@@ -81,6 +81,7 @@ struct TargetPosition {
     entity: Entity,
 }
 
+#[derive(Clone)]
 struct MonitorInfo {
     index: usize,
     name: String,
@@ -91,16 +92,32 @@ struct MonitorInfo {
 impl MonitorInfo {
     fn format_with_window(&self, win_pos: PhysicalPosition<i32>, win_size: (u32, u32)) -> String {
         format!(
-            "(mon {} {} scale={} pos=({}, {})) win_pos=({}, {}) win_size={}x{}",
-            self.index, self.name, self.scale, self.position.x, self.position.y,
-            win_pos.x, win_pos.y, win_size.0, win_size.1
+            "({} index={} scale={} pos=({}, {})) win_pos=({}, {}) win_size={}x{}",
+            self.name,
+            self.index,
+            self.scale,
+            self.position.x,
+            self.position.y,
+            win_pos.x,
+            win_pos.y,
+            win_size.0,
+            win_size.1
         )
     }
 }
 
-fn format_info(mon: Option<MonitorInfo>, win_pos: PhysicalPosition<i32>, win_size: (u32, u32)) -> String {
+fn format_info(
+    mon: Option<MonitorInfo>,
+    win_pos: PhysicalPosition<i32>,
+    win_size: (u32, u32),
+) -> String {
     mon.map_or_else(
-        || format!("(mon ?) win_pos=({}, {}) win_size={}x{}", win_pos.x, win_pos.y, win_size.0, win_size.1),
+        || {
+            format!(
+                "(mon ?) win_pos=({}, {}) win_size={}x{}",
+                win_pos.x, win_pos.y, win_size.0, win_size.1
+            )
+        },
         |m| m.format_with_window(win_pos, win_size),
     )
 }
@@ -114,7 +131,11 @@ fn monitor_at(
     monitors.enumerate().find_map(|(idx, mon)| {
         let pos = mon.position();
         let size = mon.size();
-        if x >= pos.x && x < pos.x + size.width as i32 && y >= pos.y && y < pos.y + size.height as i32 {
+        if x >= pos.x
+            && x < pos.x + size.width as i32
+            && y >= pos.y
+            && y < pos.y + size.height as i32
+        {
             Some(MonitorInfo {
                 index: idx,
                 name: mon.name().unwrap_or_else(|| "?".to_string()),
@@ -176,22 +197,39 @@ fn step1_move_to_monitor(
             return;
         };
 
-        let cur_pos = winit_window.outer_position().unwrap_or(PhysicalPosition::new(0, 0));
+        let cur_pos = winit_window
+            .outer_position()
+            .unwrap_or(PhysicalPosition::new(0, 0));
         let win_size = winit_window.inner_size();
         let current = monitor_at(winit_window.available_monitors(), cur_pos.x, cur_pos.y);
-        let Some(target_info) = monitor_by_index(winit_window.available_monitors(), target_monitor_index) else {
+        let Some(target_info) =
+            monitor_by_index(winit_window.available_monitors(), target_monitor_index)
+        else {
             info!("[Step1] Target monitor index {target_monitor_index} not found");
             return;
         };
 
         // Need monitor size for center calculation
-        let target_mon = winit_window.available_monitors().nth(target_monitor_index).unwrap();
+        let target_mon = winit_window
+            .available_monitors()
+            .nth(target_monitor_index)
+            .unwrap();
         let mon_size = target_mon.size();
         let center_x = target_info.position.x + (mon_size.width as i32 / 2);
         let center_y = target_info.position.y + (mon_size.height as i32 / 2);
 
-        info!("[Step1] Current: {}", format_info(current, cur_pos, (win_size.width, win_size.height)));
-        info!("[Step1] Target:  {}", format_info(Some(target_info), PhysicalPosition::new(saved_x, saved_y), (win_size.width, win_size.height)));
+        info!(
+            "[Step1] Current: {}",
+            format_info(current, cur_pos, (win_size.width, win_size.height))
+        );
+        info!(
+            "[Step1] Target:  {}",
+            format_info(
+                Some(target_info),
+                PhysicalPosition::new(saved_x, saved_y),
+                (win_size.width, win_size.height)
+            )
+        );
 
         // Minimize window size before moving to avoid off-screen constraints
         info!("[Step1] Minimizing window to 1x1 before move");
@@ -225,32 +263,93 @@ fn step2_apply_exact(target: Option<Res<TargetPosition>>, _non_send: NonSendMark
             return;
         };
 
-        let cur_pos = winit_window.outer_position().unwrap_or(PhysicalPosition::new(0, 0));
+        let cur_pos = winit_window
+            .outer_position()
+            .unwrap_or(PhysicalPosition::new(0, 0));
         let win_size = winit_window.inner_size();
         let current = monitor_at(winit_window.available_monitors(), cur_pos.x, cur_pos.y);
         let target_mon = monitor_at(winit_window.available_monitors(), target.x, target.y);
 
-        // Get what winit thinks the scale is vs what we know it actually is
-        let winit_scale = winit_window.scale_factor();
-        let actual_scale = current.as_ref().map(|m| m.scale).unwrap_or(winit_scale);
+        info!(
+            "[Step2] Current: {}",
+            format_info(current, cur_pos, (win_size.width, win_size.height))
+        );
+        info!(
+            "[Step2] Target:  {}",
+            format_info(
+                target_mon.clone(),
+                PhysicalPosition::new(target.x, target.y),
+                (target.width, target.height)
+            )
+        );
 
-        // Compensate if they differ
-        let compensation = winit_scale / actual_scale;
-        let send_x = (target.x as f64 * compensation).round() as i32;
-        let send_y = (target.y as f64 * compensation).round() as i32;
+        // Clamp position so window stays entirely within ONE monitor
+        // (prevents issues when window would span monitors with different scale factors)
+        let (final_x, final_y) = if let Some(ref mon) = target_mon {
+            let win_right = target.x + target.width as i32;
+            let win_bottom = target.y + target.height as i32;
 
-        info!("[Step2] Current: {}", format_info(current, cur_pos, (win_size.width, win_size.height)));
-        info!("[Step2] Target:  {}", format_info(target_mon, PhysicalPosition::new(target.x, target.y), (target.width, target.height)));
-        info!("[Step2] winit_scale={winit_scale}, actual_scale={actual_scale}, compensation={compensation}");
-        info!("[Step2] Sending: ({send_x}, {send_y}) [compensated from ({}, {})]", target.x, target.y);
-        winit_window.set_outer_position(PhysicalPosition::new(send_x, send_y));
+            // Check if window edges would land on a different monitor (or outside all monitors)
+            // Use the actual edge coordinates, not edge-1, to catch boundary cases
+            let right_mon = monitor_at(winit_window.available_monitors(), win_right, target.y);
+            let bottom_mon = monitor_at(winit_window.available_monitors(), target.x, win_bottom);
 
-        // Restore original size
-        info!("[Step2] Restoring size to {}x{}", target.width, target.height);
-        let _ = winit_window.request_inner_size(winit::dpi::PhysicalSize::new(target.width, target.height));
+            let mut x = target.x;
+            let mut y = target.y;
+
+            // If right edge is on different monitor (or no monitor), move left
+            if right_mon.as_ref().map(|m| m.index) != Some(mon.index) {
+                if let Some(mon_handle) = winit_window.available_monitors().nth(mon.index) {
+                    let mon_right = mon.position.x + mon_handle.size().width as i32;
+                    x = (mon_right - target.width as i32).max(mon.position.x);
+                }
+            }
+
+            // If bottom edge is on different monitor (or no monitor), move up
+            if bottom_mon.as_ref().map(|m| m.index) != Some(mon.index) {
+                if let Some(mon_handle) = winit_window.available_monitors().nth(mon.index) {
+                    let mon_bottom = mon.position.y + mon_handle.size().height as i32;
+                    y = (mon_bottom - target.height as i32).max(mon.position.y);
+                }
+            }
+
+            (x, y)
+        } else {
+            (target.x, target.y)
+        };
+
+        if final_x != target.x || final_y != target.y {
+            info!(
+                "[Step2] Clamped position: ({}, {}) -> ({}, {})",
+                target.x, target.y, final_x, final_y
+            );
+        }
+        info!("[Step2] Sending position: ({}, {})", final_x, final_y);
+        winit_window.set_outer_position(PhysicalPosition::new(final_x, final_y));
+
+        // Calculate decoration height (title bar) from current window
+        let outer = winit_window.outer_size();
+        let inner = winit_window.inner_size();
+        let decoration_height = outer.height.saturating_sub(inner.height);
+        let decoration_width = outer.width.saturating_sub(inner.width);
+
+        // target.width/height are OUTER size, convert to inner for request_inner_size
+        let inner_width = (target.width as u32).saturating_sub(decoration_width);
+        let inner_height = (target.height as u32).saturating_sub(decoration_height);
+
+        info!(
+            "[Step2] Restoring size: outer={}x{}, decoration={}x{}, inner={}x{}",
+            target.width,
+            target.height,
+            decoration_width,
+            decoration_height,
+            inner_width,
+            inner_height
+        );
+        let _ = winit_window
+            .request_inner_size(winit::dpi::PhysicalSize::new(inner_width, inner_height));
     });
 }
-
 
 /// Save window state when position or size changes
 fn save_on_change(
@@ -266,7 +365,14 @@ fn save_on_change(
         bevy::window::WindowPosition::At(p) => Some(p),
         _ => None,
     };
-    let current_size = (window.width(), window.height());
+
+    // Get physical OUTER size from winit (includes title bar) for accurate boundary checks
+    let physical_size = WINIT_WINDOWS.with(|ww| {
+        let ww = ww.borrow();
+        ww.get_window(entity).map(|w| w.outer_size())
+    });
+    let Some(size) = physical_size else { return };
+    let current_size = (size.width as f32, size.height as f32);
 
     let changed = tracker.last_position != current_pos || tracker.last_size != Some(current_size);
     if !changed {
@@ -276,10 +382,18 @@ fn save_on_change(
     tracker.last_position = current_pos;
     tracker.last_size = Some(current_size);
 
-    // Don't save if position unknown yet
-    let Some(pos) = current_pos else { return };
+    // Get position from winit if Bevy doesn't have it
+    let pos = current_pos.unwrap_or_else(|| {
+        WINIT_WINDOWS.with(|ww| {
+            let ww = ww.borrow();
+            ww.get_window(entity)
+                .and_then(|w| w.outer_position().ok())
+                .map(|p| IVec2::new(p.x, p.y))
+                .unwrap_or(IVec2::ZERO)
+        })
+    });
 
-    // Find monitor index using winit's enumeration (matches MonitorSelection::Index)
+    // Find monitor index
     let monitor_index = WINIT_WINDOWS.with(|ww| {
         let ww = ww.borrow();
         let winit_window = ww.get_window(entity)?;
