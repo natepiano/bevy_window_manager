@@ -30,10 +30,13 @@ fn main() {
             }),
             ..default()
         }))
-        .add_systems(PreStartup, step1_move_to_monitor)
+        .add_systems(
+            PreStartup,
+            (init_window_decoration, step1_move_to_monitor).chain(),
+        )
         .add_systems(Startup, step2_apply_exact)
         .add_systems(Update, save_on_change)
-        .init_resource::<PositionTracker>()
+        .init_resource::<WindowTracker>()
         .run();
 }
 
@@ -45,10 +48,18 @@ struct WindowState {
     monitor_index: Option<usize>,
 }
 
+/// Tracks window position/size changes for saving
 #[derive(Resource, Default)]
-struct PositionTracker {
+struct WindowTracker {
     last_position: Option<IVec2>,
     last_size: Option<(f32, f32)>,
+}
+
+/// Window decoration dimensions (title bar, borders) - populated once from winit
+#[derive(Resource)]
+struct WindowDecoration {
+    width: u32,
+    height: u32,
 }
 
 fn get_state_path() -> Option<PathBuf> {
@@ -79,6 +90,7 @@ struct TargetPosition {
     width: u32,
     height: u32,
     entity: Entity,
+    target_scale: f32,
 }
 
 #[derive(Clone)]
@@ -167,6 +179,34 @@ fn monitor_by_index(
     })
 }
 
+/// Populate WindowDecoration resource from winit (only winit call for decoration info)
+fn init_window_decoration(
+    mut commands: Commands,
+    windows: Query<Entity, With<Window>>,
+    _non_send: NonSendMarker,
+) {
+    let Ok(entity) = windows.single() else {
+        return;
+    };
+
+    WINIT_WINDOWS.with(|ww| {
+        let ww = ww.borrow();
+        if let Some(winit_window) = ww.get_window(entity) {
+            let outer = winit_window.outer_size();
+            let inner = winit_window.inner_size();
+            let decoration = WindowDecoration {
+                width: outer.width.saturating_sub(inner.width),
+                height: outer.height.saturating_sub(inner.height),
+            };
+            info!(
+                "[Init] Window decoration: {}x{}",
+                decoration.width, decoration.height
+            );
+            commands.insert_resource(decoration);
+        }
+    });
+}
+
 /// Step 1 (PreStartup): Move window onto target monitor (just need to land on it)
 fn step1_move_to_monitor(
     mut commands: Commands,
@@ -209,15 +249,6 @@ fn step1_move_to_monitor(
             return;
         };
 
-        // Need monitor size for center calculation
-        let target_mon = winit_window
-            .available_monitors()
-            .nth(target_monitor_index)
-            .unwrap();
-        let mon_size = target_mon.size();
-        let center_x = target_info.position.x + (mon_size.width as i32 / 2);
-        let center_y = target_info.position.y + (mon_size.height as i32 / 2);
-
         info!(
             "[Step1] Current: {}",
             format_info(current, cur_pos, (win_size.width, win_size.height))
@@ -225,42 +256,44 @@ fn step1_move_to_monitor(
         info!(
             "[Step1] Target:  {}",
             format_info(
-                Some(target_info),
+                Some(target_info.clone()),
                 PhysicalPosition::new(saved_x, saved_y),
                 (win_size.width, win_size.height)
             )
         );
 
-        // Minimize window size before moving to avoid off-screen constraints
-        info!("[Step1] Minimizing window to 1x1 before move");
-        let _ = winit_window.request_inner_size(winit::dpi::PhysicalSize::new(1u32, 1u32));
+        // Skip direct winit calls - let Step2 handle everything via Bevy API with scale_factor_override
+        info!("[Step1] Skipping winit calls, Step2 will handle via Bevy API");
 
-        info!("[Step1] Sending: ({center_x}, {center_y}) [target monitor center]");
-        winit_window.set_outer_position(PhysicalPosition::new(center_x, center_y));
-
-        // Store target size from RON file (not scaled inner_size)
+        // Store target info including scale factor
         commands.insert_resource(TargetPosition {
             x: saved_x,
             y: saved_y,
             width: state.width as u32,
             height: state.height as u32,
             entity: window_entity,
+            target_scale: target_info.scale as f32,
         });
     });
 }
 
 /// Step 2 (Startup): Apply exact position now that window is on correct monitor
-fn step2_apply_exact(target: Option<Res<TargetPosition>>, _non_send: NonSendMarker) {
+fn step2_apply_exact(
+    target: Option<Res<TargetPosition>>,
+    decoration: Option<Res<WindowDecoration>>,
+    mut windows: Query<&mut Window>,
+    _non_send: NonSendMarker,
+) {
     let Some(target) = target else {
         info!("[Step2] No target position");
         return;
     };
 
-    WINIT_WINDOWS.with(|ww| {
+    let final_pos = WINIT_WINDOWS.with(|ww| {
         let ww = ww.borrow();
         let Some(winit_window) = ww.get_window(target.entity) else {
             info!("[Step2] No winit window");
-            return;
+            return None;
         };
 
         let cur_pos = winit_window
@@ -324,36 +357,51 @@ fn step2_apply_exact(target: Option<Res<TargetPosition>>, _non_send: NonSendMark
                 target.x, target.y, final_x, final_y
             );
         }
-        info!("[Step2] Sending position: ({}, {})", final_x, final_y);
-        winit_window.set_outer_position(PhysicalPosition::new(final_x, final_y));
 
-        // Calculate decoration height (title bar) from current window
-        let outer = winit_window.outer_size();
-        let inner = winit_window.inner_size();
-        let decoration_height = outer.height.saturating_sub(inner.height);
-        let decoration_width = outer.width.saturating_sub(inner.width);
+        // Use decoration from resource (populated once at startup from winit)
+        let (decoration_width, decoration_height) = decoration
+            .as_ref()
+            .map(|d| (d.width, d.height))
+            .unwrap_or((0, 0));
 
-        // target.width/height are OUTER size, convert to inner for request_inner_size
+        // target.width/height are OUTER size, convert to inner for Bevy resolution
         let inner_width = (target.width as u32).saturating_sub(decoration_width);
         let inner_height = (target.height as u32).saturating_sub(decoration_height);
 
         info!(
-            "[Step2] Restoring size: outer={}x{}, decoration={}x{}, inner={}x{}",
+            "[Step2] Restoring size: outer={}x{}, decoration={}x{}, inner={}x{}, target_scale={}",
             target.width,
             target.height,
             decoration_width,
             decoration_height,
             inner_width,
-            inner_height
+            inner_height,
+            target.target_scale
         );
-        let _ = winit_window
-            .request_inner_size(winit::dpi::PhysicalSize::new(inner_width, inner_height));
+
+        Some((final_x, final_y, inner_width, inner_height))
     });
+
+    // Apply position and size via Bevy's Window component (no direct winit calls)
+    if let Some((x, y, width, height)) = final_pos {
+        if let Ok(mut window) = windows.get_mut(target.entity) {
+            info!(
+                "[Step2] Sending via Bevy: pos=({x}, {y}) size={width}x{height} scale_override={}",
+                target.target_scale
+            );
+            // Set scale factor override to target monitor's scale BEFORE setting resolution
+            window
+                .resolution
+                .set_scale_factor_override(Some(target.target_scale));
+            window.resolution.set_physical_resolution(width, height);
+            window.position = bevy::window::WindowPosition::At(IVec2::new(x, y));
+        }
+    }
 }
 
 /// Save window state when position or size changes
 fn save_on_change(
-    mut tracker: ResMut<PositionTracker>,
+    mut tracker: ResMut<WindowTracker>,
     windows: Query<(Entity, &Window)>,
     _non_send: NonSendMarker,
 ) {
