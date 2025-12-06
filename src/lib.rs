@@ -104,6 +104,6 @@ impl Plugin for RestoreWindowPlugin {
             (systems::init_winit_info, systems::step1_move_to_monitor).chain(),
         )
         .add_systems(Startup, systems::step2_apply_exact)
-        .add_systems(Update, systems::handle_window_events);
+        .add_systems(Update, systems::handle_window_messages);
     }
 }

@@ -18,18 +18,34 @@ pub struct WinitInfo {
     pub window_decoration: WindowDecoration,
 }
 
-/// Holds the target window position/size during a two-phase restore process.
+/// State for the two-phase restore process (high→low DPI only).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TwoPhaseState {
+    /// Position applied with compensation, waiting for `ScaleChanged` event.
+    WaitingForScaleChange,
+    /// Scale changed, waiting one more frame for events to settle.
+    WaitingForSettle,
+    /// Events settled, ready to apply final size without compensation.
+    ReadyToApplySize,
+}
+
+/// Restore strategy based on scale factor relationship.
 ///
-/// Window restoration requires two phases:
-/// 1. Move window to target monitor and set `scale_factor_override` to target scale
-/// 2. Apply final position/size in `handle_window_events` once on correct monitor
-///
-/// The `scale_factor_override` prevents Bevy's `changed_windows` from doing
-/// unwanted scale conversions when the window moves between monitors.
-///
-/// Note: Winit internally uses the keyboard focus monitor's scale factor for
-/// coordinate conversions, so we must compensate by multiplying values by
-/// `starting_scale / target_scale` when crossing monitors with different scales.
+/// - `Direct`: Same scale on both monitors - apply position and size directly.
+/// - `Compensate`: Low→High DPI (1x→2x) - apply with compensation (ratio < 1).
+/// - `TwoPhase`: High→Low DPI (2x→1x) - requires two phases because compensated
+///   size would exceed monitor bounds and get clamped by the OS.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RestorePhase {
+    /// Same scale - apply position and size directly.
+    Direct,
+    /// Low→High DPI (1x→2x) - apply with compensation (ratio < 1).
+    Compensate,
+    /// High→Low DPI (2x→1x) - requires two phases.
+    TwoPhase(TwoPhaseState),
+}
+
+/// Holds the target window position/size during the restore process.
 #[derive(Resource)]
 pub struct TargetPosition {
     pub x: i32,
@@ -38,8 +54,10 @@ pub struct TargetPosition {
     pub height: u32,
     pub entity: Entity,
     pub target_scale: f32,
-    /// Scale of the keyboard focus monitor at startup (used for winit compensation).
+    /// Scale of the keyboard focus monitor at startup.
     pub starting_scale: f32,
+    /// Current restore phase/strategy.
+    pub phase: RestorePhase,
 }
 
 /// Information about a monitor.

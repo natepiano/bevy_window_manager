@@ -12,7 +12,9 @@ use super::state;
 use super::types::MonitorInfo;
 use super::types::RestoreWindowConfig;
 use super::types::WindowState;
+use crate::types::RestorePhase;
 use crate::types::TargetPosition;
+use crate::types::TwoPhaseState;
 use crate::types::WindowDecoration;
 use crate::types::WinitInfo;
 
@@ -116,6 +118,7 @@ pub fn init_winit_info(
 #[expect(
     clippy::cast_possible_wrap,
     clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
     clippy::cast_sign_loss,
     clippy::needless_pass_by_value,
     reason = "window dimensions safe; Bevy systems require owned Res types"
@@ -156,22 +159,67 @@ pub fn step1_move_to_monitor(
         return;
     };
 
+    let target_scale = target_info.scale as f32;
+
+    // Determine restore phase based on scale relationship
+    let phase = if (starting_scale - target_scale).abs() < 0.01 {
+        RestorePhase::Direct
+    } else if starting_scale < target_scale {
+        RestorePhase::Compensate
+    } else {
+        RestorePhase::TwoPhase(TwoPhaseState::WaitingForScaleChange)
+    };
+
     info!(
-        "[Step1] Starting monitor={} scale={}, Target monitor={} scale={}",
-        starting_monitor_index, starting_scale, target_monitor_index, target_info.scale
+        "[Step1] Starting monitor={} scale={}, Target monitor={} scale={}, phase={:?}",
+        starting_monitor_index, starting_scale, target_monitor_index, target_scale, phase
     );
 
-    // Move window to center of target monitor at 1x1 size
-    // This triggers the scale factor change before Step2 applies final size
-    let center_x = target_info.position.x + (target_info.size.x as i32 / 2);
-    let center_y = target_info.position.y + (target_info.size.y as i32 / 2);
+    // Calculate final position with clamping based on target size
+    let target_width = state.width as u32;
+    let target_height = state.height as u32;
+
+    // Clamp position to fit target size within monitor
+    let mon_right = target_info.position.x + target_info.size.x as i32;
+    let mon_bottom = target_info.position.y + target_info.size.y as i32;
+
+    let mut final_x = saved_x;
+    let mut final_y = saved_y;
+
+    // Clamp to right/bottom edges based on target size
+    if final_x + target_width as i32 > mon_right {
+        final_x = mon_right - target_width as i32;
+    }
+    if final_y + target_height as i32 > mon_bottom {
+        final_y = mon_bottom - target_height as i32;
+    }
+
+    // Ensure we don't go past left/top edges
+    final_x = final_x.max(target_info.position.x);
+    final_y = final_y.max(target_info.position.y);
 
     info!(
-        "[Step1] Moving to monitor center ({}, {}) at 1x1 size",
-        center_x, center_y
+        "[Step1] Final position: ({}, {}) -> clamped ({}, {}) for size {}x{}",
+        saved_x, saved_y, final_x, final_y, target_width, target_height
     );
 
-    window.position = bevy::window::WindowPosition::At(IVec2::new(center_x, center_y));
+    // For TwoPhase, compensate the position because winit will divide by starting_scale
+    let (move_x, move_y) = if matches!(phase, RestorePhase::TwoPhase(_)) {
+        let ratio = starting_scale / target_scale;
+        let comp_x = (final_x as f32 * ratio) as i32;
+        let comp_y = (final_y as f32 * ratio) as i32;
+        info!(
+            "[Step1] TwoPhase: compensating position ({}, {}) -> ({}, {}) (ratio={})",
+            final_x, final_y, comp_x, comp_y, ratio
+        );
+        (comp_x, comp_y)
+    } else {
+        (final_x, final_y)
+    };
+
+    info!("[WE SET] position=({}, {}) size=1x1", move_x, move_y);
+
+    window.position = bevy::window::WindowPosition::At(IVec2::new(move_x, move_y));
     window.resolution.set_physical_resolution(1, 1);
 
     // Store target info for restore
@@ -181,31 +229,35 @@ pub fn step1_move_to_monitor(
         width: state.width as u32,
         height: state.height as u32,
         entity: window_entity,
-        target_scale: target_info.scale as f32,
+        target_scale,
         starting_scale,
+        phase,
     });
 }
 
-/// Step 2 (Startup): Just logging - scale override was set in Step1.
+/// Step 2 (Startup): Just logging.
 pub fn step2_apply_exact(target: Option<Res<TargetPosition>>) {
-    if target.is_some() {
-        info!("[Step2] Scale override set, will apply final size in handle_window_events");
+    if let Some(t) = target {
+        info!(
+            "[Step2] phase={:?}, will apply in handle_window_messages",
+            t.phase
+        );
     } else {
         info!("[Step2] No target position");
     }
 }
 
-/// Handle window events - apply pending restore or save state.
+/// Handle window messages - apply pending restore or save state.
 #[expect(
     clippy::too_many_arguments,
     reason = "Bevy systems require many owned params"
 )]
-pub fn handle_window_events(
+pub fn handle_window_messages(
     mut commands: Commands,
-    mut moved_events: MessageReader<WindowMoved>,
-    mut resized_events: MessageReader<WindowResized>,
-    mut scale_events: MessageReader<WindowScaleFactorChanged>,
-    target: Option<Res<TargetPosition>>,
+    mut moved_messages: MessageReader<WindowMoved>,
+    mut resized_messages: MessageReader<WindowResized>,
+    mut scale_factor_changed_messages: MessageReader<WindowScaleFactorChanged>,
+    target: Option<ResMut<TargetPosition>>,
     winit_info: Option<Res<WinitInfo>>,
     config: Res<RestoreWindowConfig>,
     mut windows: Query<&mut Window>,
@@ -215,14 +267,31 @@ pub fn handle_window_events(
         (w.window_decoration.width, w.window_decoration.height)
     });
 
-    // Drain events to clear queue
-    let last_scale = scale_events.read().last().cloned();
-    let last_move = moved_events.read().last().cloned();
-    let last_resize = resized_events.read().last().cloned();
+    // Drain messages to clear queue
+    let scale_changed = scale_factor_changed_messages.read().last().cloned();
+    let last_move = moved_messages.read().last().cloned();
+    let last_resize = resized_messages.read().last().cloned();
 
     // If we have a pending restore, try to apply it
-    if let Some(target) = target {
+    if let Some(mut target) = target {
         let monitors_vec: Vec<_> = monitors.iter().collect();
+
+        // Check for phase transitions
+        match target.phase {
+            RestorePhase::TwoPhase(TwoPhaseState::WaitingForScaleChange) => {
+                if scale_changed.is_some() {
+                    info!("[Restore] ScaleChanged received, transitioning to WaitingForSettle");
+                    target.phase = RestorePhase::TwoPhase(TwoPhaseState::WaitingForSettle);
+                }
+            }
+            RestorePhase::TwoPhase(TwoPhaseState::WaitingForSettle) => {
+                // Wait one frame for messages to settle, then transition
+                info!("[Restore] Settling complete, transitioning to ReadyToApplySize");
+                target.phase = RestorePhase::TwoPhase(TwoPhaseState::ReadyToApplySize);
+            }
+            _ => {}
+        }
+
         if try_apply_restore(
             &target,
             &monitors_vec,
@@ -234,25 +303,25 @@ pub fn handle_window_events(
         }
     }
 
-    // Save state on events (only when not restoring)
+    // Save state on messages (only when not restoring)
     let Ok(window) = windows.single() else {
         return;
     };
 
-    if let Some(event) = last_scale {
-        info!("[Event:ScaleChanged] scale={}", event.scale_factor);
+    if let Some(message) = scale_changed {
+        info!("[Message:ScaleChanged] scale={}", message.scale_factor);
     }
 
     let monitors_vec: Vec<_> = monitors.iter().collect();
     let last_move_pos = last_move.as_ref().map(|m| m.position);
 
-    if let Some(event) = last_move {
-        save_on_move(&event, window, &monitors_vec, decoration, &config.path);
+    if let Some(message) = last_move {
+        save_on_move(&message, window, &monitors_vec, decoration, &config.path);
     }
 
-    if let Some(event) = last_resize {
+    if let Some(message) = last_resize {
         save_on_resize(
-            &event,
+            &message,
             window,
             &monitors_vec,
             decoration,
@@ -294,12 +363,22 @@ fn try_apply_restore(
         .map_or(1.0, |m| m.scale as f32);
 
     info!(
-        "[Restore] pos=({}, {}) current_scale={} target_scale={}",
-        pos.x, pos.y, current_scale, target.target_scale
+        "[Restore] pos=({}, {}) current_scale={} target_scale={} phase={:?}",
+        pos.x, pos.y, current_scale, target.target_scale, target.phase
     );
 
-    // Not yet on target monitor
-    if (current_scale - target.target_scale).abs() >= 0.01 {
+    // For TwoPhase(WaitingForScaleChange), just wait - don't apply anything yet
+    if target.phase == RestorePhase::TwoPhase(TwoPhaseState::WaitingForScaleChange) {
+        info!("[Restore] TwoPhase: waiting for ScaleChanged message");
+        return true;
+    }
+
+    // Not yet on target monitor (for Direct/Compensate phases)
+    if !matches!(
+        target.phase,
+        RestorePhase::TwoPhase(TwoPhaseState::ReadyToApplySize)
+    ) && (current_scale - target.target_scale).abs() >= 0.01
+    {
         return true;
     }
 
@@ -310,8 +389,6 @@ fn try_apply_restore(
             mon.position.x, mon.position.y, mon.size.x, mon.size.y, mon.scale
         );
     }
-
-    info!("[Restore] On target monitor, applying final position/size");
 
     let (decoration_width, decoration_height) = decoration;
     let inner_width = target.width.saturating_sub(decoration_width);
@@ -324,39 +401,51 @@ fn try_apply_restore(
         return true;
     };
 
-    // Only compensate for winit's internal scale conversion when crossing monitors
-    // with different scale factors. Winit uses the keyboard focus monitor's scale
-    // for coordinate math, so we multiply by starting_scale/target_scale.
-    let (apply_x, apply_y, apply_width, apply_height) =
-        if (target.starting_scale - target.target_scale).abs() > 0.01 {
-            let winit_ratio = target.starting_scale / target.target_scale;
-            let comp_x = (final_x as f32 * winit_ratio) as i32;
-            let comp_y = (final_y as f32 * winit_ratio) as i32;
-            let comp_width = (inner_width as f32 * winit_ratio) as u32;
-            let comp_height = (inner_height as f32 * winit_ratio) as u32;
-
+    match target.phase {
+        RestorePhase::Direct => {
             info!(
-                "[Restore] Applying: pos=({}, {}) size={}x{} with winit compensation (ratio={})",
-                final_x, final_y, inner_width, inner_height, winit_ratio
-            );
-            info!(
-                "[Restore] Compensated: pos=({}, {}) size={}x{}",
-                comp_x, comp_y, comp_width, comp_height
-            );
-
-            (comp_x, comp_y, comp_width, comp_height)
-        } else {
-            info!(
-                "[Restore] Applying: pos=({}, {}) size={}x{} (no compensation needed)",
+                "[WE SET] position=({}, {}) size={}x{} (Direct)",
                 final_x, final_y, inner_width, inner_height
             );
-            (final_x, final_y, inner_width, inner_height)
-        };
+            window.position = bevy::window::WindowPosition::At(IVec2::new(final_x, final_y));
+            window
+                .resolution
+                .set_physical_resolution(inner_width, inner_height);
+        }
+        RestorePhase::Compensate => {
+            // Low→High DPI: compensate with ratio < 1
+            let ratio = target.starting_scale / target.target_scale;
+            let comp_x = (final_x as f32 * ratio) as i32;
+            let comp_y = (final_y as f32 * ratio) as i32;
+            let comp_width = (inner_width as f32 * ratio) as u32;
+            let comp_height = (inner_height as f32 * ratio) as u32;
 
-    window.position = bevy::window::WindowPosition::At(IVec2::new(apply_x, apply_y));
-    window
-        .resolution
-        .set_physical_resolution(apply_width, apply_height);
+            info!(
+                "[WE SET] position=({}, {}) size={}x{} (Compensate, ratio={})",
+                comp_x, comp_y, comp_width, comp_height, ratio
+            );
+            window.position = bevy::window::WindowPosition::At(IVec2::new(comp_x, comp_y));
+            window
+                .resolution
+                .set_physical_resolution(comp_width, comp_height);
+        }
+        RestorePhase::TwoPhase(TwoPhaseState::ReadyToApplySize) => {
+            // High→Low DPI after scale changed: ONLY set size, position was set in Step1
+            info!(
+                "[WE SET] size={}x{} ONLY (TwoPhase final, position already set)",
+                inner_width, inner_height
+            );
+            window
+                .resolution
+                .set_physical_resolution(inner_width, inner_height);
+        }
+        RestorePhase::TwoPhase(
+            TwoPhaseState::WaitingForScaleChange | TwoPhaseState::WaitingForSettle,
+        ) => {
+            // Still waiting, don't apply yet
+            return true;
+        }
+    }
 
     commands.remove_resource::<TargetPosition>();
     true
@@ -400,29 +489,29 @@ fn clamp_to_monitor(target: &TargetPosition, monitors: &[(Entity, &Monitor)]) ->
     (x, y)
 }
 
-/// Save window state on move event.
+/// Save window state on move message.
 #[expect(clippy::cast_precision_loss, reason = "window dimensions fit in f32")]
 fn save_on_move(
-    event: &WindowMoved,
+    message: &WindowMoved,
     window: &Window,
     monitors: &[(Entity, &Monitor)],
     decoration: (u32, u32),
     path: &std::path::Path,
 ) {
     let (decoration_width, decoration_height) = decoration;
-    let monitor_index = monitor_at(monitors, event.position.x, event.position.y)
-        .map_or_else(|| infer_monitor_index(event.position.y), |m| m.index);
+    let monitor_index = monitor_at(monitors, message.position.x, message.position.y)
+        .map_or_else(|| infer_monitor_index(message.position.y), |m| m.index);
 
     let outer_width = window.resolution.physical_width() + decoration_width;
     let outer_height = window.resolution.physical_height() + decoration_height;
 
     info!(
-        "[Event:Moved] pos=({}, {}) size={}x{} monitor={}",
-        event.position.x, event.position.y, outer_width, outer_height, monitor_index
+        "[Message:Moved] pos=({}, {}) size={}x{} monitor={}",
+        message.position.x, message.position.y, outer_width, outer_height, monitor_index
     );
 
     let state = WindowState {
-        position: Some((event.position.x, event.position.y)),
+        position: Some((message.position.x, message.position.y)),
         width: outer_width as f32,
         height: outer_height as f32,
         monitor_index,
@@ -430,7 +519,7 @@ fn save_on_move(
     state::save_state(path, &state);
 }
 
-/// Save window state on resize event.
+/// Save window state on resize message.
 #[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
@@ -438,7 +527,7 @@ fn save_on_move(
     reason = "window dimensions are within safe ranges"
 )]
 fn save_on_resize(
-    event: &WindowResized,
+    message: &WindowResized,
     window: &Window,
     monitors: &[(Entity, &Monitor)],
     decoration: (u32, u32),
@@ -447,10 +536,10 @@ fn save_on_resize(
 ) {
     let (decoration_width, decoration_height) = decoration;
     let scale = window.scale_factor();
-    let physical_width = (event.width * scale) as u32 + decoration_width;
-    let physical_height = (event.height * scale) as u32 + decoration_height;
+    let physical_width = (message.width * scale) as u32 + decoration_width;
+    let physical_height = (message.height * scale) as u32 + decoration_height;
 
-    // Use position from move event if available, otherwise from window component
+    // Use position from move message if available, otherwise from window component
     let pos = last_move_pos.or(match window.position {
         bevy::window::WindowPosition::At(p) => Some(p),
         _ => None,
@@ -458,8 +547,8 @@ fn save_on_resize(
 
     let Some(pos) = pos else {
         info!(
-            "[Event:Resized] logical={}x{} - skipping save, position unknown",
-            event.width, event.height
+            "[Message:Resized] logical={}x{} - skipping save, position unknown",
+            message.width, message.height
         );
         return;
     };
@@ -468,8 +557,8 @@ fn save_on_resize(
         monitor_at(monitors, pos.x, pos.y).map_or_else(|| infer_monitor_index(pos.y), |m| m.index);
 
     info!(
-        "[Event:Resized] logical={}x{} physical={}x{} pos=({}, {}) monitor={}",
-        event.width, event.height, physical_width, physical_height, pos.x, pos.y, monitor_index
+        "[Message:Resized] logical={}x{} physical={}x{} pos=({}, {}) monitor={}",
+        message.width, message.height, physical_width, physical_height, pos.x, pos.y, monitor_index
     );
 
     let state = WindowState {
