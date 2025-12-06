@@ -20,12 +20,16 @@ pub struct WinitInfo {
 
 /// Holds the target window position/size during a two-phase restore process.
 ///
-/// Window restoration requires two phases because Bevy's `changed_windows` system
-/// applies scale factor conversion using cached values that may not match the target
-/// monitor's scale. By first moving the window to the target monitor (Step 1), we
-/// trigger a scale factor update. Then in `handle_window_events`, once the window
-/// is on the correct monitor, we apply the final position/size with proper scale
-/// compensation.
+/// Window restoration requires two phases:
+/// 1. Move window to target monitor and set `scale_factor_override` to target scale
+/// 2. Apply final position/size in `handle_window_events` once on correct monitor
+///
+/// The `scale_factor_override` prevents Bevy's `changed_windows` from doing
+/// unwanted scale conversions when the window moves between monitors.
+///
+/// Note: Winit internally uses the keyboard focus monitor's scale factor for
+/// coordinate conversions, so we must compensate by multiplying values by
+/// `starting_scale / target_scale` when crossing monitors with different scales.
 #[derive(Resource)]
 pub struct TargetPosition {
     pub x: i32,
@@ -34,7 +38,7 @@ pub struct TargetPosition {
     pub height: u32,
     pub entity: Entity,
     pub target_scale: f32,
-    /// Scale of the monitor the window is PHYSICALLY on at startup (before any moves).
+    /// Scale of the keyboard focus monitor at startup (used for winit compensation).
     pub starting_scale: f32,
 }
 

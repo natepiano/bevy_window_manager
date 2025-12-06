@@ -186,11 +186,10 @@ pub fn step1_move_to_monitor(
     });
 }
 
-/// Step 2 (Startup): Logging only, actual positioning happens in `handle_window_events`
-/// after window has moved to target monitor.
+/// Step 2 (Startup): Just logging - scale override was set in Step1.
 pub fn step2_apply_exact(target: Option<Res<TargetPosition>>) {
     if target.is_some() {
-        info!("[Step2] Target stored, will apply after move completes");
+        info!("[Step2] Scale override set, will apply final size in handle_window_events");
     } else {
         info!("[Step2] No target position");
     }
@@ -304,6 +303,14 @@ fn try_apply_restore(
         return true;
     }
 
+    // Log target monitor info
+    if let Some(mon) = monitor_at(monitors, target.x, target.y) {
+        info!(
+            "[Restore] Target monitor: pos=({}, {}) size={}x{} scale={}",
+            mon.position.x, mon.position.y, mon.size.x, mon.size.y, mon.scale
+        );
+    }
+
     info!("[Restore] On target monitor, applying final position/size");
 
     let (decoration_width, decoration_height) = decoration;
@@ -317,22 +324,39 @@ fn try_apply_restore(
         return true;
     };
 
-    // Compensate for scale factor conversion in Bevy's `changed_windows`
-    let scale_ratio = target.starting_scale / target.target_scale;
-    let comp_x = (final_x as f32 * scale_ratio) as i32;
-    let comp_y = (final_y as f32 * scale_ratio) as i32;
-    let comp_width = (inner_width as f32 * scale_ratio) as u32;
-    let comp_height = (inner_height as f32 * scale_ratio) as u32;
+    // Only compensate for winit's internal scale conversion when crossing monitors
+    // with different scale factors. Winit uses the keyboard focus monitor's scale
+    // for coordinate math, so we multiply by starting_scale/target_scale.
+    let (apply_x, apply_y, apply_width, apply_height) =
+        if (target.starting_scale - target.target_scale).abs() > 0.01 {
+            let winit_ratio = target.starting_scale / target.target_scale;
+            let comp_x = (final_x as f32 * winit_ratio) as i32;
+            let comp_y = (final_y as f32 * winit_ratio) as i32;
+            let comp_width = (inner_width as f32 * winit_ratio) as u32;
+            let comp_height = (inner_height as f32 * winit_ratio) as u32;
 
-    window.position = bevy::window::WindowPosition::At(IVec2::new(comp_x, comp_y));
+            info!(
+                "[Restore] Applying: pos=({}, {}) size={}x{} with winit compensation (ratio={})",
+                final_x, final_y, inner_width, inner_height, winit_ratio
+            );
+            info!(
+                "[Restore] Compensated: pos=({}, {}) size={}x{}",
+                comp_x, comp_y, comp_width, comp_height
+            );
+
+            (comp_x, comp_y, comp_width, comp_height)
+        } else {
+            info!(
+                "[Restore] Applying: pos=({}, {}) size={}x{} (no compensation needed)",
+                final_x, final_y, inner_width, inner_height
+            );
+            (final_x, final_y, inner_width, inner_height)
+        };
+
+    window.position = bevy::window::WindowPosition::At(IVec2::new(apply_x, apply_y));
     window
         .resolution
-        .set_physical_resolution(comp_width, comp_height);
-
-    info!(
-        "[Restore] Applied: pos=({}, {}) size={}x{} (ratio={})",
-        final_x, final_y, comp_width, comp_height, scale_ratio
-    );
+        .set_physical_resolution(apply_width, apply_height);
 
     commands.remove_resource::<TargetPosition>();
     true
