@@ -101,9 +101,13 @@ impl Plugin for RestoreWindowPlugin {
         })
         .add_systems(
             PreStartup,
-            (systems::init_winit_info, systems::step1_move_to_monitor).chain(),
+            (
+                systems::init_winit_info,
+                systems::load_target_position,
+                systems::step1_move_to_monitor,
+            )
+                .chain(),
         )
-        .add_systems(Startup, systems::step2_apply_exact)
         .add_systems(Update, systems::handle_window_messages);
     }
 }

@@ -114,52 +114,59 @@ pub fn init_winit_info(
     });
 }
 
-/// Step 1 (PreStartup): Move window to target monitor at 1x1 size.
+/// Load saved window state and create `TargetPosition` resource.
+///
+/// All type conversions (f32→u32, etc.) happen here in one place.
+/// Runs after `init_winit_info` so we have access to starting monitor info.
 #[expect(
     clippy::cast_possible_wrap,
     clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
     clippy::cast_sign_loss,
     clippy::needless_pass_by_value,
     reason = "window dimensions safe; Bevy systems require owned Res types"
 )]
-pub fn step1_move_to_monitor(
+pub fn load_target_position(
     mut commands: Commands,
-    mut windows: Query<(Entity, &mut Window)>,
+    windows: Query<Entity, With<Window>>,
     monitors: Query<(Entity, &Monitor)>,
     winit_info: Option<Res<WinitInfo>>,
     config: Res<RestoreWindowConfig>,
 ) {
     let Some(state) = state::load_state(&config.path) else {
-        info!("[Step1] No saved state");
+        info!("[Load] No saved state");
         return;
     };
 
     let Some((saved_x, saved_y)) = state.position else {
-        info!("[Step1] No saved position");
+        info!("[Load] No saved position");
         return;
     };
 
-    let target_monitor_index = state.monitor_index;
-
-    let Ok((window_entity, mut window)) = windows.single_mut() else {
-        info!("[Step1] No window");
+    let Ok(window_entity) = windows.single() else {
+        info!("[Load] No window");
         return;
     };
 
     let monitors_vec: Vec<_> = monitors.iter().collect();
 
-    // Get starting monitor from `WinitInfo` (actual position from winit)
+    // Get starting monitor from WinitInfo
     let starting_monitor_index = winit_info.as_ref().map_or(0, |w| w.starting_monitor_index);
     let starting_info = monitor_by_index(&monitors_vec, starting_monitor_index);
     let starting_scale = starting_info.as_ref().map_or(1.0, |m| m.scale as f32);
 
-    let Some(target_info) = monitor_by_index(&monitors_vec, target_monitor_index) else {
-        info!("[Step1] Target monitor index {target_monitor_index} not found");
+    let Some(target_info) = monitor_by_index(&monitors_vec, state.monitor_index) else {
+        info!(
+            "[Load] Target monitor index {} not found",
+            state.monitor_index
+        );
         return;
     };
 
     let target_scale = target_info.scale as f32;
+
+    // Convert saved dimensions (all casting happens here)
+    let width = state.width as u32;
+    let height = state.height as u32;
 
     // Determine restore phase based on scale relationship
     let phase = if (starting_scale - target_scale).abs() < 0.01 {
@@ -170,64 +177,40 @@ pub fn step1_move_to_monitor(
         RestorePhase::TwoPhase(TwoPhaseState::WaitingForScaleChange)
     };
 
-    info!(
-        "[Step1] Starting monitor={} scale={}, Target monitor={} scale={}, phase={:?}",
-        starting_monitor_index, starting_scale, target_monitor_index, target_scale, phase
-    );
-
-    // Calculate final position with clamping based on target size
-    let target_width = state.width as u32;
-    let target_height = state.height as u32;
-
-    // Clamp position to fit target size within monitor
+    // Calculate final clamped position
     let mon_right = target_info.position.x + target_info.size.x as i32;
     let mon_bottom = target_info.position.y + target_info.size.y as i32;
 
-    let mut final_x = saved_x;
-    let mut final_y = saved_y;
+    let mut x = saved_x;
+    let mut y = saved_y;
 
-    // Clamp to right/bottom edges based on target size
-    if final_x + target_width as i32 > mon_right {
-        final_x = mon_right - target_width as i32;
+    // Clamp to fit within monitor bounds
+    if x + width as i32 > mon_right {
+        x = mon_right - width as i32;
     }
-    if final_y + target_height as i32 > mon_bottom {
-        final_y = mon_bottom - target_height as i32;
+    if y + height as i32 > mon_bottom {
+        y = mon_bottom - height as i32;
     }
+    x = x.max(target_info.position.x);
+    y = y.max(target_info.position.y);
 
-    // Ensure we don't go past left/top edges
-    final_x = final_x.max(target_info.position.x);
-    final_y = final_y.max(target_info.position.y);
+    if x != saved_x || y != saved_y {
+        info!(
+            "[Load] Clamped position: ({}, {}) -> ({}, {}) for size {}x{}",
+            saved_x, saved_y, x, y, width, height
+        );
+    }
 
     info!(
-        "[Step1] Final position: ({}, {}) -> clamped ({}, {}) for size {}x{}",
-        saved_x, saved_y, final_x, final_y, target_width, target_height
+        "[Load] Starting monitor={} scale={}, Target monitor={} scale={}, phase={:?}",
+        starting_monitor_index, starting_scale, state.monitor_index, target_scale, phase
     );
 
-    // For TwoPhase, compensate the position because winit will divide by starting_scale
-    let (move_x, move_y) = if matches!(phase, RestorePhase::TwoPhase(_)) {
-        let ratio = starting_scale / target_scale;
-        let comp_x = (final_x as f32 * ratio) as i32;
-        let comp_y = (final_y as f32 * ratio) as i32;
-        info!(
-            "[Step1] TwoPhase: compensating position ({}, {}) -> ({}, {}) (ratio={})",
-            final_x, final_y, comp_x, comp_y, ratio
-        );
-        (comp_x, comp_y)
-    } else {
-        (final_x, final_y)
-    };
-
-    info!("[WE SET] position=({}, {}) size=1x1", move_x, move_y);
-
-    window.position = bevy::window::WindowPosition::At(IVec2::new(move_x, move_y));
-    window.resolution.set_physical_resolution(1, 1);
-
-    // Store target info for restore
     commands.insert_resource(TargetPosition {
-        x: saved_x,
-        y: saved_y,
-        width: state.width as u32,
-        height: state.height as u32,
+        x,
+        y,
+        width,
+        height,
         entity: window_entity,
         target_scale,
         starting_scale,
@@ -235,16 +218,43 @@ pub fn step1_move_to_monitor(
     });
 }
 
-/// Step 2 (Startup): Just logging.
-pub fn step2_apply_exact(target: Option<Res<TargetPosition>>) {
-    if let Some(t) = target {
+/// Step 1 (PreStartup): Move window to target monitor at 1x1 size.
+///
+/// Uses pre-computed `TargetPosition` to move the window. For `TwoPhase`,
+/// the position is compensated because winit divides by starting scale.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    reason = "position values fit in f32 and i32"
+)]
+pub fn step1_move_to_monitor(mut windows: Query<&mut Window>, target: Option<Res<TargetPosition>>) {
+    let Some(target) = target else {
+        return;
+    };
+
+    let Ok(mut window) = windows.get_mut(target.entity) else {
+        info!("[Step1] Window entity not found");
+        return;
+    };
+
+    // For TwoPhase, compensate position because winit divides by starting_scale
+    let (move_x, move_y) = if matches!(target.phase, RestorePhase::TwoPhase(_)) {
+        let ratio = target.starting_scale / target.target_scale;
+        let comp_x = (target.x as f32 * ratio) as i32;
+        let comp_y = (target.y as f32 * ratio) as i32;
         info!(
-            "[Step2] phase={:?}, will apply in handle_window_messages",
-            t.phase
+            "[Step1] TwoPhase: compensating position ({}, {}) -> ({}, {}) (ratio={})",
+            target.x, target.y, comp_x, comp_y, ratio
         );
+        (comp_x, comp_y)
     } else {
-        info!("[Step2] No target position");
-    }
+        (target.x, target.y)
+    };
+
+    info!("[WE SET] position=({}, {}) size=1x1", move_x, move_y);
+
+    window.position = bevy::window::WindowPosition::At(IVec2::new(move_x, move_y));
+    window.resolution.set_physical_resolution(1, 1);
 }
 
 /// Handle window messages - apply pending restore or save state.
@@ -277,19 +287,11 @@ pub fn handle_window_messages(
         let monitors_vec: Vec<_> = monitors.iter().collect();
 
         // Check for phase transitions
-        match target.phase {
-            RestorePhase::TwoPhase(TwoPhaseState::WaitingForScaleChange) => {
-                if scale_changed.is_some() {
-                    info!("[Restore] ScaleChanged received, transitioning to WaitingForSettle");
-                    target.phase = RestorePhase::TwoPhase(TwoPhaseState::WaitingForSettle);
-                }
-            }
-            RestorePhase::TwoPhase(TwoPhaseState::WaitingForSettle) => {
-                // Wait one frame for messages to settle, then transition
-                info!("[Restore] Settling complete, transitioning to ReadyToApplySize");
-                target.phase = RestorePhase::TwoPhase(TwoPhaseState::ReadyToApplySize);
-            }
-            _ => {}
+        if target.phase == RestorePhase::TwoPhase(TwoPhaseState::WaitingForScaleChange)
+            && scale_changed.is_some()
+        {
+            info!("[Restore] ScaleChanged received, transitioning to ReadyToApplySize");
+            target.phase = RestorePhase::TwoPhase(TwoPhaseState::ReadyToApplySize);
         }
 
         if try_apply_restore(
@@ -394,9 +396,7 @@ fn try_apply_restore(
     let inner_width = target.width.saturating_sub(decoration_width);
     let inner_height = target.height.saturating_sub(decoration_height);
 
-    // Clamp position to keep window fully within target monitor
-    let (final_x, final_y) = clamp_to_monitor(target, monitors);
-
+    // Position is already clamped in TargetPosition
     let Ok(mut window) = windows.get_mut(target.entity) else {
         return true;
     };
@@ -405,9 +405,9 @@ fn try_apply_restore(
         RestorePhase::Direct => {
             info!(
                 "[WE SET] position=({}, {}) size={}x{} (Direct)",
-                final_x, final_y, inner_width, inner_height
+                target.x, target.y, inner_width, inner_height
             );
-            window.position = bevy::window::WindowPosition::At(IVec2::new(final_x, final_y));
+            window.position = bevy::window::WindowPosition::At(IVec2::new(target.x, target.y));
             window
                 .resolution
                 .set_physical_resolution(inner_width, inner_height);
@@ -415,8 +415,8 @@ fn try_apply_restore(
         RestorePhase::Compensate => {
             // Low→High DPI: compensate with ratio < 1
             let ratio = target.starting_scale / target.target_scale;
-            let comp_x = (final_x as f32 * ratio) as i32;
-            let comp_y = (final_y as f32 * ratio) as i32;
+            let comp_x = (target.x as f32 * ratio) as i32;
+            let comp_y = (target.y as f32 * ratio) as i32;
             let comp_width = (inner_width as f32 * ratio) as u32;
             let comp_height = (inner_height as f32 * ratio) as u32;
 
@@ -439,9 +439,7 @@ fn try_apply_restore(
                 .resolution
                 .set_physical_resolution(inner_width, inner_height);
         }
-        RestorePhase::TwoPhase(
-            TwoPhaseState::WaitingForScaleChange | TwoPhaseState::WaitingForSettle,
-        ) => {
+        RestorePhase::TwoPhase(TwoPhaseState::WaitingForScaleChange) => {
             // Still waiting, don't apply yet
             return true;
         }
@@ -449,44 +447,6 @@ fn try_apply_restore(
 
     commands.remove_resource::<TargetPosition>();
     true
-}
-
-/// Clamp window position to fit within target monitor bounds.
-#[expect(
-    clippy::cast_possible_wrap,
-    reason = "window dimensions are within safe ranges"
-)]
-fn clamp_to_monitor(target: &TargetPosition, monitors: &[(Entity, &Monitor)]) -> (i32, i32) {
-    let Some(mon) = monitor_at(monitors, target.x, target.y) else {
-        return (target.x, target.y);
-    };
-
-    let mon_right = mon.position.x + mon.size.x as i32;
-    let mon_bottom = mon.position.y + mon.size.y as i32;
-
-    let mut x = target.x;
-    let mut y = target.y;
-
-    // Clamp to right/bottom edges
-    if x + target.width as i32 > mon_right {
-        x = mon_right - target.width as i32;
-    }
-    if y + target.height as i32 > mon_bottom {
-        y = mon_bottom - target.height as i32;
-    }
-
-    // Ensure we don't go past left/top edges
-    x = x.max(mon.position.x);
-    y = y.max(mon.position.y);
-
-    if x != target.x || y != target.y {
-        info!(
-            "[Restore] Clamped position: ({}, {}) -> ({}, {})",
-            target.x, target.y, x, y
-        );
-    }
-
-    (x, y)
 }
 
 /// Save window state on move message.
