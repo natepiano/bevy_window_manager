@@ -1,14 +1,26 @@
 [package]
-name = "winit-test"
+name = "bevy_restore_window"
 version = "0.1.0"
 edition = "2024"
+description = "Bevy plugin to save and restore window position and size across sessions"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/natemccoy/bevy_restore_window"
+keywords = ["bevy", "window", "restore", "position", "gamedev"]
+categories = ["game-development", "gui"]
+
+[lib]
+name = "bevy_restore_window"
+path = "src/lib.rs"
+
+[[example]]
+name = "simple"
+path = "examples/simple.rs"
 
 [dependencies]
 bevy = "0.17.3"
 dirs = "6.0"
 ron = "0.12"
 serde = { version = "1.0", features = ["derive"] }
-winit = "0.30"
 
 [profile.dev.package."*"]
 opt-level = 3

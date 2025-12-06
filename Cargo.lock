@@ -1104,6 +1104,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_restore_window"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "dirs",
+ "ron 0.12.0",
+ "serde",
+]
+
+[[package]]
 name = "bevy_scene"
 version = "0.17.3"
 dependencies = [
@@ -4711,7 +4721,6 @@ checksum = "34949b42822155826b41db8e5d0c1be3a2bd296c747577a43a3e6daefc296142"
 dependencies = [
  "dlib",
  "log",
- "once_cell",
  "pkg-config",
 ]
 
@@ -5411,17 +5420,6 @@ dependencies = [
  "x11-dl",
  "x11rb",
  "xkbcommon-dl",
-]
-
-[[package]]
-name = "winit-test"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "dirs",
- "ron 0.12.0",
- "serde",
- "winit",
 ]
 
 [[package]]
