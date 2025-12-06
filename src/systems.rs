@@ -8,23 +8,26 @@ use bevy::window::WindowResized;
 use bevy::window::WindowScaleFactorChanged;
 use bevy::winit::WINIT_WINDOWS;
 
-use crate::state::RestoreWindowConfig;
-use crate::state::WindowState;
-use crate::state::load_state;
-use crate::state::save_state;
-use crate::types::MonitorInfo;
+use super::state;
+use super::types::MonitorInfo;
+use super::types::RestoreWindowConfig;
+use super::types::WindowState;
 use crate::types::TargetPosition;
 use crate::types::WindowDecoration;
 use crate::types::WinitInfo;
 
 /// Get sort key for monitor (primary at 0,0 first, then by position).
-fn monitor_sort_key(mon: &Monitor) -> (bool, i32, i32) {
+const fn monitor_sort_key(mon: &Monitor) -> (bool, i32, i32) {
     let pos = mon.physical_position;
     let is_primary = pos.x == 0 && pos.y == 0;
     (!is_primary, pos.x, pos.y)
 }
 
 /// Helper to get monitor info at a position from Bevy `Monitor` components.
+#[expect(
+    clippy::cast_possible_wrap,
+    reason = "monitor dimensions are always within i32 range"
+)]
 fn monitor_at(monitors: &[(Entity, &Monitor)], x: i32, y: i32) -> Option<MonitorInfo> {
     let mut sorted: Vec<_> = monitors.iter().collect();
     sorted.sort_by_key(|(_, mon)| monitor_sort_key(mon));
@@ -35,7 +38,6 @@ fn monitor_at(monitors: &[(Entity, &Monitor)], x: i32, y: i32) -> Option<Monitor
         if x >= pos.x && x < pos.x + size.x as i32 && y >= pos.y && y < pos.y + size.y as i32 {
             Some(MonitorInfo {
                 index: idx,
-                name: mon.name.clone().unwrap_or_else(|| "?".to_string()),
                 scale: mon.scale_factor,
                 position: pos,
                 size,
@@ -53,7 +55,6 @@ fn monitor_by_index(monitors: &[(Entity, &Monitor)], index: usize) -> Option<Mon
 
     sorted.get(index).map(|(_, mon)| MonitorInfo {
         index,
-        name: mon.name.clone().unwrap_or_else(|| "?".to_string()),
         scale: mon.scale_factor,
         position: mon.physical_position,
         size: mon.physical_size(),
@@ -62,8 +63,8 @@ fn monitor_by_index(monitors: &[(Entity, &Monitor)], index: usize) -> Option<Mon
 
 /// Infer monitor index when position is outside all monitor bounds.
 /// Uses Y coordinate: negative Y = secondary monitor (index 1), else primary (index 0).
-fn infer_monitor_index(y: i32) -> usize {
-    if y < 0 { 1 } else { 0 }
+const fn infer_monitor_index(y: i32) -> usize {
+    (y < 0) as usize
 }
 
 /// Populate `WinitInfo` resource from winit (decoration and starting monitor).
@@ -95,9 +96,8 @@ pub fn init_winit_info(
                 .map(|p| IVec2::new(p.x, p.y))
                 .unwrap_or(IVec2::ZERO);
 
-            let starting_monitor_index = monitor_at(&monitors_vec, pos.x, pos.y)
-                .map(|m| m.index)
-                .unwrap_or(0);
+            let starting_monitor_index =
+                monitor_at(&monitors_vec, pos.x, pos.y).map_or(0, |m| m.index);
 
             info!(
                 "[Init] decoration={}x{} pos=({}, {}) starting_monitor={}",
@@ -113,6 +113,13 @@ pub fn init_winit_info(
 }
 
 /// Step 1 (PreStartup): Move window to target monitor at 1x1 size.
+#[expect(
+    clippy::cast_possible_wrap,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::needless_pass_by_value,
+    reason = "window dimensions safe; Bevy systems require owned Res types"
+)]
 pub fn step1_move_to_monitor(
     mut commands: Commands,
     mut windows: Query<(Entity, &mut Window)>,
@@ -120,7 +127,7 @@ pub fn step1_move_to_monitor(
     winit_info: Option<Res<WinitInfo>>,
     config: Res<RestoreWindowConfig>,
 ) {
-    let Some(state) = load_state(&config.app_name) else {
+    let Some(state) = state::load_state(&config.path) else {
         info!("[Step1] No saved state");
         return;
     };
@@ -140,15 +147,9 @@ pub fn step1_move_to_monitor(
     let monitors_vec: Vec<_> = monitors.iter().collect();
 
     // Get starting monitor from `WinitInfo` (actual position from winit)
-    let starting_monitor_index = winit_info
-        .as_ref()
-        .map(|w| w.starting_monitor_index)
-        .unwrap_or(0);
+    let starting_monitor_index = winit_info.as_ref().map_or(0, |w| w.starting_monitor_index);
     let starting_info = monitor_by_index(&monitors_vec, starting_monitor_index);
-    let starting_scale = starting_info
-        .as_ref()
-        .map(|m| m.scale as f32)
-        .unwrap_or(1.0);
+    let starting_scale = starting_info.as_ref().map_or(1.0, |m| m.scale as f32);
 
     let Some(target_info) = monitor_by_index(&monitors_vec, target_monitor_index) else {
         info!("[Step1] Target monitor index {target_monitor_index} not found");
@@ -196,6 +197,10 @@ pub fn step2_apply_exact(target: Option<Res<TargetPosition>>) {
 }
 
 /// Handle window events - apply pending restore or save state.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Bevy systems require many owned params"
+)]
 pub fn handle_window_events(
     mut commands: Commands,
     mut moved_events: MessageReader<WindowMoved>,
@@ -207,116 +212,27 @@ pub fn handle_window_events(
     mut windows: Query<&mut Window>,
     monitors: Query<(Entity, &Monitor)>,
 ) {
-    let (decoration_width, decoration_height) = winit_info
-        .as_ref()
-        .map(|w| (w.window_decoration.width, w.window_decoration.height))
-        .unwrap_or((0, 0));
+    let decoration = winit_info.as_ref().map_or((0, 0), |w| {
+        (w.window_decoration.width, w.window_decoration.height)
+    });
 
     // Drain events to clear queue
-    let last_scale: Option<_> = scale_events.read().last().cloned();
-    let last_move: Option<_> = moved_events.read().last().cloned();
-    let last_resize: Option<_> = resized_events.read().last().cloned();
+    let last_scale = scale_events.read().last().cloned();
+    let last_move = moved_events.read().last().cloned();
+    let last_resize = resized_events.read().last().cloned();
 
-    // If we have a pending restore, check if we can apply it
+    // If we have a pending restore, try to apply it
     if let Some(target) = target {
         let monitors_vec: Vec<_> = monitors.iter().collect();
-
-        // Check current monitor via last move event or window position
-        let current_pos = last_move.as_ref().map(|e| e.position).or_else(|| {
-            windows
-                .get(target.entity)
-                .ok()
-                .and_then(|w| match w.position {
-                    bevy::window::WindowPosition::At(p) => Some(p),
-                    _ => None,
-                })
-        });
-
-        let Some(pos) = current_pos else {
-            return;
-        };
-
-        let current_mon = monitor_at(&monitors_vec, pos.x, pos.y);
-        let current_scale = current_mon.as_ref().map(|m| m.scale as f32).unwrap_or(1.0);
-
-        info!(
-            "[Restore] pos=({}, {}) current_scale={} target_scale={}",
-            pos.x, pos.y, current_scale, target.target_scale
-        );
-
-        // If we're on the target monitor (scales match), apply final position/size
-        if (current_scale - target.target_scale).abs() < 0.01 {
-            info!("[Restore] On target monitor, applying final position/size");
-
-            let inner_width = target.width.saturating_sub(decoration_width);
-            let inner_height = target.height.saturating_sub(decoration_height);
-
-            // Clamp position to keep window fully within target monitor
-            // (programmatic positioning can't restore cross-monitor overlapping positions)
-            let target_mon = monitor_at(&monitors_vec, target.x, target.y);
-            let (final_x, final_y) = if let Some(ref mon) = target_mon {
-                let mon_right = mon.position.x + mon.size.x as i32;
-                let mon_bottom = mon.position.y + mon.size.y as i32;
-
-                let mut x = target.x;
-                let mut y = target.y;
-
-                // Clamp right edge
-                if x + target.width as i32 > mon_right {
-                    x = mon_right - target.width as i32;
-                }
-                // Clamp bottom edge
-                if y + target.height as i32 > mon_bottom {
-                    y = mon_bottom - target.height as i32;
-                }
-                // Ensure we don't go past left/top edges after clamping
-                x = x.max(mon.position.x);
-                y = y.max(mon.position.y);
-
-                if x != target.x || y != target.y {
-                    info!(
-                        "[Restore] Clamped position: ({}, {}) -> ({}, {}) to fit monitor",
-                        target.x, target.y, x, y
-                    );
-                }
-
-                (x, y)
-            } else {
-                (target.x, target.y)
-            };
-
-            if let Ok(mut window) = windows.get_mut(target.entity) {
-                // Compensate for scale factor conversion in `changed_windows`
-                // 2→1: ratio=2, size/pos doubled then halved back
-                // 1→2: ratio=0.5, size/pos halved then doubled back
-                // Same: ratio=1, no change
-                let scale_ratio = target.starting_scale / target.target_scale;
-
-                let comp_x = (final_x as f32 * scale_ratio) as i32;
-                let comp_y = (final_y as f32 * scale_ratio) as i32;
-                let comp_width = (inner_width as f32 * scale_ratio) as u32;
-                let comp_height = (inner_height as f32 * scale_ratio) as u32;
-
-                window.position = bevy::window::WindowPosition::At(IVec2::new(comp_x, comp_y));
-                window
-                    .resolution
-                    .set_physical_resolution(comp_width, comp_height);
-
-                info!(
-                    "[Restore] Applied: pos=({}, {}) inner_size={}x{} (compensated from {}x{}, ratio={})",
-                    final_x,
-                    final_y,
-                    comp_width,
-                    comp_height,
-                    inner_width,
-                    inner_height,
-                    scale_ratio
-                );
-            }
-
-            commands.remove_resource::<TargetPosition>();
+        if try_apply_restore(
+            &target,
+            &monitors_vec,
+            &mut windows,
+            decoration,
+            &mut commands,
+        ) {
+            return; // Don't save during restore
         }
-        return; // Don't save during restore
     }
 
     // Save state on events (only when not restoring)
@@ -328,74 +244,215 @@ pub fn handle_window_events(
         info!("[Event:ScaleChanged] scale={}", event.scale_factor);
     }
 
+    let monitors_vec: Vec<_> = monitors.iter().collect();
     let last_move_pos = last_move.as_ref().map(|m| m.position);
 
     if let Some(event) = last_move {
-        let monitors_vec: Vec<_> = monitors.iter().collect();
-        let monitor_index = monitor_at(&monitors_vec, event.position.x, event.position.y)
-            .map(|m| m.index)
-            .unwrap_or_else(|| infer_monitor_index(event.position.y));
-
-        let outer_width = window.resolution.physical_width() + decoration_width;
-        let outer_height = window.resolution.physical_height() + decoration_height;
-
-        info!(
-            "[Event:Moved] pos=({}, {}) size={}x{} monitor={}",
-            event.position.x, event.position.y, outer_width, outer_height, monitor_index
-        );
-
-        let state = WindowState {
-            position: Some((event.position.x, event.position.y)),
-            width: outer_width as f32,
-            height: outer_height as f32,
-            monitor_index,
-        };
-        save_state(&config.app_name, &state);
+        save_on_move(&event, window, &monitors_vec, decoration, &config.path);
     }
 
     if let Some(event) = last_resize {
-        let scale = window.scale_factor();
-        let physical_width = (event.width * scale) as u32 + decoration_width;
-        let physical_height = (event.height * scale) as u32 + decoration_height;
+        save_on_resize(
+            &event,
+            window,
+            &monitors_vec,
+            decoration,
+            last_move_pos,
+            &config.path,
+        );
+    }
+}
 
-        // Use position from move event if available, otherwise from window component
-        let pos = last_move_pos.or_else(|| match window.position {
+/// Try to apply a pending window restore. Returns `true` if restore is still in progress.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    reason = "window dimensions and scale factors are within safe ranges"
+)]
+fn try_apply_restore(
+    target: &TargetPosition,
+    monitors: &[(Entity, &Monitor)],
+    windows: &mut Query<&mut Window>,
+    decoration: (u32, u32),
+    commands: &mut Commands,
+) -> bool {
+    // Check current monitor via window position
+    let current_pos = windows
+        .get(target.entity)
+        .ok()
+        .and_then(|w| match w.position {
             bevy::window::WindowPosition::At(p) => Some(p),
             _ => None,
         });
 
-        let Some(pos) = pos else {
-            // Can't determine position, skip saving
-            info!(
-                "[Event:Resized] logical={}x{} - skipping save, position unknown",
-                event.width, event.height
-            );
-            return;
-        };
+    let Some(pos) = current_pos else {
+        return true;
+    };
 
-        let monitors_vec: Vec<_> = monitors.iter().collect();
-        let monitor_index = monitor_at(&monitors_vec, pos.x, pos.y)
-            .map(|m| m.index)
-            .unwrap_or_else(|| infer_monitor_index(pos.y));
+    let current_scale = monitor_at(monitors, pos.x, pos.y)
+        .as_ref()
+        .map_or(1.0, |m| m.scale as f32);
 
-        info!(
-            "[Event:Resized] logical={}x{} physical_outer={}x{} pos=({}, {}) monitor={} scale={}",
-            event.width,
-            event.height,
-            physical_width,
-            physical_height,
-            pos.x,
-            pos.y,
-            monitor_index,
-            scale
-        );
+    info!(
+        "[Restore] pos=({}, {}) current_scale={} target_scale={}",
+        pos.x, pos.y, current_scale, target.target_scale
+    );
 
-        let state = WindowState {
-            position: Some((pos.x, pos.y)),
-            width: physical_width as f32,
-            height: physical_height as f32,
-            monitor_index,
-        };
-        save_state(&config.app_name, &state);
+    // Not yet on target monitor
+    if (current_scale - target.target_scale).abs() >= 0.01 {
+        return true;
     }
+
+    info!("[Restore] On target monitor, applying final position/size");
+
+    let (decoration_width, decoration_height) = decoration;
+    let inner_width = target.width.saturating_sub(decoration_width);
+    let inner_height = target.height.saturating_sub(decoration_height);
+
+    // Clamp position to keep window fully within target monitor
+    let (final_x, final_y) = clamp_to_monitor(target, monitors);
+
+    let Ok(mut window) = windows.get_mut(target.entity) else {
+        return true;
+    };
+
+    // Compensate for scale factor conversion in Bevy's `changed_windows`
+    let scale_ratio = target.starting_scale / target.target_scale;
+    let comp_x = (final_x as f32 * scale_ratio) as i32;
+    let comp_y = (final_y as f32 * scale_ratio) as i32;
+    let comp_width = (inner_width as f32 * scale_ratio) as u32;
+    let comp_height = (inner_height as f32 * scale_ratio) as u32;
+
+    window.position = bevy::window::WindowPosition::At(IVec2::new(comp_x, comp_y));
+    window
+        .resolution
+        .set_physical_resolution(comp_width, comp_height);
+
+    info!(
+        "[Restore] Applied: pos=({}, {}) size={}x{} (ratio={})",
+        final_x, final_y, comp_width, comp_height, scale_ratio
+    );
+
+    commands.remove_resource::<TargetPosition>();
+    true
+}
+
+/// Clamp window position to fit within target monitor bounds.
+#[expect(
+    clippy::cast_possible_wrap,
+    reason = "window dimensions are within safe ranges"
+)]
+fn clamp_to_monitor(target: &TargetPosition, monitors: &[(Entity, &Monitor)]) -> (i32, i32) {
+    let Some(mon) = monitor_at(monitors, target.x, target.y) else {
+        return (target.x, target.y);
+    };
+
+    let mon_right = mon.position.x + mon.size.x as i32;
+    let mon_bottom = mon.position.y + mon.size.y as i32;
+
+    let mut x = target.x;
+    let mut y = target.y;
+
+    // Clamp to right/bottom edges
+    if x + target.width as i32 > mon_right {
+        x = mon_right - target.width as i32;
+    }
+    if y + target.height as i32 > mon_bottom {
+        y = mon_bottom - target.height as i32;
+    }
+
+    // Ensure we don't go past left/top edges
+    x = x.max(mon.position.x);
+    y = y.max(mon.position.y);
+
+    if x != target.x || y != target.y {
+        info!(
+            "[Restore] Clamped position: ({}, {}) -> ({}, {})",
+            target.x, target.y, x, y
+        );
+    }
+
+    (x, y)
+}
+
+/// Save window state on move event.
+#[expect(clippy::cast_precision_loss, reason = "window dimensions fit in f32")]
+fn save_on_move(
+    event: &WindowMoved,
+    window: &Window,
+    monitors: &[(Entity, &Monitor)],
+    decoration: (u32, u32),
+    path: &std::path::Path,
+) {
+    let (decoration_width, decoration_height) = decoration;
+    let monitor_index = monitor_at(monitors, event.position.x, event.position.y)
+        .map_or_else(|| infer_monitor_index(event.position.y), |m| m.index);
+
+    let outer_width = window.resolution.physical_width() + decoration_width;
+    let outer_height = window.resolution.physical_height() + decoration_height;
+
+    info!(
+        "[Event:Moved] pos=({}, {}) size={}x{} monitor={}",
+        event.position.x, event.position.y, outer_width, outer_height, monitor_index
+    );
+
+    let state = WindowState {
+        position: Some((event.position.x, event.position.y)),
+        width: outer_width as f32,
+        height: outer_height as f32,
+        monitor_index,
+    };
+    state::save_state(path, &state);
+}
+
+/// Save window state on resize event.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    reason = "window dimensions are within safe ranges"
+)]
+fn save_on_resize(
+    event: &WindowResized,
+    window: &Window,
+    monitors: &[(Entity, &Monitor)],
+    decoration: (u32, u32),
+    last_move_pos: Option<IVec2>,
+    path: &std::path::Path,
+) {
+    let (decoration_width, decoration_height) = decoration;
+    let scale = window.scale_factor();
+    let physical_width = (event.width * scale) as u32 + decoration_width;
+    let physical_height = (event.height * scale) as u32 + decoration_height;
+
+    // Use position from move event if available, otherwise from window component
+    let pos = last_move_pos.or(match window.position {
+        bevy::window::WindowPosition::At(p) => Some(p),
+        _ => None,
+    });
+
+    let Some(pos) = pos else {
+        info!(
+            "[Event:Resized] logical={}x{} - skipping save, position unknown",
+            event.width, event.height
+        );
+        return;
+    };
+
+    let monitor_index =
+        monitor_at(monitors, pos.x, pos.y).map_or_else(|| infer_monitor_index(pos.y), |m| m.index);
+
+    info!(
+        "[Event:Resized] logical={}x{} physical={}x{} pos=({}, {}) monitor={}",
+        event.width, event.height, physical_width, physical_height, pos.x, pos.y, monitor_index
+    );
+
+    let state = WindowState {
+        position: Some((pos.x, pos.y)),
+        width: physical_width as f32,
+        height: physical_height as f32,
+        monitor_index,
+    };
+    state::save_state(path, &state);
 }

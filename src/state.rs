@@ -1,51 +1,44 @@
 //! Window state persistence.
 
-use std::fs;
-use std::path::PathBuf;
-
+use super::types::WindowState;
 use bevy::prelude::*;
-use serde::Deserialize;
-use serde::Serialize;
+use std::fs;
+use std::path::Path;
+use std::path::PathBuf;
 
 const STATE_FILE: &str = "windows.ron";
 
-/// Configuration for the `RestoreWindowPlugin`.
-#[derive(Resource, Clone)]
-pub struct RestoreWindowConfig {
-    /// Application name used for the config directory path.
-    pub app_name: String,
+/// Get the default state file path using the executable name.
+///
+/// Returns `config_dir()/<exe_name>/windows.ron`
+pub fn get_default_state_path() -> Option<PathBuf> {
+    let exe_name = std::env::current_exe()
+        .ok()?
+        .file_stem()?
+        .to_str()?
+        .to_string();
+    dirs::config_dir().map(|d| d.join(exe_name).join(STATE_FILE))
 }
 
-/// Saved window state.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WindowState {
-    pub position: Option<(i32, i32)>,
-    pub width: f32,
-    pub height: f32,
-    pub monitor_index: usize,
-}
-
-/// Get the path to the state file for the given app name.
-pub fn get_state_path(app_name: &str) -> Option<PathBuf> {
+/// Get the state file path for a given app name.
+///
+/// Returns `config_dir()/<app_name>/windows.ron`
+pub fn get_state_path_for_app(app_name: &str) -> Option<PathBuf> {
     dirs::config_dir().map(|d| d.join(app_name).join(STATE_FILE))
 }
 
-/// Load the saved window state.
-pub fn load_state(app_name: &str) -> Option<WindowState> {
-    let path = get_state_path(app_name)?;
-    let contents = fs::read_to_string(&path).ok()?;
+/// Load the saved window state from the given path.
+pub fn load_state(path: &Path) -> Option<WindowState> {
+    let contents = fs::read_to_string(path).ok()?;
     ron::from_str(&contents).ok()
 }
 
-/// Save the window state.
-pub fn save_state(app_name: &str, state: &WindowState) {
-    let Some(path) = get_state_path(app_name) else {
-        return;
-    };
+/// Save the window state to the given path.
+pub fn save_state(path: &Path, state: &WindowState) {
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
     if let Ok(contents) = ron::ser::to_string_pretty(state, ron::ser::PrettyConfig::default()) {
-        let _ = fs::write(&path, contents);
+        let _ = fs::write(path, contents);
     }
 }

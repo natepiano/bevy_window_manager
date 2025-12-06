@@ -25,72 +25,71 @@
 //! This plugin uses winit directly to capture the actual window position at startup,
 //! compensates for scale factor conversions, and properly restores windows across monitors.
 //!
-//! # Example
+//! # Usage
 //!
 //! ```no_run
 //! use bevy::prelude::*;
 //! use bevy_restore_window::RestoreWindowPlugin;
 //!
-//! fn main() {
-//!     App::new()
-//!         .add_plugins(DefaultPlugins)
-//!         .add_plugins(RestoreWindowPlugin::new("my_app"))
-//!         .run();
-//! }
+//! App::new()
+//!     .add_plugins(DefaultPlugins)
+//!     // Uses executable name for config directory
+//!     .add_plugins(RestoreWindowPlugin::default())
+//!     .run();
 //! ```
+//!
+//! See `examples/custom_app_name.rs` for how to override the `app_name` used in the path
+//! (default is to choose executable name).
+//!
+//! See `examples/custom_path.rs` for how to override the full path to the state file.
 
 mod state;
 mod systems;
 mod types;
 
-pub use state::RestoreWindowConfig;
-pub use state::WindowState;
-pub use types::MonitorInfo;
-pub use types::TargetPosition;
-pub use types::WinitInfo;
-
 use bevy::prelude::*;
+use std::path::PathBuf;
+use types::RestoreWindowConfig;
 
-use systems::handle_window_events;
-use systems::init_winit_info;
-use systems::step1_move_to_monitor;
-use systems::step2_apply_exact;
-
-/// Plugin that saves and restores window position and size across sessions.
+/// The main plugin. See module docs for usage.
 ///
-/// The window state is saved to a RON file in the system config directory
-/// under a subdirectory named after your application.
-///
-/// # Example
-///
-/// ```no_run
-/// use bevy::prelude::*;
-/// use bevy_restore_window::RestoreWindowPlugin;
-///
-/// App::new()
-///     .add_plugins(DefaultPlugins)
-///     .add_plugins(RestoreWindowPlugin::new("my_game"))
-///     .run();
-/// ```
-///
-/// This will save window state to:
-/// - macOS: `~/Library/Application Support/my_game/windows.ron`
-/// - Linux: `~/.config/my_game/windows.ron`
-/// - Windows: `C:\Users\<User>\AppData\Roaming\my_game\windows.ron`
+/// Default state file locations:
+/// - macOS: `~/Library/Application Support/<exe_name>/windows.ron`
+/// - Linux: `~/.config/<exe_name>/windows.ron`
+/// - Windows: `C:\Users\<User>\AppData\Roaming\<exe_name>\windows.ron`
 pub struct RestoreWindowPlugin {
-    /// Application name used for the config directory.
-    pub app_name: String,
+    path: PathBuf,
 }
 
 impl RestoreWindowPlugin {
-    /// Create a new `RestoreWindowPlugin` with the given application name.
+    /// Create a plugin with a custom app name.
     ///
-    /// The application name is used to create a subdirectory in the system
-    /// config directory where the window state file will be stored.
+    /// Uses `config_dir()/<app_name>/windows.ron`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the config directory cannot be determined.
     #[must_use]
-    pub fn new(app_name: impl Into<String>) -> Self {
+    #[expect(clippy::expect_used, reason = "fail fast if path cannot be determined")]
+    pub fn with_app_name(app_name: impl Into<String>) -> Self {
         Self {
-            app_name: app_name.into(),
+            path: state::get_state_path_for_app(&app_name.into())
+                .expect("Could not determine state file path"),
+        }
+    }
+
+    /// Create a plugin with a custom state file path.
+    #[must_use]
+    pub fn with_path(path: impl Into<PathBuf>) -> Self {
+        Self { path: path.into() }
+    }
+}
+
+#[expect(clippy::expect_used, reason = "fail fast if path cannot be determined")]
+impl Default for RestoreWindowPlugin {
+    fn default() -> Self {
+        Self {
+            path: state::get_default_state_path().expect("Could not determine state file path"),
         }
     }
 }
@@ -98,10 +97,13 @@ impl RestoreWindowPlugin {
 impl Plugin for RestoreWindowPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(RestoreWindowConfig {
-            app_name: self.app_name.clone(),
+            path: self.path.clone(),
         })
-        .add_systems(PreStartup, (init_winit_info, step1_move_to_monitor).chain())
-        .add_systems(Startup, step2_apply_exact)
-        .add_systems(Update, handle_window_events);
+        .add_systems(
+            PreStartup,
+            (systems::init_winit_info, systems::step1_move_to_monitor).chain(),
+        )
+        .add_systems(Startup, systems::step2_apply_exact)
+        .add_systems(Update, systems::handle_window_events);
     }
 }

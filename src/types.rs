@@ -1,6 +1,9 @@
 //! Type definitions for window restoration.
 
 use bevy::prelude::*;
+use serde::Deserialize;
+use serde::Serialize;
+use std::path::PathBuf;
 
 /// Window decoration dimensions (title bar, borders).
 pub struct WindowDecoration {
@@ -15,7 +18,14 @@ pub struct WinitInfo {
     pub window_decoration: WindowDecoration,
 }
 
-/// Resource to pass target position from PreStartup to Startup.
+/// Holds the target window position/size during a two-phase restore process.
+///
+/// Window restoration requires two phases because Bevy's `changed_windows` system
+/// applies scale factor conversion using cached values that may not match the target
+/// monitor's scale. By first moving the window to the target monitor (Step 1), we
+/// trigger a scale factor update. Then in `handle_window_events`, once the window
+/// is on the correct monitor, we apply the final position/size with proper scale
+/// compensation.
 #[derive(Resource)]
 pub struct TargetPosition {
     pub x: i32,
@@ -32,26 +42,23 @@ pub struct TargetPosition {
 #[derive(Clone)]
 pub struct MonitorInfo {
     pub index: usize,
-    pub name: String,
     pub scale: f64,
     pub position: IVec2,
     pub size: UVec2,
 }
 
-impl MonitorInfo {
-    /// Format monitor info with window position and size for logging.
-    pub fn format_with_window(&self, win_pos: IVec2, win_size: (u32, u32)) -> String {
-        format!(
-            "({} index={} scale={} pos=({}, {})) win_pos=({}, {}) win_size={}x{}",
-            self.name,
-            self.index,
-            self.scale,
-            self.position.x,
-            self.position.y,
-            win_pos.x,
-            win_pos.y,
-            win_size.0,
-            win_size.1
-        )
-    }
+/// Configuration for the `RestoreWindowPlugin`.
+#[derive(Resource, Clone)]
+pub struct RestoreWindowConfig {
+    /// Full path to the state file.
+    pub path: PathBuf,
+}
+
+/// Saved window state.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WindowState {
+    pub position: Option<(i32, i32)>,
+    pub width: f32,
+    pub height: f32,
+    pub monitor_index: usize,
 }

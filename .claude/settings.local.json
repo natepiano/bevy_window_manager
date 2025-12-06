@@ -4,7 +4,9 @@
       "Bash(git commit:*)",
       "Bash(git add:*)",
       "Bash(cargo build:*)",
-      "Bash(cargo +nightly fmt:*)"
+      "Bash(cargo +nightly fmt:*)",
+      "Bash(chmod:*)",
+      "Bash(cargo clippy:*)"
     ],
     "deny": [],
     "ask": []
