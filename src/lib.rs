@@ -50,6 +50,7 @@ mod types;
 use bevy::prelude::*;
 use std::path::PathBuf;
 use types::RestoreWindowConfig;
+use types::TargetPosition;
 
 /// The main plugin. See module docs for usage.
 ///
@@ -104,7 +105,7 @@ impl Plugin for RestoreWindowPlugin {
             (
                 systems::init_winit_info,
                 systems::load_target_position,
-                systems::step1_move_to_monitor,
+                systems::two_phase_set_position.run_if(resource_exists::<TargetPosition>),
             )
                 .chain(),
         )

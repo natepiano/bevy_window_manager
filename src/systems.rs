@@ -3,6 +3,7 @@
 use bevy::ecs::system::NonSendMarker;
 use bevy::prelude::*;
 use bevy::window::Monitor;
+use bevy::window::PrimaryWindow;
 use bevy::window::WindowMoved;
 use bevy::window::WindowResized;
 use bevy::window::WindowScaleFactorChanged;
@@ -72,19 +73,15 @@ const fn infer_monitor_index(y: i32) -> usize {
 /// Populate `WinitInfo` resource from winit (decoration and starting monitor).
 pub fn init_winit_info(
     mut commands: Commands,
-    windows: Query<Entity, With<Window>>,
+    window_entity: Single<Entity, With<PrimaryWindow>>,
     monitors: Query<(Entity, &Monitor)>,
     _non_send: NonSendMarker,
 ) {
-    let Ok(entity) = windows.single() else {
-        return;
-    };
-
     let monitors_vec: Vec<_> = monitors.iter().collect();
 
     WINIT_WINDOWS.with(|ww| {
         let ww = ww.borrow();
-        if let Some(winit_window) = ww.get_window(entity) {
+        if let Some(winit_window) = ww.get_window(*window_entity) {
             let outer = winit_window.outer_size();
             let inner = winit_window.inner_size();
             let decoration = WindowDecoration {
@@ -127,23 +124,18 @@ pub fn init_winit_info(
 )]
 pub fn load_target_position(
     mut commands: Commands,
-    windows: Query<Entity, With<Window>>,
+    window_entity: Single<Entity, With<PrimaryWindow>>,
     monitors: Query<(Entity, &Monitor)>,
     winit_info: Option<Res<WinitInfo>>,
     config: Res<RestoreWindowConfig>,
 ) {
     let Some(state) = state::load_state(&config.path) else {
-        info!("[Load] No saved state");
+        debug!("[Load] No saved bevy_restore_window state");
         return;
     };
 
     let Some((saved_x, saved_y)) = state.position else {
-        info!("[Load] No saved position");
-        return;
-    };
-
-    let Ok(window_entity) = windows.single() else {
-        info!("[Load] No window");
+        debug!("[Load] No saved bevy_restore_window position");
         return;
     };
 
@@ -211,7 +203,7 @@ pub fn load_target_position(
         y,
         width,
         height,
-        entity: window_entity,
+        entity: *window_entity,
         target_scale,
         starting_scale,
         phase,
@@ -227,16 +219,10 @@ pub fn load_target_position(
     clippy::cast_precision_loss,
     reason = "position values fit in f32 and i32"
 )]
-pub fn step1_move_to_monitor(mut windows: Query<&mut Window>, target: Option<Res<TargetPosition>>) {
-    let Some(target) = target else {
-        return;
-    };
-
-    let Ok(mut window) = windows.get_mut(target.entity) else {
-        info!("[Step1] Window entity not found");
-        return;
-    };
-
+pub fn two_phase_set_position(
+    mut window: Single<&mut Window, With<PrimaryWindow>>,
+    target: Res<TargetPosition>,
+) {
     // For TwoPhase, compensate position because winit divides by starting_scale
     let (move_x, move_y) = if matches!(target.phase, RestorePhase::TwoPhase(_)) {
         let ratio = target.starting_scale / target.target_scale;
