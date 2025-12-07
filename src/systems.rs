@@ -185,19 +185,20 @@ pub fn move_to_target_monitor(
     window.resolution.set_physical_resolution(1, 1);
 }
 
-/// Handle window messages - apply pending restore or save state.
+/// Apply pending window restore. Runs only when `TargetPosition` exists.
+///
+/// Drains all window messages during restore to prevent saving.
 #[expect(
     clippy::too_many_arguments,
-    reason = "Bevy systems require many owned params"
+    reason = "Bevy system requires many params"
 )]
-pub fn handle_window_messages(
+pub fn apply_restore(
     mut commands: Commands,
     mut moved_messages: MessageReader<WindowMoved>,
     mut resized_messages: MessageReader<WindowResized>,
-    mut scale_factor_changed_messages: MessageReader<WindowScaleFactorChanged>,
-    target: Option<ResMut<TargetPosition>>,
+    mut scale_changed_messages: MessageReader<WindowScaleFactorChanged>,
+    mut target: ResMut<TargetPosition>,
     winit_info: Option<Res<WinitInfo>>,
-    config: Res<RestoreWindowConfig>,
     mut windows: Query<&mut Window>,
     monitors: Res<Monitors>,
 ) {
@@ -205,58 +206,80 @@ pub fn handle_window_messages(
         (w.window_decoration.width, w.window_decoration.height)
     });
 
-    // Drain messages to clear queue
-    let scale_changed = scale_factor_changed_messages.read().last().cloned();
-    let last_move = moved_messages.read().last().cloned();
-    let last_resize = resized_messages.read().last().cloned();
+    // Drain all messages (don't save during restore)
+    let scale_changed = scale_changed_messages.read().last().is_some();
+    let _ = moved_messages.read().count();
+    let _ = resized_messages.read().count();
 
-    // If we have a pending restore, try to apply it
-    if let Some(mut target) = target {
-        // Check for HigherToLower state transitions
-        if target.monitor_scale_strategy
-            == MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange)
-            && scale_changed.is_some()
-        {
-            info!(
-                "[Restore] ScaleChanged received, transitioning to WindowRestoreState::ApplySize"
-            );
-            target.monitor_scale_strategy =
-                MonitorScaleStrategy::HigherToLower(WindowRestoreState::ApplySize);
-        }
-
-        if try_apply_restore(&target, &monitors, &mut windows, decoration, &mut commands) {
-            return; // Don't save during restore
-        }
+    // Handle HigherToLower state transition on scale change
+    if target.monitor_scale_strategy
+        == MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange)
+        && scale_changed
+    {
+        info!("[Restore] ScaleChanged received, transitioning to WindowRestoreState::ApplySize");
+        target.monitor_scale_strategy =
+            MonitorScaleStrategy::HigherToLower(WindowRestoreState::ApplySize);
     }
 
-    // Save state on messages (only when not restoring)
+    if try_apply_restore(&target, &monitors, &mut windows, decoration) {
+        commands.remove_resource::<TargetPosition>();
+    }
+}
+
+/// Save window state on move/resize. Runs only when not restoring.
+pub fn save_window_state(
+    mut moved_messages: MessageReader<WindowMoved>,
+    mut resized_messages: MessageReader<WindowResized>,
+    winit_info: Option<Res<WinitInfo>>,
+    config: Res<RestoreWindowConfig>,
+    windows: Query<&Window>,
+    monitors: Res<Monitors>,
+) {
+    // Check if any relevant messages arrived
+    let moved = moved_messages.read().last().is_some();
+    let resized = resized_messages.read().last().is_some();
+
+    if !moved && !resized {
+        return;
+    }
+
     let Ok(window) = windows.single() else {
         return;
     };
 
-    if let Some(message) = scale_changed {
-        info!("[Message:ScaleChanged] scale={}", message.scale_factor);
-    }
+    let Some(pos) = (match window.position {
+        bevy::window::WindowPosition::At(p) => Some(p),
+        _ => None,
+    }) else {
+        return;
+    };
 
-    let last_move_pos = last_move.as_ref().map(|m| m.position);
+    let decoration = winit_info.as_ref().map_or((0, 0), |w| {
+        (w.window_decoration.width, w.window_decoration.height)
+    });
 
-    if let Some(message) = last_move {
-        save_on_move(&message, window, &monitors, decoration, &config.path);
-    }
+    let outer_width = window.resolution.physical_width() + decoration.0;
+    let outer_height = window.resolution.physical_height() + decoration.1;
 
-    if let Some(message) = last_resize {
-        save_on_resize(
-            &message,
-            window,
-            &monitors,
-            decoration,
-            last_move_pos,
-            &config.path,
-        );
-    }
+    let monitor_index = monitors
+        .at(pos.x, pos.y)
+        .map_or_else(|| monitors.infer_index(pos.x, pos.y), |m| m.index);
+
+    info!(
+        "[save_window_state] pos=({}, {}) size={}x{} monitor={}",
+        pos.x, pos.y, outer_width, outer_height, monitor_index
+    );
+
+    let state = WindowState {
+        position: Some((pos.x, pos.y)),
+        width: outer_width,
+        height: outer_height,
+        monitor_index,
+    };
+    state::save_state(&config.path, &state);
 }
 
-/// Try to apply a pending window restore. Returns `true` if restore is still in progress.
+/// Try to apply a pending window restore. Returns `true` when restore is complete.
 #[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
@@ -267,7 +290,6 @@ fn try_apply_restore(
     monitors: &Monitors,
     windows: &mut Query<&mut Window>,
     decoration: (u32, u32),
-    commands: &mut Commands,
 ) -> bool {
     // Check current monitor via window position
     let current_pos = windows
@@ -279,7 +301,7 @@ fn try_apply_restore(
         });
 
     let Some(pos) = current_pos else {
-        return true;
+        return false;
     };
 
     let current_scale = monitors.at(pos.x, pos.y).map_or(1.0, |m| m.scale);
@@ -294,7 +316,7 @@ fn try_apply_restore(
         == MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange)
     {
         info!("[Restore] HigherToLower: waiting for ScaleChanged message");
-        return true;
+        return false;
     }
 
     // Not yet on target monitor (for ApplyUnchanged/LowerToHigher strategies)
@@ -303,7 +325,7 @@ fn try_apply_restore(
         MonitorScaleStrategy::HigherToLower(WindowRestoreState::ApplySize)
     ) && (current_scale - target.target_scale).abs() >= 0.01
     {
-        return true;
+        return false;
     }
 
     // Log target monitor info
@@ -320,7 +342,7 @@ fn try_apply_restore(
 
     // Position is already clamped in TargetPosition
     let Ok(mut window) = windows.get_mut(target.entity) else {
-        return true;
+        return false;
     };
 
     match target.monitor_scale_strategy {
@@ -363,94 +385,9 @@ fn try_apply_restore(
         },
         MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange) => {
             // Still waiting, don't apply yet
-            return true;
+            return false;
         },
     }
 
-    commands.remove_resource::<TargetPosition>();
     true
-}
-
-/// Save window state on move message.
-fn save_on_move(
-    message: &WindowMoved,
-    window: &Window,
-    monitors: &Monitors,
-    decoration: (u32, u32),
-    path: &std::path::Path,
-) {
-    let (decoration_width, decoration_height) = decoration;
-    let monitor_index = monitors
-        .at(message.position.x, message.position.y)
-        .map_or_else(
-            || monitors.infer_index(message.position.x, message.position.y),
-            |m| m.index,
-        );
-
-    let outer_width = window.resolution.physical_width() + decoration_width;
-    let outer_height = window.resolution.physical_height() + decoration_height;
-
-    info!(
-        "[Message:Moved] pos=({}, {}) size={}x{} monitor={}",
-        message.position.x, message.position.y, outer_width, outer_height, monitor_index
-    );
-
-    let state = WindowState {
-        position: Some((message.position.x, message.position.y)),
-        width: outer_width,
-        height: outer_height,
-        monitor_index,
-    };
-    state::save_state(path, &state);
-}
-
-/// Save window state on resize message.
-#[expect(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "window dimensions are within safe ranges"
-)]
-fn save_on_resize(
-    message: &WindowResized,
-    window: &Window,
-    monitors: &Monitors,
-    decoration: (u32, u32),
-    last_move_pos: Option<IVec2>,
-    path: &std::path::Path,
-) {
-    let (decoration_width, decoration_height) = decoration;
-    let scale = window.scale_factor();
-    let physical_width = (message.width * scale) as u32 + decoration_width;
-    let physical_height = (message.height * scale) as u32 + decoration_height;
-
-    // Use position from move message if available, otherwise from window component
-    let pos = last_move_pos.or(match window.position {
-        bevy::window::WindowPosition::At(p) => Some(p),
-        _ => None,
-    });
-
-    let Some(pos) = pos else {
-        info!(
-            "[Message:Resized] logical={}x{} - skipping save, position unknown",
-            message.width, message.height
-        );
-        return;
-    };
-
-    let monitor_index = monitors
-        .at(pos.x, pos.y)
-        .map_or_else(|| monitors.infer_index(pos.x, pos.y), |m| m.index);
-
-    info!(
-        "[Message:Resized] logical={}x{} physical={}x{} pos=({}, {}) monitor={}",
-        message.width, message.height, physical_width, physical_height, pos.x, pos.y, monitor_index
-    );
-
-    let state = WindowState {
-        position: Some((pos.x, pos.y)),
-        width: physical_width,
-        height: physical_height,
-        monitor_index,
-    };
-    state::save_state(path, &state);
 }

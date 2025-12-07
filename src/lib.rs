@@ -115,6 +115,12 @@ impl Plugin for RestoreWindowPlugin {
                     .chain()
                     .after(init_monitors),
             )
-            .add_systems(Update, systems::handle_window_messages);
+            .add_systems(
+                Update,
+                (
+                    systems::apply_restore.run_if(resource_exists::<TargetPosition>),
+                    systems::save_window_state.run_if(not(resource_exists::<TargetPosition>)),
+                ),
+            );
     }
 }
