@@ -14,7 +14,7 @@
 //! See the `custom_path` example for details.
 
 use bevy::prelude::*;
-use bevy_restore_window::RestoreWindowPlugin;
+use bevy_restore_windows::RestoreWindowsPlugin;
 
 fn main() {
     App::new()
@@ -25,6 +25,6 @@ fn main() {
             }),
             ..default()
         }))
-        .add_plugins(RestoreWindowPlugin::with_app_name("my_awesome_game"))
+        .add_plugins(RestoreWindowsPlugin::with_app_name("my_awesome_game"))
         .run();
 }

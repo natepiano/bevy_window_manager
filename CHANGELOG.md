@@ -15,4 +15,4 @@ Initial release.
 - Automatic state persistence to platform-specific config directories
 - Simple example demonstrating plugin usage
 
-[0.17.0]: https://github.com/natemccoy/bevy_restore_window/releases/tag/v0.17.0
+[0.17.0]: https://github.com/natemccoy/bevy_restore_windows/releases/tag/v0.17.0

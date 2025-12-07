@@ -1,10 +1,10 @@
 [package]
-name = "bevy_restore_window"
+name = "bevy_restore_windows"
 version = "0.17.0"
 edition = "2024"
 description = "Bevy plugin to save and restore window position and size across sessions"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/natemccoy/bevy_restore_window"
+repository = "https://github.com/natemccoy/bevy_restore_windows"
 keywords = ["bevy", "window", "restore", "position", "gamedev"]
 categories = ["game-development", "gui"]
 
@@ -24,7 +24,7 @@ multiple_crate_versions = "allow"
 needless_pass_by_value = "allow"
 
 [lib]
-name = "bevy_restore_window"
+name = "bevy_restore_windows"
 path = "src/lib.rs"
 
 [dependencies]

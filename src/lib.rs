@@ -29,7 +29,7 @@
 //!
 //! ```no_run
 //! use bevy::prelude::*;
-//! use bevy_restore_window::RestoreWindowPlugin;
+//! use bevy_restore_windows::RestoreWindowsPlugin;
 //!
 //! App::new()
 //!     .add_plugins(DefaultPlugins)
@@ -64,11 +64,11 @@ use types::TargetPosition;
 /// - macOS: `~/Library/Application Support/<exe_name>/windows.ron`
 /// - Linux: `~/.config/<exe_name>/windows.ron`
 /// - Windows: `C:\Users\<User>\AppData\Roaming\<exe_name>\windows.ron`
-pub struct RestoreWindowPlugin {
+pub struct RestoreWindowsPlugin {
     path: PathBuf,
 }
 
-impl RestoreWindowPlugin {
+impl RestoreWindowsPlugin {
     /// Create a plugin with a custom app name.
     ///
     /// Uses `config_dir()/<app_name>/windows.ron`.
@@ -91,7 +91,7 @@ impl RestoreWindowPlugin {
 }
 
 #[expect(clippy::expect_used, reason = "fail fast if path cannot be determined")]
-impl Default for RestoreWindowPlugin {
+impl Default for RestoreWindowsPlugin {
     fn default() -> Self {
         Self {
             path: state::get_default_state_path().expect("Could not determine state file path"),
@@ -99,7 +99,7 @@ impl Default for RestoreWindowPlugin {
     }
 }
 
-impl Plugin for RestoreWindowPlugin {
+impl Plugin for RestoreWindowsPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MonitorPlugin)
             .insert_resource(RestoreWindowConfig {

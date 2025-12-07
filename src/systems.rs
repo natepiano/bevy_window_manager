@@ -67,21 +67,21 @@ pub fn load_target_position(
     mut commands: Commands,
     window_entity: Single<Entity, With<PrimaryWindow>>,
     monitors: Res<Monitors>,
-    winit_info: Option<Res<WinitInfo>>,
+    winit_info: Res<WinitInfo>,
     config: Res<RestoreWindowConfig>,
 ) {
     let Some(state) = state::load_state(&config.path) else {
-        debug!("[load_target_position] No saved bevy_restore_window state");
+        debug!("[load_target_position] No saved bevy_restore_windows state");
         return;
     };
 
     let Some((saved_x, saved_y)) = state.position else {
-        debug!("[load_target_position] No saved bevy_restore_window position");
+        debug!("[load_target_position] No saved bevy_restore_windows position");
         return;
     };
 
     // Get starting monitor from WinitInfo
-    let starting_monitor_index = winit_info.as_ref().map_or(0, |w| w.starting_monitor_index);
+    let starting_monitor_index = winit_info.starting_monitor_index;
     let starting_info = monitors.by_index(starting_monitor_index);
     let starting_scale = starting_info.map_or(1.0, |m| m.scale);
 
@@ -198,13 +198,14 @@ pub fn apply_restore(
     mut resized_messages: MessageReader<WindowResized>,
     mut scale_changed_messages: MessageReader<WindowScaleFactorChanged>,
     mut target: ResMut<TargetPosition>,
-    winit_info: Option<Res<WinitInfo>>,
+    winit_info: Res<WinitInfo>,
     mut windows: Query<&mut Window>,
     monitors: Res<Monitors>,
 ) {
-    let decoration = winit_info.as_ref().map_or((0, 0), |w| {
-        (w.window_decoration.width, w.window_decoration.height)
-    });
+    let decoration = (
+        winit_info.window_decoration.width,
+        winit_info.window_decoration.height,
+    );
 
     // Drain all messages (don't save during restore)
     let scale_changed = scale_changed_messages.read().last().is_some();
@@ -230,10 +231,10 @@ pub fn apply_restore(
 pub fn save_window_state(
     mut moved_messages: MessageReader<WindowMoved>,
     mut resized_messages: MessageReader<WindowResized>,
-    winit_info: Option<Res<WinitInfo>>,
+    winit_info: Res<WinitInfo>,
     config: Res<RestoreWindowConfig>,
-    windows: Query<&Window>,
     monitors: Res<Monitors>,
+    windows: Query<&Window>,
 ) {
     // Check if any relevant messages arrived
     let moved = moved_messages.read().last().is_some();
@@ -254,9 +255,10 @@ pub fn save_window_state(
         return;
     };
 
-    let decoration = winit_info.as_ref().map_or((0, 0), |w| {
-        (w.window_decoration.width, w.window_decoration.height)
-    });
+    let decoration = (
+        winit_info.window_decoration.width,
+        winit_info.window_decoration.height,
+    );
 
     let outer_width = window.resolution.physical_width() + decoration.0;
     let outer_height = window.resolution.physical_height() + decoration.1;

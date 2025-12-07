@@ -1,8 +1,8 @@
-# bevy_restore_window
+# bevy_restore_windows
 
-[![License](https://img.shields.io/badge/license-MIT%2FApache-blue.svg)](https://github.com/natemccoy/bevy_restore_window#license)
-[![Crates.io](https://img.shields.io/crates/v/bevy_restore_window.svg)](https://crates.io/crates/bevy_restore_window)
-[![Downloads](https://img.shields.io/crates/d/bevy_restore_window.svg)](https://crates.io/crates/bevy_restore_window)
+[![License](https://img.shields.io/badge/license-MIT%2FApache-blue.svg)](https://github.com/natemccoy/bevy_restore_windows#license)
+[![Crates.io](https://img.shields.io/crates/v/bevy_restore_windows.svg)](https://crates.io/crates/bevy_restore_windows)
+[![Downloads](https://img.shields.io/crates/d/bevy_restore_windows.svg)](https://crates.io/crates/bevy_restore_windows)
 
 
 A Bevy plugin that saves and restores the primary window position and size across application sessions.
@@ -19,7 +19,7 @@ See the documentation in [`src/lib.rs`](src/lib.rs) for technical details.
 
 ```rust
 use bevy::prelude::*;
-use bevy_restore_window::RestoreWindowPlugin;
+use bevy_restore_windows::RestoreWindowsPlugin;
 
 fn main() {
     App::new()
@@ -31,9 +31,9 @@ fn main() {
 
 ## Version Compatibility
 
-| bevy_restore_window | Bevy |
-|---------------------|------|
-| 0.17                | 0.17 |
+| bevy_restore_windows | Bevy |
+|----------------------|------|
+| 0.17                 | 0.17 |
 
 ## Platform Support
 
@@ -47,7 +47,7 @@ fn main() {
 
 ## License
 
-bevy_restore_window is free, open source and permissively licensed!
+bevy_restore_windows is free, open source and permissively licensed!
 Except where noted (below and/or in individual files), all code in this repository is dual-licensed under either:
 
 * MIT License ([LICENSE-MIT](LICENSE-MIT) or [http://opensource.org/licenses/MIT](http://opensource.org/licenses/MIT))

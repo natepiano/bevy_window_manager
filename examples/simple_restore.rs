@@ -12,7 +12,7 @@
 //! - Windows: `C:\Users\{user}\AppData\Roaming\simple_restore\windows.ron`
 
 use bevy::prelude::*;
-use bevy_restore_window::RestoreWindowPlugin;
+use bevy_restore_windows::RestoreWindowsPlugin;
 
 fn main() {
     App::new()
@@ -23,6 +23,6 @@ fn main() {
             }),
             ..default()
         }))
-        .add_plugins(RestoreWindowPlugin::default())
+        .add_plugins(RestoreWindowsPlugin::default())
         .run();
 }

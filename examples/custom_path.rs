@@ -12,7 +12,7 @@
 //! - Windows: `C:\Users\{user}\AppData\Roaming\my_custom_app\window_state.ron`
 
 use bevy::prelude::*;
-use bevy_restore_window::RestoreWindowPlugin;
+use bevy_restore_windows::RestoreWindowsPlugin;
 
 #[expect(
     clippy::expect_used,
@@ -33,6 +33,6 @@ fn main() {
             }),
             ..default()
         }))
-        .add_plugins(RestoreWindowPlugin::with_path(config_path))
+        .add_plugins(RestoreWindowsPlugin::with_path(config_path))
         .run();
 }
