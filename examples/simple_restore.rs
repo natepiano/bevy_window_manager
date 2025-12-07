@@ -1,4 +1,4 @@
-//! Simple example demonstrating the `RestoreWindowPlugin`.
+//! Simple example demonstrating `RestoreWindowsPlugin`.
 //!
 //! Run with: `cargo run --example simple_restore`
 //!
@@ -23,6 +23,6 @@ fn main() {
             }),
             ..default()
         }))
-        .add_plugins(RestoreWindowsPlugin::default())
+        .add_plugins(RestoreWindowsPlugin)
         .run();
 }

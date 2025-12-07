@@ -34,7 +34,7 @@
 //! App::new()
 //!     .add_plugins(DefaultPlugins)
 //!     // Uses executable name for config directory
-//!     .add_plugins(RestoreWindowPlugin::default())
+//!     .add_plugins(RestoreWindowsPlugin)
 //!     .run();
 //! ```
 //!
@@ -51,10 +51,10 @@ mod types;
 use std::path::PathBuf;
 
 use bevy::prelude::*;
+use monitors::init_monitors;
 pub use monitors::MonitorInfo;
 pub use monitors::MonitorPlugin;
 pub use monitors::Monitors;
-use monitors::init_monitors;
 use types::RestoreWindowConfig;
 use types::TargetPosition;
 
@@ -64,9 +64,9 @@ use types::TargetPosition;
 /// - macOS: `~/Library/Application Support/<exe_name>/windows.ron`
 /// - Linux: `~/.config/<exe_name>/windows.ron`
 /// - Windows: `C:\Users\<User>\AppData\Roaming\<exe_name>\windows.ron`
-pub struct RestoreWindowsPlugin {
-    path: PathBuf,
-}
+///
+/// unit struct version for convenience using .add_plugins(RestoreWindowsPlugin)
+pub struct RestoreWindowsPlugin;
 
 impl RestoreWindowsPlugin {
     /// Create a plugin with a custom app name.
@@ -78,8 +78,8 @@ impl RestoreWindowsPlugin {
     /// Panics if the config directory cannot be determined.
     #[must_use]
     #[expect(clippy::expect_used, reason = "fail fast if path cannot be determined")]
-    pub fn with_app_name(app_name: impl Into<String>) -> Self {
-        Self {
+    pub fn with_app_name(app_name: impl Into<String>) -> RestoreWindowsPluginCustomPath {
+        RestoreWindowsPluginCustomPath {
             path: state::get_state_path_for_app(&app_name.into())
                 .expect("Could not determine state file path"),
         }
@@ -87,40 +87,46 @@ impl RestoreWindowsPlugin {
 
     /// Create a plugin with a custom state file path.
     #[must_use]
-    pub fn with_path(path: impl Into<PathBuf>) -> Self { Self { path: path.into() } }
-}
-
-#[expect(clippy::expect_used, reason = "fail fast if path cannot be determined")]
-impl Default for RestoreWindowsPlugin {
-    fn default() -> Self {
-        Self {
-            path: state::get_default_state_path().expect("Could not determine state file path"),
-        }
+    pub fn with_path(path: impl Into<PathBuf>) -> RestoreWindowsPluginCustomPath {
+        RestoreWindowsPluginCustomPath { path: path.into() }
     }
 }
 
 impl Plugin for RestoreWindowsPlugin {
+    #[expect(clippy::expect_used, reason = "fail fast if path cannot be determined")]
     fn build(&self, app: &mut App) {
-        app.add_plugins(MonitorPlugin)
-            .insert_resource(RestoreWindowConfig {
-                path: self.path.clone(),
-            })
-            .add_systems(
-                PreStartup,
-                (
-                    systems::init_winit_info,
-                    systems::load_target_position,
-                    systems::move_to_target_monitor.run_if(resource_exists::<TargetPosition>),
-                )
-                    .chain()
-                    .after(init_monitors),
-            )
-            .add_systems(
-                Update,
-                (
-                    systems::apply_restore.run_if(resource_exists::<TargetPosition>),
-                    systems::save_window_state.run_if(not(resource_exists::<TargetPosition>)),
-                ),
-            );
+        let path = state::get_default_state_path().expect("Could not determine state file path");
+        build_plugin(app, path);
     }
+}
+
+/// Plugin variant with a custom state file path.
+pub struct RestoreWindowsPluginCustomPath {
+    path: PathBuf,
+}
+
+impl Plugin for RestoreWindowsPluginCustomPath {
+    fn build(&self, app: &mut App) { build_plugin(app, self.path.clone()); }
+}
+
+fn build_plugin(app: &mut App, path: PathBuf) {
+    app.add_plugins(MonitorPlugin)
+        .insert_resource(RestoreWindowConfig { path })
+        .add_systems(
+            PreStartup,
+            (
+                systems::init_winit_info,
+                systems::load_target_position,
+                systems::move_to_target_monitor.run_if(resource_exists::<TargetPosition>),
+            )
+                .chain()
+                .after(init_monitors),
+        )
+        .add_systems(
+            Update,
+            (
+                systems::apply_restore.run_if(resource_exists::<TargetPosition>),
+                systems::save_window_state.run_if(not(resource_exists::<TargetPosition>)),
+            ),
+        );
 }
