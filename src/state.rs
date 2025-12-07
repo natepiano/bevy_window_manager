@@ -1,10 +1,12 @@
 //! Window state persistence.
 
-use super::types::WindowState;
-use bevy::prelude::*;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
+
+use bevy::prelude::*;
+
+use super::types::WindowState;
 
 const STATE_FILE: &str = "windows.ron";
 

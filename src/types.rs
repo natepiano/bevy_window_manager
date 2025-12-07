@@ -1,13 +1,14 @@
 //! Type definitions for window restoration.
 
+use std::path::PathBuf;
+
 use bevy::prelude::*;
 use serde::Deserialize;
 use serde::Serialize;
-use std::path::PathBuf;
 
 /// Window decoration dimensions (title bar, borders).
 pub struct WindowDecoration {
-    pub width: u32,
+    pub width:  u32,
     pub height: u32,
 }
 
@@ -15,7 +16,7 @@ pub struct WindowDecoration {
 #[derive(Resource)]
 pub struct WinitInfo {
     pub starting_monitor_index: usize,
-    pub window_decoration: WindowDecoration,
+    pub window_decoration:      WindowDecoration,
 }
 
 /// State for `MonitorScaleStrategy::HigherToLower` (high→low DPI restore).
@@ -44,15 +45,15 @@ pub enum WindowRestoreState {
 ///
 /// # Variants
 ///
-/// - **`ApplyUnchanged`**: Same scale on both monitors (1→1 or 2→2). Apply position and
-///   size directly without compensation.
+/// - **`ApplyUnchanged`**: Same scale on both monitors (1→1 or 2→2). Apply position and size
+///   directly without compensation.
 ///
-/// - **`LowerToHigher`**: Low→High DPI (1x→2x, ratio < 1). Multiply values by ratio before
-///   applying so that after winit divides by launch scale, we get the correct result.
+/// - **`LowerToHigher`**: Low→High DPI (1x→2x, ratio < 1). Multiply values by ratio before applying
+///   so that after winit divides by launch scale, we get the correct result.
 ///
-/// - **`HigherToLower`**: High→Low DPI (2x→1x, ratio > 1). Cannot use simple compensation
-///   because the compensated size would exceed monitor bounds and get clamped by macOS.
-///   Instead uses a two-phase approach via `WindowRestoreState`:
+/// - **`HigherToLower`**: High→Low DPI (2x→1x, ratio > 1). Cannot use simple compensation because
+///   the compensated size would exceed monitor bounds and get clamped by macOS. Instead uses a
+///   two-phase approach via `WindowRestoreState`:
 ///   1. Move a 1x1 window to the final position (compensated) to trigger scale change
 ///   2. After scale changes, apply size without compensation (position already correct)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,17 +73,17 @@ pub enum MonitorScaleStrategy {
 #[derive(Resource)]
 pub struct TargetPosition {
     /// Final clamped position (adjusted to fit within target monitor).
-    pub x: i32,
-    pub y: i32,
+    pub x:                      i32,
+    pub y:                      i32,
     /// Target outer size (including window decoration).
-    pub width: u32,
-    pub height: u32,
+    pub width:                  u32,
+    pub height:                 u32,
     /// Window entity being restored.
-    pub entity: Entity,
+    pub entity:                 Entity,
     /// Scale factor of the target monitor.
-    pub target_scale: f32,
+    pub target_scale:           f32,
     /// Scale factor of the monitor where the window starts (keyboard focus monitor).
-    pub starting_scale: f32,
+    pub starting_scale:         f32,
     /// Strategy for handling scale factor differences between monitors.
     pub monitor_scale_strategy: MonitorScaleStrategy,
 }
@@ -97,8 +98,8 @@ pub struct RestoreWindowConfig {
 /// Saved window state.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WindowState {
-    pub position: Option<(i32, i32)>,
-    pub width: f32,
-    pub height: f32,
+    pub position:      Option<(i32, i32)>,
+    pub width:         f32,
+    pub height:        f32,
     pub monitor_index: usize,
 }

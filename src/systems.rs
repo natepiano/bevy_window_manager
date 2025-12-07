@@ -31,7 +31,7 @@ pub fn init_winit_info(
             let outer = winit_window.outer_size();
             let inner = winit_window.inner_size();
             let decoration = WindowDecoration {
-                width: outer.width.saturating_sub(inner.width),
+                width:  outer.width.saturating_sub(inner.width),
                 height: outer.height.saturating_sub(inner.height),
             };
 
@@ -341,7 +341,7 @@ fn try_apply_restore(
             window
                 .resolution
                 .set_physical_resolution(inner_width, inner_height);
-        }
+        },
         MonitorScaleStrategy::LowerToHigher => {
             // Low→High DPI: compensate with ratio < 1
             let ratio = target.starting_scale / target.target_scale;
@@ -358,7 +358,7 @@ fn try_apply_restore(
             window
                 .resolution
                 .set_physical_resolution(comp_width, comp_height);
-        }
+        },
         MonitorScaleStrategy::HigherToLower(WindowRestoreState::ApplySize) => {
             // HigherToLower after scale changed: ONLY set size, position was set earlier
             info!(
@@ -368,11 +368,11 @@ fn try_apply_restore(
             window
                 .resolution
                 .set_physical_resolution(inner_width, inner_height);
-        }
+        },
         MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange) => {
             // Still waiting, don't apply yet
             return true;
-        }
+        },
     }
 
     commands.remove_resource::<TargetPosition>();

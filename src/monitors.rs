@@ -20,13 +20,13 @@ impl Plugin for MonitorPlugin {
 #[derive(Clone, Debug)]
 pub struct MonitorInfo {
     /// Index in the sorted monitor list.
-    pub index: usize,
+    pub index:    usize,
     /// Scale factor (typically 1.0 or 2.0 on macOS).
-    pub scale: f64,
+    pub scale:    f64,
     /// Physical position of top-left corner.
     pub position: IVec2,
     /// Physical size in pixels.
-    pub size: UVec2,
+    pub size:     UVec2,
 }
 
 /// Sorted monitor list, updated when monitors change.
@@ -55,9 +55,7 @@ impl Monitors {
 
     /// Get monitor by index in sorted list.
     #[must_use]
-    pub fn by_index(&self, index: usize) -> Option<&MonitorInfo> {
-        self.list.get(index)
-    }
+    pub fn by_index(&self, index: usize) -> Option<&MonitorInfo> { self.list.get(index) }
 
     /// Infer monitor index when position is outside all monitor bounds.
     ///
@@ -115,10 +113,10 @@ fn build_monitors(monitors: &Query<&Monitor>) -> Monitors {
     let mut list: Vec<_> = monitors
         .iter()
         .map(|mon| MonitorInfo {
-            index: 0, // Will be set after sorting
-            scale: mon.scale_factor,
+            index:    0, // Will be set after sorting
+            scale:    mon.scale_factor,
             position: mon.physical_position,
-            size: mon.physical_size(),
+            size:     mon.physical_size(),
         })
         .collect();
 

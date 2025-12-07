@@ -12,10 +12,10 @@
 //!    is `Automatic` (not `At(pos)`), even though winit has placed the window at a specific
 //!    physical position.
 //!
-//! 2. **Scale factor conversion in `changed_windows`**: When you modify `Window.resolution`,
-//!    Bevy's `changed_windows` system applies scale factor conversion if
-//!    `scale_factor != cached_scale_factor`. This corrupts the size when moving windows
-//!    between monitors with different scale factors.
+//! 2. **Scale factor conversion in `changed_windows`**: When you modify `Window.resolution`, Bevy's
+//!    `changed_windows` system applies scale factor conversion if `scale_factor !=
+//!    cached_scale_factor`. This corrupts the size when moving windows between monitors with
+//!    different scale factors.
 //!
 //! 3. **Timing of scale factor updates**: The `CachedWindow` is updated after winit events are
 //!    processed, but our systems run before we receive the `ScaleFactorChanged` event.
@@ -48,13 +48,13 @@ mod state;
 mod systems;
 mod types;
 
+use std::path::PathBuf;
+
+use bevy::prelude::*;
 pub use monitors::MonitorInfo;
 pub use monitors::MonitorPlugin;
 pub use monitors::Monitors;
-
-use bevy::prelude::*;
 use monitors::init_monitors;
-use std::path::PathBuf;
 use types::RestoreWindowConfig;
 use types::TargetPosition;
 
@@ -87,9 +87,7 @@ impl RestoreWindowPlugin {
 
     /// Create a plugin with a custom state file path.
     #[must_use]
-    pub fn with_path(path: impl Into<PathBuf>) -> Self {
-        Self { path: path.into() }
-    }
+    pub fn with_path(path: impl Into<PathBuf>) -> Self { Self { path: path.into() } }
 }
 
 #[expect(clippy::expect_used, reason = "fail fast if path cannot be determined")]
