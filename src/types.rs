@@ -87,15 +87,6 @@ pub struct TargetPosition {
     pub monitor_scale_strategy: MonitorScaleStrategy,
 }
 
-/// Information about a monitor.
-#[derive(Clone)]
-pub struct MonitorInfo {
-    pub index: usize,
-    pub scale: f64,
-    pub position: IVec2,
-    pub size: UVec2,
-}
-
 /// Configuration for the `RestoreWindowPlugin`.
 #[derive(Resource, Clone)]
 pub struct RestoreWindowConfig {

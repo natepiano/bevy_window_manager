@@ -43,11 +43,17 @@
 //!
 //! See `examples/custom_path.rs` for how to override the full path to the state file.
 
+mod monitors;
 mod state;
 mod systems;
 mod types;
 
+pub use monitors::MonitorInfo;
+pub use monitors::MonitorPlugin;
+pub use monitors::Monitors;
+
 use bevy::prelude::*;
+use monitors::init_monitors;
 use std::path::PathBuf;
 use types::RestoreWindowConfig;
 use types::TargetPosition;
@@ -97,18 +103,20 @@ impl Default for RestoreWindowPlugin {
 
 impl Plugin for RestoreWindowPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(RestoreWindowConfig {
-            path: self.path.clone(),
-        })
-        .add_systems(
-            PreStartup,
-            (
-                systems::init_winit_info,
-                systems::load_target_position,
-                systems::move_to_target_monitor.run_if(resource_exists::<TargetPosition>),
+        app.add_plugins(MonitorPlugin)
+            .insert_resource(RestoreWindowConfig {
+                path: self.path.clone(),
+            })
+            .add_systems(
+                PreStartup,
+                (
+                    systems::init_winit_info,
+                    systems::load_target_position,
+                    systems::move_to_target_monitor.run_if(resource_exists::<TargetPosition>),
+                )
+                    .chain()
+                    .after(init_monitors),
             )
-                .chain(),
-        )
-        .add_systems(Update, systems::handle_window_messages);
+            .add_systems(Update, systems::handle_window_messages);
     }
 }

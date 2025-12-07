@@ -2,7 +2,6 @@
 
 use bevy::ecs::system::NonSendMarker;
 use bevy::prelude::*;
-use bevy::window::Monitor;
 use bevy::window::PrimaryWindow;
 use bevy::window::WindowMoved;
 use bevy::window::WindowResized;
@@ -10,76 +9,22 @@ use bevy::window::WindowScaleFactorChanged;
 use bevy::winit::WINIT_WINDOWS;
 
 use super::state;
-use super::types::MonitorInfo;
 use super::types::RestoreWindowConfig;
 use super::types::WindowState;
+use crate::monitors::Monitors;
 use crate::types::MonitorScaleStrategy;
 use crate::types::TargetPosition;
 use crate::types::WindowDecoration;
 use crate::types::WindowRestoreState;
 use crate::types::WinitInfo;
 
-/// Get sort key for monitor (primary at 0,0 first, then by position).
-const fn monitor_sort_key(mon: &Monitor) -> (bool, i32, i32) {
-    let pos = mon.physical_position;
-    let is_primary = pos.x == 0 && pos.y == 0;
-    (!is_primary, pos.x, pos.y)
-}
-
-/// Create a sorted monitor list (primary first, then by position).
-fn sorted_monitors<'a>(monitors: impl Iterator<Item = &'a Monitor>) -> Vec<&'a Monitor> {
-    let mut sorted: Vec<_> = monitors.collect();
-    sorted.sort_by_key(|mon| monitor_sort_key(mon));
-    sorted
-}
-
-/// Get monitor info at a position (assumes pre-sorted monitors).
-#[expect(
-    clippy::cast_possible_wrap,
-    reason = "monitor dimensions are always within i32 range"
-)]
-fn monitor_at(monitors: &[&Monitor], x: i32, y: i32) -> Option<MonitorInfo> {
-    monitors.iter().enumerate().find_map(|(idx, mon)| {
-        let pos = mon.physical_position;
-        let size = mon.physical_size();
-        if x >= pos.x && x < pos.x + size.x as i32 && y >= pos.y && y < pos.y + size.y as i32 {
-            Some(MonitorInfo {
-                index: idx,
-                scale: mon.scale_factor,
-                position: pos,
-                size,
-            })
-        } else {
-            None
-        }
-    })
-}
-
-/// Get monitor info by index (assumes pre-sorted monitors).
-fn monitor_by_index(monitors: &[&Monitor], index: usize) -> Option<MonitorInfo> {
-    monitors.get(index).map(|mon| MonitorInfo {
-        index,
-        scale: mon.scale_factor,
-        position: mon.physical_position,
-        size: mon.physical_size(),
-    })
-}
-
-/// Infer monitor index when position is outside all monitor bounds.
-/// Uses Y coordinate: negative Y = secondary monitor (index 1), else primary (index 0).
-const fn infer_monitor_index(y: i32) -> usize {
-    (y < 0) as usize
-}
-
 /// Populate `WinitInfo` resource from winit (decoration and starting monitor).
 pub fn init_winit_info(
     mut commands: Commands,
     window_entity: Single<Entity, With<PrimaryWindow>>,
-    monitors: Query<(Entity, &Monitor)>,
+    monitors: Res<Monitors>,
     _non_send: NonSendMarker,
 ) {
-    let monitors = sorted_monitors(monitors.iter().map(|(_, m)| m));
-
     WINIT_WINDOWS.with(|ww| {
         let ww = ww.borrow();
         if let Some(winit_window) = ww.get_window(*window_entity) {
@@ -96,7 +41,7 @@ pub fn init_winit_info(
                 .map(|p| IVec2::new(p.x, p.y))
                 .unwrap_or(IVec2::ZERO);
 
-            let starting_monitor_index = monitor_at(&monitors, pos.x, pos.y).map_or(0, |m| m.index);
+            let starting_monitor_index = monitors.at(pos.x, pos.y).map_or(0, |m| m.index);
 
             info!(
                 "[init_winit_info] decoration={}x{} pos=({}, {}) starting_monitor={}",
@@ -125,7 +70,7 @@ pub fn init_winit_info(
 pub fn load_target_position(
     mut commands: Commands,
     window_entity: Single<Entity, With<PrimaryWindow>>,
-    monitors: Query<(Entity, &Monitor)>,
+    monitors: Res<Monitors>,
     winit_info: Option<Res<WinitInfo>>,
     config: Res<RestoreWindowConfig>,
 ) {
@@ -139,14 +84,12 @@ pub fn load_target_position(
         return;
     };
 
-    let monitors = sorted_monitors(monitors.iter().map(|(_, m)| m));
-
     // Get starting monitor from WinitInfo
     let starting_monitor_index = winit_info.as_ref().map_or(0, |w| w.starting_monitor_index);
-    let starting_info = monitor_by_index(&monitors, starting_monitor_index);
-    let starting_scale = starting_info.as_ref().map_or(1.0, |m| m.scale as f32);
+    let starting_info = monitors.by_index(starting_monitor_index);
+    let starting_scale = starting_info.map_or(1.0, |m| m.scale as f32);
 
-    let Some(target_info) = monitor_by_index(&monitors, state.monitor_index) else {
+    let Some(target_info) = monitors.by_index(state.monitor_index) else {
         info!(
             "[load_target_position] Target monitor index {} not found",
             state.monitor_index
@@ -263,7 +206,7 @@ pub fn handle_window_messages(
     winit_info: Option<Res<WinitInfo>>,
     config: Res<RestoreWindowConfig>,
     mut windows: Query<&mut Window>,
-    monitors: Query<(Entity, &Monitor)>,
+    monitors: Res<Monitors>,
 ) {
     let decoration = winit_info.as_ref().map_or((0, 0), |w| {
         (w.window_decoration.width, w.window_decoration.height)
@@ -276,8 +219,6 @@ pub fn handle_window_messages(
 
     // If we have a pending restore, try to apply it
     if let Some(mut target) = target {
-        let monitors = sorted_monitors(monitors.iter().map(|(_, m)| m));
-
         // Check for HigherToLower state transitions
         if target.monitor_scale_strategy
             == MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange)
@@ -304,7 +245,6 @@ pub fn handle_window_messages(
         info!("[Message:ScaleChanged] scale={}", message.scale_factor);
     }
 
-    let monitors = sorted_monitors(monitors.iter().map(|(_, m)| m));
     let last_move_pos = last_move.as_ref().map(|m| m.position);
 
     if let Some(message) = last_move {
@@ -332,7 +272,7 @@ pub fn handle_window_messages(
 )]
 fn try_apply_restore(
     target: &TargetPosition,
-    monitors: &[&Monitor],
+    monitors: &Monitors,
     windows: &mut Query<&mut Window>,
     decoration: (u32, u32),
     commands: &mut Commands,
@@ -350,9 +290,7 @@ fn try_apply_restore(
         return true;
     };
 
-    let current_scale = monitor_at(monitors, pos.x, pos.y)
-        .as_ref()
-        .map_or(1.0, |m| m.scale as f32);
+    let current_scale = monitors.at(pos.x, pos.y).map_or(1.0, |m| m.scale as f32);
 
     info!(
         "[Restore] pos=({}, {}) current_scale={} target_scale={} strategy={:?}",
@@ -377,7 +315,7 @@ fn try_apply_restore(
     }
 
     // Log target monitor info
-    if let Some(mon) = monitor_at(monitors, target.x, target.y) {
+    if let Some(mon) = monitors.at(target.x, target.y) {
         info!(
             "[Restore] Target monitor: pos=({}, {}) size={}x{} scale={}",
             mon.position.x, mon.position.y, mon.size.x, mon.size.y, mon.scale
@@ -446,13 +384,17 @@ fn try_apply_restore(
 fn save_on_move(
     message: &WindowMoved,
     window: &Window,
-    monitors: &[&Monitor],
+    monitors: &Monitors,
     decoration: (u32, u32),
     path: &std::path::Path,
 ) {
     let (decoration_width, decoration_height) = decoration;
-    let monitor_index = monitor_at(monitors, message.position.x, message.position.y)
-        .map_or_else(|| infer_monitor_index(message.position.y), |m| m.index);
+    let monitor_index = monitors
+        .at(message.position.x, message.position.y)
+        .map_or_else(
+            || monitors.infer_index(message.position.x, message.position.y),
+            |m| m.index,
+        );
 
     let outer_width = window.resolution.physical_width() + decoration_width;
     let outer_height = window.resolution.physical_height() + decoration_height;
@@ -481,7 +423,7 @@ fn save_on_move(
 fn save_on_resize(
     message: &WindowResized,
     window: &Window,
-    monitors: &[&Monitor],
+    monitors: &Monitors,
     decoration: (u32, u32),
     last_move_pos: Option<IVec2>,
     path: &std::path::Path,
@@ -505,8 +447,9 @@ fn save_on_resize(
         return;
     };
 
-    let monitor_index =
-        monitor_at(monitors, pos.x, pos.y).map_or_else(|| infer_monitor_index(pos.y), |m| m.index);
+    let monitor_index = monitors
+        .at(pos.x, pos.y)
+        .map_or_else(|| monitors.infer_index(pos.x, pos.y), |m| m.index);
 
     info!(
         "[Message:Resized] logical={}x{} physical={}x{} pos=({}, {}) monitor={}",
