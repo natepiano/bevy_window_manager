@@ -6,7 +6,8 @@
       "Bash(cargo build:*)",
       "Bash(cargo +nightly fmt:*)",
       "Bash(chmod:*)",
-      "Bash(cargo clippy:*)"
+      "Bash(cargo clippy:*)",
+      "Bash(cargo check:*)"
     ],
     "deny": [],
     "ask": []
