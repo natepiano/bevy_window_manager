@@ -105,7 +105,7 @@ impl Plugin for RestoreWindowPlugin {
             (
                 systems::init_winit_info,
                 systems::load_target_position,
-                systems::two_phase_set_position.run_if(resource_exists::<TargetPosition>),
+                systems::move_to_target_monitor.run_if(resource_exists::<TargetPosition>),
             )
                 .chain(),
         )

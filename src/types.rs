@@ -18,49 +18,51 @@ pub struct WinitInfo {
     pub window_decoration: WindowDecoration,
 }
 
-/// State for the two-phase restore process (high→low DPI only).
+/// State for `MonitorScaleStrategy::HigherToLower` (high→low DPI restore).
 ///
-/// In `TwoPhase`, we must set position BEFORE size because Bevy's `changed_windows`
-/// system processes size changes before position changes. If we set both together,
-/// the window resizes first while still at the old position, temporarily extending
-/// into the wrong monitor and triggering a scale factor bounce from macOS.
+/// When restoring from a high-DPI to low-DPI monitor, we must set position BEFORE size
+/// because Bevy's `changed_windows` system processes size changes before position changes.
+/// If we set both together, the window resizes first while still at the old position,
+/// temporarily extending into the wrong monitor and triggering a scale factor bounce from macOS.
 ///
-/// By setting the final position in Step1 (with a 1x1 window), we ensure the window
-/// is already at the correct location when we later apply size in `ReadyToApplySize`.
+/// By moving a 1x1 window to the final position first, we ensure the window is already
+/// at the correct location when we later apply size in `ApplySize`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TwoPhaseState {
+pub enum WindowRestoreState {
     /// Position applied with compensation, waiting for `ScaleChanged` message.
     WaitingForScaleChange,
-    /// Scale changed, ready to apply final size (position already set in Step1).
-    ReadyToApplySize,
+    /// Scale changed, ready to apply final size (position already set in phase 1).
+    ApplySize,
 }
 
-/// Restore strategy based on scale factor relationship between starting and target monitors.
+/// Restore strategy based on scale factor relationship between launch and target monitors.
 ///
 /// The strategy depends on how winit/macOS handle coordinate scaling:
 /// - Winit uses the "keyboard focus monitor's" scale factor for coordinate math
-/// - When setting position/size, values are divided by the starting monitor's scale
+/// - When setting position/size, values are divided by the launch monitor's scale
 /// - This means we must compensate when scales differ
 ///
 /// # Variants
 ///
-/// - **Direct**: Same scale on both monitors (1→1 or 2→2). Apply position and size directly.
+/// - **`ApplyUnchanged`**: Same scale on both monitors (1→1 or 2→2). Apply position and
+///   size directly without compensation.
 ///
-/// - **Compensate**: Low→High DPI (1x→2x, ratio < 1). Multiply values by ratio before
-///   applying so that after winit divides by starting scale, we get the correct result.
+/// - **`LowerToHigher`**: Low→High DPI (1x→2x, ratio < 1). Multiply values by ratio before
+///   applying so that after winit divides by launch scale, we get the correct result.
 ///
-/// - **`TwoPhase`**: High→Low DPI (2x→1x, ratio > 1). Cannot use simple compensation because
-///   the compensated size would exceed monitor bounds and get clamped by macOS. Instead:
+/// - **`HigherToLower`**: High→Low DPI (2x→1x, ratio > 1). Cannot use simple compensation
+///   because the compensated size would exceed monitor bounds and get clamped by macOS.
+///   Instead uses a two-phase approach via `WindowRestoreState`:
 ///   1. Move a 1x1 window to the final position (compensated) to trigger scale change
 ///   2. After scale changes, apply size without compensation (position already correct)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RestorePhase {
+pub enum MonitorScaleStrategy {
     /// Same scale - apply position and size directly.
-    Direct,
+    ApplyUnchanged,
     /// Low→High DPI (1x→2x) - apply with compensation (ratio < 1).
-    Compensate,
+    LowerToHigher,
     /// High→Low DPI (2x→1x) - requires two phases (see enum docs).
-    TwoPhase(TwoPhaseState),
+    HigherToLower(WindowRestoreState),
 }
 
 /// Holds the target window state during the restore process.
@@ -81,8 +83,8 @@ pub struct TargetPosition {
     pub target_scale: f32,
     /// Scale factor of the monitor where the window starts (keyboard focus monitor).
     pub starting_scale: f32,
-    /// Current restore phase/strategy.
-    pub phase: RestorePhase,
+    /// Strategy for handling scale factor differences between monitors.
+    pub monitor_scale_strategy: MonitorScaleStrategy,
 }
 
 /// Information about a monitor.

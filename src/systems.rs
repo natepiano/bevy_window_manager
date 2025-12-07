@@ -13,10 +13,10 @@ use super::state;
 use super::types::MonitorInfo;
 use super::types::RestoreWindowConfig;
 use super::types::WindowState;
-use crate::types::RestorePhase;
+use crate::types::MonitorScaleStrategy;
 use crate::types::TargetPosition;
-use crate::types::TwoPhaseState;
 use crate::types::WindowDecoration;
+use crate::types::WindowRestoreState;
 use crate::types::WinitInfo;
 
 /// Get sort key for monitor (primary at 0,0 first, then by position).
@@ -26,16 +26,20 @@ const fn monitor_sort_key(mon: &Monitor) -> (bool, i32, i32) {
     (!is_primary, pos.x, pos.y)
 }
 
-/// Helper to get monitor info at a position from Bevy `Monitor` components.
+/// Create a sorted monitor list (primary first, then by position).
+fn sorted_monitors<'a>(monitors: impl Iterator<Item = &'a Monitor>) -> Vec<&'a Monitor> {
+    let mut sorted: Vec<_> = monitors.collect();
+    sorted.sort_by_key(|mon| monitor_sort_key(mon));
+    sorted
+}
+
+/// Get monitor info at a position (assumes pre-sorted monitors).
 #[expect(
     clippy::cast_possible_wrap,
     reason = "monitor dimensions are always within i32 range"
 )]
-fn monitor_at(monitors: &[(Entity, &Monitor)], x: i32, y: i32) -> Option<MonitorInfo> {
-    let mut sorted: Vec<_> = monitors.iter().collect();
-    sorted.sort_by_key(|(_, mon)| monitor_sort_key(mon));
-
-    sorted.iter().enumerate().find_map(|(idx, (_, mon))| {
+fn monitor_at(monitors: &[&Monitor], x: i32, y: i32) -> Option<MonitorInfo> {
+    monitors.iter().enumerate().find_map(|(idx, mon)| {
         let pos = mon.physical_position;
         let size = mon.physical_size();
         if x >= pos.x && x < pos.x + size.x as i32 && y >= pos.y && y < pos.y + size.y as i32 {
@@ -51,12 +55,9 @@ fn monitor_at(monitors: &[(Entity, &Monitor)], x: i32, y: i32) -> Option<Monitor
     })
 }
 
-/// Helper to get monitor info by index from Bevy `Monitor` components.
-fn monitor_by_index(monitors: &[(Entity, &Monitor)], index: usize) -> Option<MonitorInfo> {
-    let mut sorted: Vec<_> = monitors.iter().collect();
-    sorted.sort_by_key(|(_, mon)| monitor_sort_key(mon));
-
-    sorted.get(index).map(|(_, mon)| MonitorInfo {
+/// Get monitor info by index (assumes pre-sorted monitors).
+fn monitor_by_index(monitors: &[&Monitor], index: usize) -> Option<MonitorInfo> {
+    monitors.get(index).map(|mon| MonitorInfo {
         index,
         scale: mon.scale_factor,
         position: mon.physical_position,
@@ -77,7 +78,7 @@ pub fn init_winit_info(
     monitors: Query<(Entity, &Monitor)>,
     _non_send: NonSendMarker,
 ) {
-    let monitors_vec: Vec<_> = monitors.iter().collect();
+    let monitors = sorted_monitors(monitors.iter().map(|(_, m)| m));
 
     WINIT_WINDOWS.with(|ww| {
         let ww = ww.borrow();
@@ -95,11 +96,10 @@ pub fn init_winit_info(
                 .map(|p| IVec2::new(p.x, p.y))
                 .unwrap_or(IVec2::ZERO);
 
-            let starting_monitor_index =
-                monitor_at(&monitors_vec, pos.x, pos.y).map_or(0, |m| m.index);
+            let starting_monitor_index = monitor_at(&monitors, pos.x, pos.y).map_or(0, |m| m.index);
 
             info!(
-                "[Init] decoration={}x{} pos=({}, {}) starting_monitor={}",
+                "[init_winit_info] decoration={}x{} pos=({}, {}) starting_monitor={}",
                 decoration.width, decoration.height, pos.x, pos.y, starting_monitor_index
             );
 
@@ -130,25 +130,25 @@ pub fn load_target_position(
     config: Res<RestoreWindowConfig>,
 ) {
     let Some(state) = state::load_state(&config.path) else {
-        debug!("[Load] No saved bevy_restore_window state");
+        debug!("[load_target_position] No saved bevy_restore_window state");
         return;
     };
 
     let Some((saved_x, saved_y)) = state.position else {
-        debug!("[Load] No saved bevy_restore_window position");
+        debug!("[load_target_position] No saved bevy_restore_window position");
         return;
     };
 
-    let monitors_vec: Vec<_> = monitors.iter().collect();
+    let monitors = sorted_monitors(monitors.iter().map(|(_, m)| m));
 
     // Get starting monitor from WinitInfo
     let starting_monitor_index = winit_info.as_ref().map_or(0, |w| w.starting_monitor_index);
-    let starting_info = monitor_by_index(&monitors_vec, starting_monitor_index);
+    let starting_info = monitor_by_index(&monitors, starting_monitor_index);
     let starting_scale = starting_info.as_ref().map_or(1.0, |m| m.scale as f32);
 
-    let Some(target_info) = monitor_by_index(&monitors_vec, state.monitor_index) else {
+    let Some(target_info) = monitor_by_index(&monitors, state.monitor_index) else {
         info!(
-            "[Load] Target monitor index {} not found",
+            "[load_target_position] Target monitor index {} not found",
             state.monitor_index
         );
         return;
@@ -160,13 +160,13 @@ pub fn load_target_position(
     let width = state.width as u32;
     let height = state.height as u32;
 
-    // Determine restore phase based on scale relationship
-    let phase = if (starting_scale - target_scale).abs() < 0.01 {
-        RestorePhase::Direct
+    // Determine monitor scale strategy based on scale relationship
+    let strategy = if (starting_scale - target_scale).abs() < 0.01 {
+        MonitorScaleStrategy::ApplyUnchanged
     } else if starting_scale < target_scale {
-        RestorePhase::Compensate
+        MonitorScaleStrategy::LowerToHigher
     } else {
-        RestorePhase::TwoPhase(TwoPhaseState::WaitingForScaleChange)
+        MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange)
     };
 
     // Calculate final clamped position
@@ -188,14 +188,14 @@ pub fn load_target_position(
 
     if x != saved_x || y != saved_y {
         info!(
-            "[Load] Clamped position: ({}, {}) -> ({}, {}) for size {}x{}",
+            "[load_target_position] Clamped position: ({}, {}) -> ({}, {}) for size {}x{}",
             saved_x, saved_y, x, y, width, height
         );
     }
 
     info!(
-        "[Load] Starting monitor={} scale={}, Target monitor={} scale={}, phase={:?}",
-        starting_monitor_index, starting_scale, state.monitor_index, target_scale, phase
+        "[load_target_position] Starting monitor={} scale={}, Target monitor={} scale={}, strategy={:?}",
+        starting_monitor_index, starting_scale, state.monitor_index, target_scale, strategy
     );
 
     commands.insert_resource(TargetPosition {
@@ -206,30 +206,33 @@ pub fn load_target_position(
         entity: *window_entity,
         target_scale,
         starting_scale,
-        phase,
+        monitor_scale_strategy: strategy,
     });
 }
 
-/// Step 1 (PreStartup): Move window to target monitor at 1x1 size.
+/// Move window to target monitor at 1x1 size (`PreStartup`).
 ///
-/// Uses pre-computed `TargetPosition` to move the window. For `TwoPhase`,
-/// the position is compensated because winit divides by starting scale.
+/// Uses pre-computed `TargetPosition` to move the window. For `HigherToLower` strategy,
+/// the position is compensated because winit divides by launch scale.
 #[expect(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
     reason = "position values fit in f32 and i32"
 )]
-pub fn two_phase_set_position(
+pub fn move_to_target_monitor(
     mut window: Single<&mut Window, With<PrimaryWindow>>,
     target: Res<TargetPosition>,
 ) {
-    // For TwoPhase, compensate position because winit divides by starting_scale
-    let (move_x, move_y) = if matches!(target.phase, RestorePhase::TwoPhase(_)) {
+    // For HigherToLower, compensate position because winit divides by launch scale
+    let (move_x, move_y) = if matches!(
+        target.monitor_scale_strategy,
+        MonitorScaleStrategy::HigherToLower(_)
+    ) {
         let ratio = target.starting_scale / target.target_scale;
         let comp_x = (target.x as f32 * ratio) as i32;
         let comp_y = (target.y as f32 * ratio) as i32;
         info!(
-            "[Step1] TwoPhase: compensating position ({}, {}) -> ({}, {}) (ratio={})",
+            "[move_to_target_monitor] HigherToLower: compensating position ({}, {}) -> ({}, {}) (ratio={})",
             target.x, target.y, comp_x, comp_y, ratio
         );
         (comp_x, comp_y)
@@ -237,7 +240,10 @@ pub fn two_phase_set_position(
         (target.x, target.y)
     };
 
-    info!("[WE SET] position=({}, {}) size=1x1", move_x, move_y);
+    info!(
+        "[move_to_target_monitor] position=({}, {}) size=1x1",
+        move_x, move_y
+    );
 
     window.position = bevy::window::WindowPosition::At(IVec2::new(move_x, move_y));
     window.resolution.set_physical_resolution(1, 1);
@@ -270,23 +276,21 @@ pub fn handle_window_messages(
 
     // If we have a pending restore, try to apply it
     if let Some(mut target) = target {
-        let monitors_vec: Vec<_> = monitors.iter().collect();
+        let monitors = sorted_monitors(monitors.iter().map(|(_, m)| m));
 
-        // Check for phase transitions
-        if target.phase == RestorePhase::TwoPhase(TwoPhaseState::WaitingForScaleChange)
+        // Check for HigherToLower state transitions
+        if target.monitor_scale_strategy
+            == MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange)
             && scale_changed.is_some()
         {
-            info!("[Restore] ScaleChanged received, transitioning to ReadyToApplySize");
-            target.phase = RestorePhase::TwoPhase(TwoPhaseState::ReadyToApplySize);
+            info!(
+                "[Restore] ScaleChanged received, transitioning to WindowRestoreState::ApplySize"
+            );
+            target.monitor_scale_strategy =
+                MonitorScaleStrategy::HigherToLower(WindowRestoreState::ApplySize);
         }
 
-        if try_apply_restore(
-            &target,
-            &monitors_vec,
-            &mut windows,
-            decoration,
-            &mut commands,
-        ) {
+        if try_apply_restore(&target, &monitors, &mut windows, decoration, &mut commands) {
             return; // Don't save during restore
         }
     }
@@ -300,18 +304,18 @@ pub fn handle_window_messages(
         info!("[Message:ScaleChanged] scale={}", message.scale_factor);
     }
 
-    let monitors_vec: Vec<_> = monitors.iter().collect();
+    let monitors = sorted_monitors(monitors.iter().map(|(_, m)| m));
     let last_move_pos = last_move.as_ref().map(|m| m.position);
 
     if let Some(message) = last_move {
-        save_on_move(&message, window, &monitors_vec, decoration, &config.path);
+        save_on_move(&message, window, &monitors, decoration, &config.path);
     }
 
     if let Some(message) = last_resize {
         save_on_resize(
             &message,
             window,
-            &monitors_vec,
+            &monitors,
             decoration,
             last_move_pos,
             &config.path,
@@ -328,7 +332,7 @@ pub fn handle_window_messages(
 )]
 fn try_apply_restore(
     target: &TargetPosition,
-    monitors: &[(Entity, &Monitor)],
+    monitors: &[&Monitor],
     windows: &mut Query<&mut Window>,
     decoration: (u32, u32),
     commands: &mut Commands,
@@ -351,20 +355,22 @@ fn try_apply_restore(
         .map_or(1.0, |m| m.scale as f32);
 
     info!(
-        "[Restore] pos=({}, {}) current_scale={} target_scale={} phase={:?}",
-        pos.x, pos.y, current_scale, target.target_scale, target.phase
+        "[Restore] pos=({}, {}) current_scale={} target_scale={} strategy={:?}",
+        pos.x, pos.y, current_scale, target.target_scale, target.monitor_scale_strategy
     );
 
-    // For TwoPhase(WaitingForScaleChange), just wait - don't apply anything yet
-    if target.phase == RestorePhase::TwoPhase(TwoPhaseState::WaitingForScaleChange) {
-        info!("[Restore] TwoPhase: waiting for ScaleChanged message");
+    // For HigherToLower(WaitingForScaleChange), just wait - don't apply anything yet
+    if target.monitor_scale_strategy
+        == MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange)
+    {
+        info!("[Restore] HigherToLower: waiting for ScaleChanged message");
         return true;
     }
 
-    // Not yet on target monitor (for Direct/Compensate phases)
+    // Not yet on target monitor (for ApplyUnchanged/LowerToHigher strategies)
     if !matches!(
-        target.phase,
-        RestorePhase::TwoPhase(TwoPhaseState::ReadyToApplySize)
+        target.monitor_scale_strategy,
+        MonitorScaleStrategy::HigherToLower(WindowRestoreState::ApplySize)
     ) && (current_scale - target.target_scale).abs() >= 0.01
     {
         return true;
@@ -387,10 +393,10 @@ fn try_apply_restore(
         return true;
     };
 
-    match target.phase {
-        RestorePhase::Direct => {
+    match target.monitor_scale_strategy {
+        MonitorScaleStrategy::ApplyUnchanged => {
             info!(
-                "[WE SET] position=({}, {}) size={}x{} (Direct)",
+                "[try_apply_restore] position=({}, {}) size={}x{} (ApplyUnchanged)",
                 target.x, target.y, inner_width, inner_height
             );
             window.position = bevy::window::WindowPosition::At(IVec2::new(target.x, target.y));
@@ -398,7 +404,7 @@ fn try_apply_restore(
                 .resolution
                 .set_physical_resolution(inner_width, inner_height);
         }
-        RestorePhase::Compensate => {
+        MonitorScaleStrategy::LowerToHigher => {
             // Low→High DPI: compensate with ratio < 1
             let ratio = target.starting_scale / target.target_scale;
             let comp_x = (target.x as f32 * ratio) as i32;
@@ -407,7 +413,7 @@ fn try_apply_restore(
             let comp_height = (inner_height as f32 * ratio) as u32;
 
             info!(
-                "[WE SET] position=({}, {}) size={}x{} (Compensate, ratio={})",
+                "[try_apply_restore] position=({}, {}) size={}x{} (LowerToHigher, ratio={})",
                 comp_x, comp_y, comp_width, comp_height, ratio
             );
             window.position = bevy::window::WindowPosition::At(IVec2::new(comp_x, comp_y));
@@ -415,17 +421,17 @@ fn try_apply_restore(
                 .resolution
                 .set_physical_resolution(comp_width, comp_height);
         }
-        RestorePhase::TwoPhase(TwoPhaseState::ReadyToApplySize) => {
-            // High→Low DPI after scale changed: ONLY set size, position was set in Step1
+        MonitorScaleStrategy::HigherToLower(WindowRestoreState::ApplySize) => {
+            // HigherToLower after scale changed: ONLY set size, position was set earlier
             info!(
-                "[WE SET] size={}x{} ONLY (TwoPhase final, position already set)",
+                "[try_apply_restore] size={}x{} ONLY (HigherToLower::ApplySize, position already set)",
                 inner_width, inner_height
             );
             window
                 .resolution
                 .set_physical_resolution(inner_width, inner_height);
         }
-        RestorePhase::TwoPhase(TwoPhaseState::WaitingForScaleChange) => {
+        MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange) => {
             // Still waiting, don't apply yet
             return true;
         }
@@ -440,7 +446,7 @@ fn try_apply_restore(
 fn save_on_move(
     message: &WindowMoved,
     window: &Window,
-    monitors: &[(Entity, &Monitor)],
+    monitors: &[&Monitor],
     decoration: (u32, u32),
     path: &std::path::Path,
 ) {
@@ -475,7 +481,7 @@ fn save_on_move(
 fn save_on_resize(
     message: &WindowResized,
     window: &Window,
-    monitors: &[(Entity, &Monitor)],
+    monitors: &[&Monitor],
     decoration: (u32, u32),
     last_move_pos: Option<IVec2>,
     path: &std::path::Path,
