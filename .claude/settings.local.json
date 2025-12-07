@@ -7,7 +7,9 @@
       "Bash(cargo +nightly fmt:*)",
       "Bash(chmod:*)",
       "Bash(cargo clippy:*)",
-      "Bash(cargo check:*)"
+      "Bash(cargo check:*)",
+      "WebFetch(domain:crates.io)",
+      "WebFetch(domain:docs.rs)"
     ],
     "deny": [],
     "ask": []
