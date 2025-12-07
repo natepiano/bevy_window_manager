@@ -58,14 +58,10 @@ pub fn init_winit_info(
 
 /// Load saved window state and create `TargetPosition` resource.
 ///
-/// All type conversions (f32→u32, etc.) happen here in one place.
 /// Runs after `init_winit_info` so we have access to starting monitor info.
 #[expect(
     clippy::cast_possible_wrap,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::needless_pass_by_value,
-    reason = "window dimensions safe; Bevy systems require owned Res types"
+    reason = "window dimensions never exceed i32::MAX"
 )]
 pub fn load_target_position(
     mut commands: Commands,
@@ -87,7 +83,7 @@ pub fn load_target_position(
     // Get starting monitor from WinitInfo
     let starting_monitor_index = winit_info.as_ref().map_or(0, |w| w.starting_monitor_index);
     let starting_info = monitors.by_index(starting_monitor_index);
-    let starting_scale = starting_info.map_or(1.0, |m| m.scale as f32);
+    let starting_scale = starting_info.map_or(1.0, |m| m.scale);
 
     let Some(target_info) = monitors.by_index(state.monitor_index) else {
         info!(
@@ -97,11 +93,9 @@ pub fn load_target_position(
         return;
     };
 
-    let target_scale = target_info.scale as f32;
-
-    // Convert saved dimensions (all casting happens here)
-    let width = state.width as u32;
-    let height = state.height as u32;
+    let target_scale = target_info.scale;
+    let width = state.width;
+    let height = state.height;
 
     // Determine monitor scale strategy based on scale relationship
     let strategy = if (starting_scale - target_scale).abs() < 0.01 {
@@ -159,8 +153,7 @@ pub fn load_target_position(
 /// the position is compensated because winit divides by launch scale.
 #[expect(
     clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    reason = "position values fit in f32 and i32"
+    reason = "position values fit in i32"
 )]
 pub fn move_to_target_monitor(
     mut window: Single<&mut Window, With<PrimaryWindow>>,
@@ -172,8 +165,8 @@ pub fn move_to_target_monitor(
         MonitorScaleStrategy::HigherToLower(_)
     ) {
         let ratio = target.starting_scale / target.target_scale;
-        let comp_x = (target.x as f32 * ratio) as i32;
-        let comp_y = (target.y as f32 * ratio) as i32;
+        let comp_x = (f64::from(target.x) * ratio) as i32;
+        let comp_y = (f64::from(target.y) * ratio) as i32;
         info!(
             "[move_to_target_monitor] HigherToLower: compensating position ({}, {}) -> ({}, {}) (ratio={})",
             target.x, target.y, comp_x, comp_y, ratio
@@ -267,7 +260,6 @@ pub fn handle_window_messages(
 #[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
     reason = "window dimensions and scale factors are within safe ranges"
 )]
 fn try_apply_restore(
@@ -290,7 +282,7 @@ fn try_apply_restore(
         return true;
     };
 
-    let current_scale = monitors.at(pos.x, pos.y).map_or(1.0, |m| m.scale as f32);
+    let current_scale = monitors.at(pos.x, pos.y).map_or(1.0, |m| m.scale);
 
     info!(
         "[Restore] pos=({}, {}) current_scale={} target_scale={} strategy={:?}",
@@ -345,10 +337,10 @@ fn try_apply_restore(
         MonitorScaleStrategy::LowerToHigher => {
             // Low→High DPI: compensate with ratio < 1
             let ratio = target.starting_scale / target.target_scale;
-            let comp_x = (target.x as f32 * ratio) as i32;
-            let comp_y = (target.y as f32 * ratio) as i32;
-            let comp_width = (inner_width as f32 * ratio) as u32;
-            let comp_height = (inner_height as f32 * ratio) as u32;
+            let comp_x = (f64::from(target.x) * ratio) as i32;
+            let comp_y = (f64::from(target.y) * ratio) as i32;
+            let comp_width = (f64::from(inner_width) * ratio) as u32;
+            let comp_height = (f64::from(inner_height) * ratio) as u32;
 
             info!(
                 "[try_apply_restore] position=({}, {}) size={}x{} (LowerToHigher, ratio={})",
@@ -380,7 +372,6 @@ fn try_apply_restore(
 }
 
 /// Save window state on move message.
-#[expect(clippy::cast_precision_loss, reason = "window dimensions fit in f32")]
 fn save_on_move(
     message: &WindowMoved,
     window: &Window,
@@ -406,8 +397,8 @@ fn save_on_move(
 
     let state = WindowState {
         position: Some((message.position.x, message.position.y)),
-        width: outer_width as f32,
-        height: outer_height as f32,
+        width: outer_width,
+        height: outer_height,
         monitor_index,
     };
     state::save_state(path, &state);
@@ -417,7 +408,6 @@ fn save_on_move(
 #[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
     reason = "window dimensions are within safe ranges"
 )]
 fn save_on_resize(
@@ -458,8 +448,8 @@ fn save_on_resize(
 
     let state = WindowState {
         position: Some((pos.x, pos.y)),
-        width: physical_width as f32,
-        height: physical_height as f32,
+        width: physical_width,
+        height: physical_height,
         monitor_index,
     };
     state::save_state(path, &state);

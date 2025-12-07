@@ -81,9 +81,9 @@ pub struct TargetPosition {
     /// Window entity being restored.
     pub entity:                 Entity,
     /// Scale factor of the target monitor.
-    pub target_scale:           f32,
+    pub target_scale:           f64,
     /// Scale factor of the monitor where the window starts (keyboard focus monitor).
-    pub starting_scale:         f32,
+    pub starting_scale:         f64,
     /// Strategy for handling scale factor differences between monitors.
     pub monitor_scale_strategy: MonitorScaleStrategy,
 }
@@ -99,7 +99,7 @@ pub struct RestoreWindowConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WindowState {
     pub position:      Option<(i32, i32)>,
-    pub width:         f32,
-    pub height:        f32,
+    pub width:         u32,
+    pub height:        u32,
     pub monitor_index: usize,
 }
