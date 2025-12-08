@@ -14,7 +14,9 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(xargs:*)",
       "Bash(cat:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "WebSearch",
+      "Bash(cargo tree:*)"
     ],
     "deny": [],
     "ask": []

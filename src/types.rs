@@ -3,8 +3,92 @@
 use std::path::PathBuf;
 
 use bevy::prelude::*;
+use bevy::window::MonitorSelection;
+use bevy::window::VideoMode;
+use bevy::window::VideoModeSelection;
+use bevy::window::WindowMode;
 use serde::Deserialize;
 use serde::Serialize;
+
+/// Saved video mode for exclusive fullscreen.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SavedVideoMode {
+    pub physical_size:           UVec2,
+    pub bit_depth:               u16,
+    pub refresh_rate_millihertz: u32,
+}
+
+impl SavedVideoMode {
+    /// Convert to Bevy's `VideoMode`.
+    #[must_use]
+    pub const fn to_video_mode(&self) -> VideoMode {
+        VideoMode {
+            physical_size:           self.physical_size,
+            bit_depth:               self.bit_depth,
+            refresh_rate_millihertz: self.refresh_rate_millihertz,
+        }
+    }
+}
+
+/// Serializable window mode.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SavedWindowMode {
+    Windowed,
+    BorderlessFullscreen,
+    /// Exclusive fullscreen with optional specific video mode.
+    Fullscreen {
+        /// Video mode if explicitly set (`None` = use current display mode).
+        video_mode: Option<SavedVideoMode>,
+    },
+}
+
+impl SavedWindowMode {
+    /// Convert to Bevy's `WindowMode` with the given monitor index.
+    #[must_use]
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "VideoModeSelection::Specific is not const"
+    )]
+    pub fn to_window_mode(&self, monitor_index: usize) -> WindowMode {
+        let selection = MonitorSelection::Index(monitor_index);
+        match self {
+            Self::Windowed => WindowMode::Windowed,
+            Self::BorderlessFullscreen => WindowMode::BorderlessFullscreen(selection),
+            Self::Fullscreen { video_mode: None } => {
+                WindowMode::Fullscreen(selection, VideoModeSelection::Current)
+            },
+            Self::Fullscreen {
+                video_mode: Some(saved),
+            } => WindowMode::Fullscreen(
+                selection,
+                VideoModeSelection::Specific(saved.to_video_mode()),
+            ),
+        }
+    }
+
+    /// Check if this is a fullscreen mode (borderless or exclusive).
+    #[must_use]
+    pub const fn is_fullscreen(&self) -> bool { !matches!(self, Self::Windowed) }
+}
+
+impl From<&WindowMode> for SavedWindowMode {
+    fn from(mode: &WindowMode) -> Self {
+        match mode {
+            WindowMode::Windowed => Self::Windowed,
+            WindowMode::BorderlessFullscreen(_) => Self::BorderlessFullscreen,
+            WindowMode::Fullscreen(_, video_mode_selection) => Self::Fullscreen {
+                video_mode: match video_mode_selection {
+                    VideoModeSelection::Current => None,
+                    VideoModeSelection::Specific(mode) => Some(SavedVideoMode {
+                        physical_size:           mode.physical_size,
+                        bit_depth:               mode.bit_depth,
+                        refresh_rate_millihertz: mode.refresh_rate_millihertz,
+                    }),
+                },
+            },
+        }
+    }
+}
 
 /// Window decoration dimensions (title bar, borders).
 pub struct WindowDecoration {
@@ -86,6 +170,8 @@ pub struct TargetPosition {
     pub starting_scale:         f64,
     /// Strategy for handling scale factor differences between monitors.
     pub monitor_scale_strategy: MonitorScaleStrategy,
+    /// Window mode to restore.
+    pub mode:                   SavedWindowMode,
 }
 
 /// Configuration for the `RestoreWindowPlugin`.
@@ -102,4 +188,5 @@ pub struct WindowState {
     pub width:         u32,
     pub height:        u32,
     pub monitor_index: usize,
+    pub mode:          SavedWindowMode,
 }

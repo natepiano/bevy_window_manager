@@ -48,15 +48,48 @@ mod state;
 mod systems;
 mod types;
 
+use std::ops::Deref;
 use std::path::PathBuf;
 
 use bevy::prelude::*;
-use monitors::init_monitors;
+#[cfg(target_os = "macos")]
+use bevy::winit::WINIT_WINDOWS;
 pub use monitors::MonitorInfo;
 pub use monitors::MonitorPlugin;
 pub use monitors::Monitors;
+use monitors::init_monitors;
 use types::RestoreWindowConfig;
+pub use types::SavedVideoMode;
+pub use types::SavedWindowMode;
 use types::TargetPosition;
+
+/// Workaround for macOS crash when exiting from exclusive fullscreen.
+///
+/// On macOS, when the app exits while in exclusive fullscreen, Bevy's windows
+/// (stored in TLS) are dropped during TLS destruction. winit's `Window::drop`
+/// calls `set_fullscreen(None)`, which triggers a macOS callback that tries to
+/// access TLS - causing a panic.
+///
+/// This resource exits fullscreen in its `Drop` impl, which runs during
+/// `world.clear_all()` before TLS destruction, avoiding the panic.
+///
+/// See: <https://github.com/bevyengine/bevy/issues/XXXX>
+#[cfg(target_os = "macos")]
+#[derive(Resource)]
+struct FullscreenExitGuard;
+
+#[cfg(target_os = "macos")]
+impl Drop for FullscreenExitGuard {
+    fn drop(&mut self) {
+        WINIT_WINDOWS.with(|ww| {
+            for (_, window) in ww.borrow().windows.iter() {
+                window.deref().set_fullscreen(None);
+            }
+        });
+        // Give macOS time to process the fullscreen exit
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
 
 /// The main plugin. See module docs for usage.
 ///
@@ -65,7 +98,7 @@ use types::TargetPosition;
 /// - Linux: `~/.config/<exe_name>/windows.ron`
 /// - Windows: `C:\Users\<User>\AppData\Roaming\<exe_name>\windows.ron`
 ///
-/// unit struct version for convenience using .add_plugins(RestoreWindowsPlugin)
+/// Unit struct version for convenience using `.add_plugins(RestoreWindowsPlugin)`.
 pub struct RestoreWindowsPlugin;
 
 impl RestoreWindowsPlugin {
@@ -110,6 +143,9 @@ impl Plugin for RestoreWindowsPluginCustomPath {
 }
 
 fn build_plugin(app: &mut App, path: PathBuf) {
+    #[cfg(target_os = "macos")]
+    app.insert_resource(FullscreenExitGuard);
+
     app.add_plugins(MonitorPlugin)
         .insert_resource(RestoreWindowConfig { path })
         .add_systems(

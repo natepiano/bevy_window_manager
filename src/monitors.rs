@@ -5,6 +5,10 @@
 
 use bevy::prelude::*;
 use bevy::window::Monitor;
+use bevy::window::WindowMode;
+use bevy::window::WindowPosition;
+
+use crate::SavedWindowMode;
 
 /// Plugin that manages the `Monitors` resource.
 pub struct MonitorPlugin;
@@ -99,6 +103,48 @@ impl Monitors {
                 dx * dx + dy * dy
             })
             .map_or(0, |(idx, _)| idx)
+    }
+
+    /// Detect the effective window mode, including macOS green button detection.
+    ///
+    /// On macOS, clicking the green "maximize" button makes the window fill the
+    /// screen, but Bevy's `window.mode` remains `Windowed`. This method detects
+    /// that case by checking if the window fills a monitor.
+    ///
+    /// # Detection order
+    ///
+    /// 1. If `window.mode` is `Fullscreen` or `BorderlessFullscreen`, returns that
+    /// 2. If window is at a monitor's origin and fills it, returns `BorderlessFullscreen`
+    /// 3. Otherwise returns `Windowed`
+    ///
+    /// This is primarily useful on macOS. On other platforms, `window.mode` is
+    /// typically accurate and this method will just return the same value.
+    #[must_use]
+    pub fn detect_effective_mode(&self, window: &Window) -> SavedWindowMode {
+        // If Bevy knows it's fullscreen, use that
+        if !matches!(window.mode, WindowMode::Windowed) {
+            return (&window.mode).into();
+        }
+
+        // Empirical detection for macOS green button (mode stays Windowed but fills monitor)
+        let pos = match window.position {
+            WindowPosition::At(p) => p,
+            _ => return SavedWindowMode::Windowed,
+        };
+
+        let Some(monitor) = self.at(pos.x, pos.y) else {
+            return SavedWindowMode::Windowed;
+        };
+
+        let at_origin = pos.x == monitor.position.x && pos.y == monitor.position.y;
+        let fills_monitor =
+            window.physical_width() == monitor.size.x && window.physical_height() == monitor.size.y;
+
+        if at_origin && fills_monitor {
+            SavedWindowMode::BorderlessFullscreen
+        } else {
+            SavedWindowMode::Windowed
+        }
     }
 }
 

@@ -45,6 +45,14 @@ fn main() {
 
 **Warning:** This plugin was developed for and tested on macOS only. It may work on Windows and Linux, but there are no guarantees as I don't have a setup to test on those platforms. PR's welcome!
 
+## macOS Fullscreen Crash Fix
+
+This plugin includes a workaround for a Bevy bug on macOS where quitting the application while in exclusive fullscreen mode causes a panic. The crash occurs because Bevy stores windows in thread-local storage (TLS), and when windows are dropped during TLS destruction, winit's cleanup code triggers a macOS callback that tries to access already-destroyed TLS.
+
+This plugin prevents the crash by exiting fullscreen before TLS destruction begins. See [docs/bevy-issue-macos-fullscreen-panic.md](docs/bevy-issue-macos-fullscreen-panic.md) for full technical details.
+
+This issue will be fixed upstream in Bevy: https://github.com/bevyengine/bevy/pull/22060
+
 ## License
 
 bevy_restore_windows is free, open source and permissively licensed!

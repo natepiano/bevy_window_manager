@@ -13,6 +13,7 @@ use super::types::RestoreWindowConfig;
 use super::types::WindowState;
 use crate::monitors::Monitors;
 use crate::types::MonitorScaleStrategy;
+use crate::types::SavedWindowMode;
 use crate::types::TargetPosition;
 use crate::types::WindowDecoration;
 use crate::types::WindowRestoreState;
@@ -144,6 +145,7 @@ pub fn load_target_position(
         target_scale,
         starting_scale,
         monitor_scale_strategy: strategy,
+        mode: state.mode,
     });
 }
 
@@ -151,6 +153,8 @@ pub fn load_target_position(
 ///
 /// Uses pre-computed `TargetPosition` to move the window. For `HigherToLower` strategy,
 /// the position is compensated because winit divides by launch scale.
+///
+/// Skipped for fullscreen modes - they don't need position/size setup.
 #[expect(
     clippy::cast_possible_truncation,
     reason = "position values fit in i32"
@@ -159,6 +163,15 @@ pub fn move_to_target_monitor(
     mut window: Single<&mut Window, With<PrimaryWindow>>,
     target: Res<TargetPosition>,
 ) {
+    // Skip for fullscreen modes - they don't need the 1x1 positioning trick
+    if !matches!(target.mode, SavedWindowMode::Windowed) {
+        info!(
+            "[move_to_target_monitor] Skipping for fullscreen mode {:?}",
+            target.mode
+        );
+        return;
+    }
+
     // For HigherToLower, compensate position because winit divides by launch scale
     let (move_x, move_y) = if matches!(
         target.monitor_scale_strategy,
@@ -267,9 +280,11 @@ pub fn save_window_state(
         .at(pos.x, pos.y)
         .map_or_else(|| monitors.infer_index(pos.x, pos.y), |m| m.index);
 
+    let mode = monitors.detect_effective_mode(window);
+
     info!(
-        "[save_window_state] pos=({}, {}) size={}x{} monitor={}",
-        pos.x, pos.y, outer_width, outer_height, monitor_index
+        "[save_window_state] pos=({}, {}) size={}x{} monitor={} mode={:?}",
+        pos.x, pos.y, outer_width, outer_height, monitor_index, mode
     );
 
     let state = WindowState {
@@ -277,6 +292,7 @@ pub fn save_window_state(
         width: outer_width,
         height: outer_height,
         monitor_index,
+        mode,
     };
     state::save_state(&config.path, &state);
 }
@@ -293,6 +309,24 @@ fn try_apply_restore(
     windows: &mut Query<&mut Window>,
     decoration: (u32, u32),
 ) -> bool {
+    // Handle fullscreen modes - just set the mode and we're done
+    if !matches!(target.mode, SavedWindowMode::Windowed) {
+        let Ok(mut window) = windows.get_mut(target.entity) else {
+            return false;
+        };
+
+        // Find the target monitor index from the saved position
+        let monitor_index = monitors.at(target.x, target.y).map_or(0, |m| m.index);
+
+        info!(
+            "[Restore] Applying fullscreen mode {:?} on monitor {}",
+            target.mode, monitor_index
+        );
+
+        window.mode = target.mode.to_window_mode(monitor_index);
+        return true;
+    }
+
     // Check current monitor via window position
     let current_pos = windows
         .get(target.entity)
