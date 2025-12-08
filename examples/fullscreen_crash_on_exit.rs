@@ -3,7 +3,7 @@
 //! Run with: `cargo run --example fullscreen_crash_on_exit`
 //!
 //! On macOS, pressing Cmd+Q while in exclusive fullscreen will panic.
-//! This example does NOT use RestoreWindowsPlugin, which contains the workaround.
+//! This example does NOT use `RestoreWindowsPlugin`, which contains the workaround.
 
 use bevy::prelude::*;
 use bevy::window::MonitorSelection;

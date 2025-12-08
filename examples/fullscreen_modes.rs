@@ -4,7 +4,7 @@
 //!
 //! This example displays the current window mode and allows switching between modes:
 //! - Press `1` for exclusive fullscreen (uses selected video mode) WARNING: Exclusive fullscreen on
-//!   macOS may panic on exit due to winit bugs. See: https://github.com/rust-windowing/winit/issues/3668
+//!   macOS may panic on exit due to winit bugs. See: <https://github.com/rust-windowing/winit/issues/3668>
 //! - Press `2` for borderless fullscreen (recommended on macOS)
 //! - Press `W` or `Escape` for windowed mode
 //! - Press `Up`/`Down` to cycle through available video modes
@@ -80,48 +80,18 @@ fn update_display(
         return;
     };
 
-    // Get window position for display
-    let pos = match window.position {
-        bevy::window::WindowPosition::At(p) => p,
-        _ => IVec2::ZERO,
-    };
-
-    // Determine current monitor from position
-    let current_monitor_index = monitors_res.at(pos.x, pos.y).map_or(0, |m| m.index);
-
-    // Detect effective mode which may differ from Bevy's window.mode (e.g., macOS green button)
-    let detected = window.effective_mode(&monitors_res);
-
-    // Get Bevy's window.mode
-    let bevy_mode = format!("{:?}", window.mode);
-
-    // Get monitor info
-    let monitor_info = monitors_res.by_index(current_monitor_index).map_or_else(
-        || "Unknown".into(),
-        |m| {
-            format!(
-                "index={} size={}x{} scale={}",
-                m.index, m.size.x, m.size.y, m.scale
-            )
-        },
-    );
+    let monitor = window.monitor(&monitors_res);
+    let effective_mode = window.effective_mode(&monitors_res);
 
     // Get video modes and refresh rate for current monitor by matching position
-    let current_monitor_pos = monitors_res
-        .by_index(current_monitor_index)
-        .map(|m| m.position);
-
-    let (video_modes, refresh_rate): (Vec<&VideoMode>, Option<u32>) = current_monitor_pos
-        .and_then(|target_pos| {
-            bevy_monitors
-                .iter()
-                .find(|(_, m)| m.physical_position == target_pos)
-                .map(|(_, m)| {
-                    (
-                        m.video_modes.iter().collect(),
-                        m.refresh_rate_millihertz.map(|r| r / 1000),
-                    )
-                })
+    let (video_modes, refresh_rate): (Vec<&VideoMode>, Option<u32>) = bevy_monitors
+        .iter()
+        .find(|(_, m)| m.physical_position == monitor.position)
+        .map(|(_, m)| {
+            (
+                m.video_modes.iter().collect(),
+                m.refresh_rate_millihertz.map(|r| r / 1000),
+            )
         })
         .unwrap_or_default();
 
@@ -132,8 +102,7 @@ fn update_display(
         },
         _ => refresh_rate,
     };
-    let refresh_info =
-        active_refresh.map_or_else(String::new, |hz| format!("Refresh rate: {hz}Hz"));
+    let refresh_display = active_refresh.map_or_else(|| "N/A".into(), |hz| format!("{hz}Hz"));
 
     // Build video modes display (show a few around selected)
     let video_modes_display = if video_modes.is_empty() {
@@ -161,13 +130,16 @@ fn update_display(
     };
 
     text.0 = format!(
-        "Detected mode: {detected:?}\n\
-         Bevy window.mode: {bevy_mode}\n\
+        "Window Position: {:?}\n\
+         Window Size: {}x{}\n\
+         Mode: {:?} (set value only, not dynamically updated)\n\
+         Effective Mode: {:?}\n\
          \n\
-         Window pos: ({}, {})\n\
-         Window size: {}x{}\n\
-         Monitor: {monitor_info}\n\
-         {refresh_info}\n\
+         Monitor {}\n\
+         Position: ({}, {})\n\
+         Size: {}x{}\n\
+         Scale: {}\n\
+         Refresh Rate: {}\n\
          \n\
          Video Modes (Up/Down to select):\n\
          {video_modes_display}\n\
@@ -176,10 +148,18 @@ fn update_display(
          [1] Exclusive Fullscreen (selected mode)\n\
          [2] Borderless Fullscreen\n\
          [W/Esc] Windowed",
-        pos.x,
-        pos.y,
+        window.position,
         window.physical_width(),
         window.physical_height(),
+        window.mode,
+        effective_mode,
+        monitor.index,
+        monitor.position.x,
+        monitor.position.y,
+        monitor.size.x,
+        monitor.size.y,
+        monitor.scale,
+        refresh_display
     );
 }
 
@@ -190,25 +170,13 @@ fn handle_input(
     monitors_res: Res<Monitors>,
     mut selected: ResMut<SelectedVideoMode>,
 ) {
-    // Determine current monitor from position
-    let pos = match window.position {
-        bevy::window::WindowPosition::At(p) => p,
-        _ => IVec2::ZERO,
-    };
-    let current_monitor_index = monitors_res.at(pos.x, pos.y).map_or(0, |m| m.index);
+    let monitor = window.monitor(&monitors_res);
 
     // Get video modes for current monitor by matching position
-    let current_monitor_pos = monitors_res
-        .by_index(current_monitor_index)
-        .map(|m| m.position);
-
-    let video_modes: Vec<VideoMode> = current_monitor_pos
-        .and_then(|target_pos| {
-            bevy_monitors
-                .iter()
-                .find(|(_, m)| m.physical_position == target_pos)
-                .map(|(_, m)| m.video_modes.clone())
-        })
+    let video_modes: Vec<VideoMode> = bevy_monitors
+        .iter()
+        .find(|(_, m)| m.physical_position == monitor.position)
+        .map(|(_, m)| m.video_modes.clone())
         .unwrap_or_default();
 
     // Navigate video modes
@@ -228,14 +196,11 @@ fn handle_input(
                 VideoModeSelection::Specific(*mode)
             });
 
-        window.mode = WindowMode::Fullscreen(
-            MonitorSelection::Index(current_monitor_index),
-            video_mode_selection,
-        );
+        window.mode =
+            WindowMode::Fullscreen(MonitorSelection::Index(monitor.index), video_mode_selection);
     }
     if keys.just_pressed(KeyCode::Digit2) {
-        window.mode =
-            WindowMode::BorderlessFullscreen(MonitorSelection::Index(current_monitor_index));
+        window.mode = WindowMode::BorderlessFullscreen(MonitorSelection::Index(monitor.index));
     }
     if keys.just_pressed(KeyCode::KeyW) || keys.just_pressed(KeyCode::Escape) {
         window.mode = WindowMode::Windowed;

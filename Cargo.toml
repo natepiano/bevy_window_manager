@@ -23,6 +23,11 @@ pedantic = { level = "deny", priority = -1 }
 multiple_crate_versions = "allow"
 needless_pass_by_value = "allow"
 
+# Screen dimensions are always within safe ranges for these casts
+cast_possible_wrap = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+
 [lib]
 name = "bevy_restore_windows"
 path = "src/lib.rs"

@@ -5,70 +5,6 @@
 
 use bevy::prelude::*;
 use bevy::window::Monitor;
-use bevy::window::MonitorSelection;
-use bevy::window::WindowMode;
-use bevy::window::WindowPosition;
-
-/// Extension trait for `Window` that provides monitor-aware methods.
-///
-/// Import this trait to access additional window functionality that requires
-/// monitor information.
-pub trait WindowExt {
-    /// Detect the effective window mode, including macOS green button detection.
-    ///
-    /// On macOS, clicking the green "maximize" button makes the window fill the
-    /// screen, but `window.mode` remains `Windowed`. This method detects that case
-    /// and returns `BorderlessFullscreen` with the correct monitor selection.
-    ///
-    /// # Returns
-    ///
-    /// A properly populated [`WindowMode`]:
-    /// - If `window.mode` is already fullscreen, returns it unchanged
-    /// - If window fills a monitor (macOS green button), returns `BorderlessFullscreen` with
-    ///   [`MonitorSelection::Index`] set to the correct monitor
-    /// - Otherwise returns `Windowed`
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// use bevy_restore_windows::WindowExt;
-    ///
-    /// fn check_mode(window: &Window, monitors: Res<Monitors>) {
-    ///     let effective = window.effective_mode(&monitors);
-    ///     // effective reflects what the user actually sees,
-    ///     // even if window.mode says Windowed
-    /// }
-    /// ```
-    fn effective_mode(&self, monitors: &Monitors) -> WindowMode;
-}
-
-impl WindowExt for Window {
-    fn effective_mode(&self, monitors: &Monitors) -> WindowMode {
-        // If Bevy knows it's fullscreen, return as-is
-        if !matches!(self.mode, WindowMode::Windowed) {
-            return self.mode;
-        }
-
-        // Check for macOS green button (fills monitor but mode says Windowed)
-        let WindowPosition::At(pos) = self.position else {
-            return WindowMode::Windowed;
-        };
-
-        let Some(monitor) = monitors.at(pos.x, pos.y) else {
-            return WindowMode::Windowed;
-        };
-
-        let at_origin = pos.x == monitor.position.x && pos.y == monitor.position.y;
-        let fills_monitor =
-            self.physical_width() == monitor.size.x && self.physical_height() == monitor.size.y;
-
-        if at_origin && fills_monitor {
-            WindowMode::BorderlessFullscreen(MonitorSelection::Index(monitor.index))
-        } else {
-            WindowMode::Windowed
-        }
-    }
-}
 
 /// Plugin that manages the `Monitors` resource.
 pub struct MonitorPlugin;
@@ -104,10 +40,6 @@ pub struct Monitors {
 impl Monitors {
     /// Find monitor containing position (x, y).
     #[must_use]
-    #[expect(
-        clippy::cast_possible_wrap,
-        reason = "monitor dimensions are always within i32 range"
-    )]
     pub fn at(&self, x: i32, y: i32) -> Option<&MonitorInfo> {
         self.list.iter().find(|mon| {
             x >= mon.position.x
@@ -121,28 +53,32 @@ impl Monitors {
     #[must_use]
     pub fn by_index(&self, index: usize) -> Option<&MonitorInfo> { self.list.get(index) }
 
-    /// Infer monitor index when position is outside all monitor bounds.
+    /// Get the primary monitor (index 0).
     ///
-    /// Finds the closest monitor to the given position by calculating
-    /// the distance to each monitor's bounding box.
+    /// # Panics
+    ///
+    /// Panics if no monitors exist (should never happen on a real system).
     #[must_use]
-    #[expect(
-        clippy::cast_possible_wrap,
-        reason = "monitor dimensions are always within i32 range"
-    )]
-    pub fn infer_index(&self, x: i32, y: i32) -> usize {
-        if self.list.is_empty() {
-            return 0;
+    pub fn primary(&self) -> &MonitorInfo { &self.list[0] }
+
+    /// Find the monitor at position, or the closest one if outside all bounds.
+    ///
+    /// Unlike [`at`](Self::at), this always returns a monitor by finding
+    /// the closest monitor when position is outside all bounds.
+    #[must_use]
+    pub fn closest_to(&self, x: i32, y: i32) -> &MonitorInfo {
+        // Try exact match first
+        if let Some(monitor) = self.at(x, y) {
+            return monitor;
         }
 
+        // Find closest monitor by distance to bounding box
         self.list
             .iter()
-            .enumerate()
-            .min_by_key(|(_, mon)| {
+            .min_by_key(|mon| {
                 let right = mon.position.x + mon.size.x as i32;
                 let bottom = mon.position.y + mon.size.y as i32;
 
-                // Calculate distance to monitor bounding box
                 let dx = if x < mon.position.x {
                     mon.position.x - x
                 } else if x >= right {
@@ -159,10 +95,9 @@ impl Monitors {
                     0
                 };
 
-                // Use squared distance to avoid sqrt
                 dx * dx + dy * dy
             })
-            .map_or(0, |(idx, _)| idx)
+            .unwrap_or(&self.list[0])
     }
 }
 

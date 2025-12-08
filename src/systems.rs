@@ -12,13 +12,13 @@ use super::state;
 use super::types::RestoreWindowConfig;
 use super::types::WindowState;
 use crate::monitors::Monitors;
-use crate::monitors::WindowExt;
 use crate::types::MonitorScaleStrategy;
 use crate::types::SavedWindowMode;
 use crate::types::TargetPosition;
 use crate::types::WindowDecoration;
 use crate::types::WindowRestoreState;
 use crate::types::WinitInfo;
+use crate::window_ext::WindowExt;
 
 /// Populate `WinitInfo` resource from winit (decoration and starting monitor).
 pub fn init_winit_info(
@@ -43,7 +43,7 @@ pub fn init_winit_info(
                 .map(|p| IVec2::new(p.x, p.y))
                 .unwrap_or(IVec2::ZERO);
 
-            let starting_monitor_index = monitors.at(pos.x, pos.y).map_or(0, |m| m.index);
+            let starting_monitor_index = monitors.closest_to(pos.x, pos.y).index;
 
             debug!(
                 "[init_winit_info] decoration={}x{} pos=({}, {}) starting_monitor={}",
@@ -61,10 +61,6 @@ pub fn init_winit_info(
 /// Load saved window state and create `TargetPosition` resource.
 ///
 /// Runs after `init_winit_info` so we have access to starting monitor info.
-#[expect(
-    clippy::cast_possible_wrap,
-    reason = "window dimensions never exceed i32::MAX"
-)]
 pub fn load_target_position(
     mut commands: Commands,
     monitors: Res<Monitors>,
@@ -95,8 +91,15 @@ pub fn load_target_position(
     };
 
     let target_scale = target_info.scale;
-    let outer_width = state.width;
-    let outer_height = state.height;
+
+    // File stores inner dimensions (content area)
+    let width = state.width;
+    let height = state.height;
+
+    // Calculate outer dimensions for clamping (inner + decoration)
+    let decoration = winit_info.decoration();
+    let outer_width = width + decoration.x;
+    let outer_height = height + decoration.y;
 
     // Determine monitor scale strategy based on scale relationship
     let strategy = if (starting_scale - target_scale).abs() < 0.01 {
@@ -107,14 +110,13 @@ pub fn load_target_position(
         MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange)
     };
 
-    // Calculate final clamped position
+    // Calculate final clamped position (using outer dimensions for accurate bounds)
     let mon_right = target_info.position.x + target_info.size.x as i32;
     let mon_bottom = target_info.position.y + target_info.size.y as i32;
 
     let mut x = saved_x;
     let mut y = saved_y;
 
-    // Clamp to fit within monitor bounds (using outer dimensions)
     if x + outer_width as i32 > mon_right {
         x = mon_right - outer_width as i32;
     }
@@ -126,7 +128,7 @@ pub fn load_target_position(
 
     if x != saved_x || y != saved_y {
         debug!(
-            "[load_target_position] Clamped position: ({}, {}) -> ({}, {}) for size {}x{}",
+            "[load_target_position] Clamped position: ({}, {}) -> ({}, {}) for outer size {}x{}",
             saved_x, saved_y, x, y, outer_width, outer_height
         );
     }
@@ -136,11 +138,12 @@ pub fn load_target_position(
         starting_monitor_index, starting_scale, state.monitor_index, target_scale, strategy
     );
 
+    // Store inner dimensions - decoration is only needed for clamping above
     commands.insert_resource(TargetPosition {
         x,
         y,
-        outer_width,
-        outer_height,
+        width,
+        height,
         target_scale,
         starting_scale,
         monitor_scale_strategy: strategy,
@@ -154,10 +157,6 @@ pub fn load_target_position(
 /// the position is compensated because winit divides by launch scale.
 ///
 /// Skipped for fullscreen modes - they don't need position/size setup.
-#[expect(
-    clippy::cast_possible_truncation,
-    reason = "position values fit in i32"
-)]
 pub fn move_to_target_monitor(
     mut window: Single<&mut Window, With<PrimaryWindow>>,
     target: Res<TargetPosition>,
@@ -201,7 +200,6 @@ pub fn move_to_target_monitor(
 pub fn save_window_state(
     mut moved_messages: MessageReader<WindowMoved>,
     mut resized_messages: MessageReader<WindowResized>,
-    winit_info: Res<WinitInfo>,
     config: Res<RestoreWindowConfig>,
     monitors: Res<Monitors>,
     window: Single<&Window, With<PrimaryWindow>>,
@@ -221,26 +219,22 @@ pub fn save_window_state(
         return;
     };
 
-    let decoration = winit_info.decoration();
+    let width = window.resolution.physical_width();
+    let height = window.resolution.physical_height();
 
-    let outer_width = window.resolution.physical_width() + decoration.x;
-    let outer_height = window.resolution.physical_height() + decoration.y;
-
-    let monitor_index = monitors
-        .at(pos.x, pos.y)
-        .map_or_else(|| monitors.infer_index(pos.x, pos.y), |m| m.index);
+    let monitor_index = window.monitor(&monitors).index;
 
     let mode: SavedWindowMode = (&window.effective_mode(&monitors)).into();
 
     debug!(
         "[save_window_state] pos=({}, {}) size={}x{} monitor={} mode={:?}",
-        pos.x, pos.y, outer_width, outer_height, monitor_index, mode
+        pos.x, pos.y, width, height, monitor_index, mode
     );
 
     let state = WindowState {
         position: Some((pos.x, pos.y)),
-        width: outer_width,
-        height: outer_height,
+        width,
+        height,
         monitor_index,
         mode,
     };
@@ -252,7 +246,6 @@ pub fn restore_primary_window(
     mut commands: Commands,
     mut scale_changed_messages: MessageReader<WindowScaleFactorChanged>,
     mut target: ResMut<TargetPosition>,
-    winit_info: Res<WinitInfo>,
     mut primary_window: Single<&mut Window, With<PrimaryWindow>>,
     monitors: Res<Monitors>,
 ) {
@@ -269,12 +262,7 @@ pub fn restore_primary_window(
     }
 
     if matches!(
-        try_apply_restore(
-            &target,
-            &monitors,
-            &mut primary_window,
-            winit_info.decoration()
-        ),
+        try_apply_restore(&target, &monitors, &mut primary_window),
         RestoreStatus::Complete
     ) {
         commands.remove_resource::<TargetPosition>();
@@ -290,100 +278,74 @@ enum RestoreStatus {
 }
 
 /// Try to apply a pending window restore.
-#[expect(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "window dimensions and scale factors are within safe ranges"
-)]
 fn try_apply_restore(
     target: &TargetPosition,
     monitors: &Monitors,
     primary_window: &mut Window,
-    decoration: UVec2,
 ) -> RestoreStatus {
+    let target_mon = monitors.closest_to(target.x, target.y);
+
     // Handle fullscreen modes - just set the mode and we're done
     if target.mode.is_fullscreen() {
-        let monitor_index = monitors.at(target.x, target.y).map_or(0, |m| m.index);
-
         debug!(
             "[Restore] Applying fullscreen mode {:?} on monitor {}",
-            target.mode, monitor_index
+            target.mode, target_mon.index
         );
 
-        primary_window.mode = target.mode.to_window_mode(monitor_index);
+        primary_window.mode = target.mode.to_window_mode(target_mon.index);
         return RestoreStatus::Complete;
     }
 
-    // Check current monitor via window position
-    let bevy::window::WindowPosition::At(pos) = primary_window.position else {
-        return RestoreStatus::Waiting;
-    };
-
-    let current_scale = monitors.at(pos.x, pos.y).map_or(1.0, |m| m.scale);
+    // the primary window may be on a monitor that is different than the target
+    // so the scale could be different - this difference is why we need this crate
+    let current_scale = primary_window.monitor(monitors).scale;
 
     debug!(
-        "[Restore] pos=({}, {}) current_scale={} target_scale={} strategy={:?}",
-        pos.x, pos.y, current_scale, target.target_scale, target.monitor_scale_strategy
+        "[Restore] target_pos=({}, {}) current_scale={} target_scale={} strategy={:?}",
+        target.x, target.y, current_scale, target.target_scale, target.monitor_scale_strategy
     );
 
     // Not yet on target monitor (for ApplyUnchanged/LowerToHigher strategies)
-    if !matches!(
-        target.monitor_scale_strategy,
-        MonitorScaleStrategy::HigherToLower(WindowRestoreState::ApplySize)
-    ) && (current_scale - target.target_scale).abs() >= 0.01
-    {
-        return RestoreStatus::Waiting;
-    }
-
-    // Log target monitor info
-    if let Some(mon) = monitors.at(target.x, target.y) {
-        debug!(
-            "[Restore] Target monitor: pos=({}, {}) size={}x{} scale={}",
-            mon.position.x, mon.position.y, mon.size.x, mon.size.y, mon.scale
-        );
-    }
-
-    let inner_size = target.inner_size(decoration);
+    // if !matches!(
+    //     target.monitor_scale_strategy,
+    //     MonitorScaleStrategy::HigherToLower(WindowRestoreState::ApplySize)
+    // ) && (current_scale - target.target_scale).abs() >= 0.01
+    // {
+    //     return RestoreStatus::Waiting;
+    // }
 
     match target.monitor_scale_strategy {
         MonitorScaleStrategy::ApplyUnchanged => {
+            let size = target.size();
             debug!(
                 "[try_apply_restore] position=({}, {}) size={}x{} (ApplyUnchanged)",
-                target.x, target.y, inner_size.x, inner_size.y
+                target.x, target.y, size.x, size.y
             );
-            primary_window.position =
-                bevy::window::WindowPosition::At(IVec2::new(target.x, target.y));
-            primary_window
-                .resolution
-                .set_physical_resolution(inner_size.x, inner_size.y);
+            primary_window.set_position_and_size(target.position(), size);
         },
         MonitorScaleStrategy::LowerToHigher => {
-            // Low→High DPI: compensate with ratio < 1
-            let ratio = target.starting_scale / target.target_scale;
-            let comp_pos_x = (f64::from(target.x) * ratio) as i32;
-            let comp_pos_y = (f64::from(target.y) * ratio) as i32;
-            let comp_width = (f64::from(inner_size.x) * ratio) as u32;
-            let comp_height = (f64::from(inner_size.y) * ratio) as u32;
-
+            let position = target.compensated_position();
+            let size = target.compensated_size();
             debug!(
                 "[try_apply_restore] position=({}, {}) size={}x{} (LowerToHigher, ratio={})",
-                comp_pos_x, comp_pos_y, comp_width, comp_height, ratio
+                position.x,
+                position.y,
+                size.x,
+                size.y,
+                target.ratio()
             );
-            primary_window.position =
-                bevy::window::WindowPosition::At(IVec2::new(comp_pos_x, comp_pos_y));
-            primary_window
-                .resolution
-                .set_physical_resolution(comp_width, comp_height);
+            primary_window.set_position_and_size(position, size);
         },
         MonitorScaleStrategy::HigherToLower(WindowRestoreState::ApplySize) => {
             // HigherToLower after scale changed: ONLY set size, position was set earlier
+            let size = target.size();
             debug!(
                 "[try_apply_restore] size={}x{} ONLY (HigherToLower::ApplySize, position already set)",
-                inner_size.x, inner_size.y
+                size.x, size.y
             );
             primary_window
                 .resolution
-                .set_physical_resolution(inner_size.x, inner_size.y);
+                .set_physical_resolution(size.x, size.y);
         },
         // in this case we haven't yet received the ScaleChanged message so we can't apply the size
         // yet - early return

@@ -49,6 +49,7 @@ mod monitors;
 mod state;
 mod systems;
 mod types;
+mod window_ext;
 
 use std::path::PathBuf;
 
@@ -56,10 +57,10 @@ use bevy::prelude::*;
 pub use monitors::MonitorInfo;
 use monitors::MonitorPlugin;
 pub use monitors::Monitors;
-pub use monitors::WindowExt;
 use monitors::init_monitors;
 use types::RestoreWindowConfig;
 use types::TargetPosition;
+pub use window_ext::WindowExt;
 
 /// The main plugin. See module docs for usage.
 ///

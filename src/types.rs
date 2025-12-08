@@ -45,11 +45,7 @@ pub enum SavedWindowMode {
 impl SavedWindowMode {
     /// Convert to Bevy's `WindowMode` with the given monitor index.
     #[must_use]
-    #[expect(
-        clippy::missing_const_for_fn,
-        reason = "VideoModeSelection::Specific is not const"
-    )]
-    pub fn to_window_mode(&self, monitor_index: usize) -> WindowMode {
+    pub const fn to_window_mode(&self, monitor_index: usize) -> WindowMode {
         let selection = MonitorSelection::Index(monitor_index);
         match self {
             Self::Windowed => WindowMode::Windowed,
@@ -163,24 +159,19 @@ pub enum MonitorScaleStrategy {
 /// All values are pre-computed with proper types. Casting from saved state
 /// happens once during loading, not scattered throughout the restore logic.
 ///
-/// # Outer vs Inner Dimensions
-///
-/// Window dimensions come in two forms:
-/// - **Outer**: Total window size including title bar and borders (what we save/restore)
-/// - **Inner**: Content area only (what Bevy's `Window.resolution` represents)
-///
-/// We save outer dimensions because the window position refers to the top-left of the
-/// outer frame. To properly clamp windows within monitor bounds, we need the full size.
-/// When applying via `set_physical_resolution()`, we convert back to inner dimensions.
+/// Dimensions stored here are **inner** (content area only), matching what
+/// Bevy's `Window.resolution` represents and what we save to the state file.
+/// Outer dimensions (including title bar) are only used during loading for
+/// clamping calculations.
 #[derive(Resource)]
 pub struct TargetPosition {
     /// Final clamped position (adjusted to fit within target monitor).
     pub x:                      i32,
     pub y:                      i32,
-    /// Target outer width (including window decoration).
-    pub outer_width:            u32,
-    /// Target outer height (including window decoration).
-    pub outer_height:           u32,
+    /// Target width (content area, excluding window decoration).
+    pub width:                  u32,
+    /// Target height (content area, excluding window decoration).
+    pub height:                 u32,
     /// Scale factor of the target monitor.
     pub target_scale:           f64,
     /// Scale factor of the monitor where the window starts (keyboard focus monitor).
@@ -192,14 +183,39 @@ pub struct TargetPosition {
 }
 
 impl TargetPosition {
-    /// Calculate inner dimensions by subtracting window decoration from outer dimensions.
-    ///
-    /// Inner dimensions are what Bevy's `Window.resolution` represents (content area only).
+    /// Get the target position as an `IVec2`.
     #[must_use]
-    pub const fn inner_size(&self, decoration: UVec2) -> UVec2 {
+    pub const fn position(&self) -> IVec2 { IVec2::new(self.x, self.y) }
+
+    /// Get the target size as a `UVec2`.
+    #[must_use]
+    pub const fn size(&self) -> UVec2 { UVec2::new(self.width, self.height) }
+
+    /// Scale ratio between starting and target monitors.
+    #[must_use]
+    pub fn ratio(&self) -> f64 { self.starting_scale / self.target_scale }
+
+    /// Position compensated for scale factor differences.
+    ///
+    /// Multiplies position by the ratio to account for winit dividing by launch scale.
+    #[must_use]
+    pub fn compensated_position(&self) -> IVec2 {
+        let ratio = self.ratio();
+        IVec2::new(
+            (f64::from(self.x) * ratio) as i32,
+            (f64::from(self.y) * ratio) as i32,
+        )
+    }
+
+    /// Size compensated for scale factor differences.
+    ///
+    /// Multiplies size by the ratio to account for winit dividing by launch scale.
+    #[must_use]
+    pub fn compensated_size(&self) -> UVec2 {
+        let ratio = self.ratio();
         UVec2::new(
-            self.outer_width.saturating_sub(decoration.x),
-            self.outer_height.saturating_sub(decoration.y),
+            (f64::from(self.width) * ratio) as u32,
+            (f64::from(self.height) * ratio) as u32,
         )
     }
 }
