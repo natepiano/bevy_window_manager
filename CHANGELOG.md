@@ -8,19 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Fullscreen mode detection and restoration (windowed, borderless, exclusive with video mode)
-- macOS crash fix: workaround for panic when quitting from exclusive fullscreen mode (will be fixed upstream in https://github.com/bevyengine/bevy/pull/22060)
-
-## [0.17.0] - 2025-12-06
-
-Initial release.
-
-### Added
-
 - `WindowManagerPlugin` for saving and restoring window position and size across sessions
 - Multi-monitor support with proper scale factor handling
 - Automatic state persistence to platform-specific config directories
-- Simple example demonstrating plugin usage
-
-[Unreleased]: https://github.com/natemccoy/bevy_window_manager/compare/v0.17.0...HEAD
-[0.17.0]: https://github.com/natemccoy/bevy_window_manager/releases/tag/v0.17.0
+- Fullscreen mode detection and restoration (windowed, borderless, exclusive with video mode)
+- macOS crash fix: workaround for panic when quitting from exclusive fullscreen mode (will be fixed upstream in https://github.com/bevyengine/bevy/pull/22060)
+- `Monitors` resource for querying available monitors by position or index
+- `MonitorInfo` struct exposing monitor scale, position, and size
+- `WindowExt` extension trait for window-to-monitor queries and effective mode detection
