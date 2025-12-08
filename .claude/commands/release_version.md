@@ -2,6 +2,14 @@
 
 Perform a release for bevy_window_manager.
 
+## Versioning Strategy
+
+This crate tracks Bevy's release cycle:
+- **Major.Minor** matches Bevy version (e.g., `0.17.x` for Bevy 0.17)
+- **Patch** versions are independent (bug fixes, features that don't require Bevy changes)
+
+When releasing a new minor version (e.g., `0.17.0`), a release branch is created (`release/0.17`) to support patch releases while `main` can move forward to the next Bevy version.
+
 ## Usage
 - `/release_version X.Y.Z-rc.N` - Release as RC version (e.g., `0.17.0-rc.1`)
 - `/release_version X.Y.Z` - Release as final version (e.g., `0.17.0`)
@@ -13,7 +21,7 @@ Perform a release for bevy_window_manager.
 ## Prerequisites
 
 Before starting the release, verify:
-1. You're on the `main` branch
+1. You're on the `main` branch (or appropriate release branch for patch releases)
 2. Working directory is clean (no uncommitted changes)
 3. `gh` CLI is installed and authenticated
 
@@ -26,9 +34,10 @@ Before starting the release, verify:
     **STEP 3:** Execute <BumpVersion/>
     **STEP 4:** Execute <PublishCrate/>
     **STEP 5:** Execute <PushToGit/>
-    **STEP 6:** Execute <CreateGitHubRelease/>
-    **STEP 7:** Execute <PostReleaseVerification/>
-    **STEP 8:** Execute <PrepareNextReleaseCycle/>
+    **STEP 6:** Execute <CreateReleaseBranch/> (only for X.Y.0 releases)
+    **STEP 7:** Execute <CreateGitHubRelease/>
+    **STEP 8:** Execute <PostReleaseVerification/>
+    **STEP 9:** Execute <PrepareNextReleaseCycle/>
 </ExecutionSteps>
 
 <ArgumentValidation>
@@ -134,14 +143,39 @@ git push origin "v${VERSION}"
 → **Auto-check**: Continue if push succeeds, stop if fails
 </PushToGit>
 
+<CreateReleaseBranch>
+## STEP 6: Create Release Branch (X.Y.0 releases only)
+
+**Skip this step if:**
+- This is a patch release (X.Y.Z where Z > 0)
+- This is an RC release (X.Y.Z-rc.N)
+
+**For new minor versions (X.Y.0)**, create a release branch to support future patch releases while `main` moves to the next Bevy version:
+
+```bash
+git branch release/X.Y v${VERSION}
+git push origin release/X.Y
+```
+
+Example for version 0.17.0:
+```bash
+git branch release/0.17 v0.17.0
+git push origin release/0.17
+```
+
+→ **Auto-check**: Continue if branch created and pushed successfully
+
+**Note**: Future patch releases (0.17.1, 0.17.2) should be made from this branch, not `main`.
+</CreateReleaseBranch>
+
 <CreateGitHubRelease>
-## STEP 6: Create GitHub Release
+## STEP 7: Create GitHub Release
 
 → **I will gather CHANGELOG entry and create a release using GitHub CLI**
 
 ```bash
 gh release create "v${VERSION}" \
-  --repo natemccoy/bevy_window_manager \
+  --repo natepiano/bevy_window_manager \
   --title "bevy_window_manager v${VERSION}" \
   --notes "Release notes from CHANGELOG"
 ```
@@ -149,7 +183,7 @@ gh release create "v${VERSION}" \
 </CreateGitHubRelease>
 
 <PostReleaseVerification>
-## STEP 7: Post-Release Verification
+## STEP 8: Post-Release Verification
 
 ```bash
 curl -s "https://crates.io/api/v1/crates/bevy_window_manager" | jq '.crate.max_version'
@@ -160,7 +194,7 @@ curl -s "https://crates.io/api/v1/crates/bevy_window_manager" | jq '.crate.max_v
 </PostReleaseVerification>
 
 <PrepareNextReleaseCycle>
-## STEP 8: Prepare for Next Release Cycle
+## STEP 9: Prepare for Next Release Cycle
 
 → **I will add [Unreleased] section to CHANGELOG.md**
 
@@ -179,6 +213,15 @@ git push origin main
 
 **✅ Release complete!**
 </PrepareNextReleaseCycle>
+
+## Patch Release Workflow
+
+For patch releases on an existing minor version (e.g., 0.17.1):
+
+1. Checkout the release branch: `git checkout release/0.17`
+2. Cherry-pick or apply fixes
+3. Run `/release_version 0.17.1`
+4. Skip the "Create Release Branch" step (branch already exists)
 
 ## Rollback Instructions
 
