@@ -15,7 +15,7 @@ Perform a release for bevy_window_manager.
 Before starting the release, verify:
 1. You're on the `main` branch
 2. Working directory is clean (no uncommitted changes)
-3. cargo-release is installed (`cargo install cargo-release`)
+3. `gh` CLI is installed and authenticated
 
 <ExecutionSteps>
     **EXECUTE THESE STEPS IN ORDER:**
@@ -34,16 +34,8 @@ Before starting the release, verify:
 <ArgumentValidation>
 ## STEP 0: Argument Validation
 
-**Validate the version format:**
-```bash
-bash .claude/scripts/release_version_validate.sh "$ARGUMENTS"
-```
+**Validate the version format** (must match `X.Y.Z` or `X.Y.Z-rc.N`):
 → **Auto-check**: Continue if version is valid format, stop with clear error if invalid
-
-**Confirm version:**
-```bash
-echo "Release version set to: $ARGUMENTS"
-```
 </ArgumentValidation>
 
 <PreReleaseChecks>
