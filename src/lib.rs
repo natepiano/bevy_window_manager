@@ -82,7 +82,7 @@ impl RestoreWindowsPlugin {
     /// Panics if the config directory cannot be determined.
     #[must_use]
     #[expect(clippy::expect_used, reason = "fail fast if path cannot be determined")]
-    pub fn with_app_name(app_name: impl Into<String>) -> RestoreWindowsPluginCustomPath {
+    pub fn with_app_name(app_name: impl Into<String>) -> impl Plugin {
         RestoreWindowsPluginCustomPath {
             path: state::get_state_path_for_app(&app_name.into())
                 .expect("Could not determine state file path"),
@@ -91,7 +91,7 @@ impl RestoreWindowsPlugin {
 
     /// Create a plugin with a custom state file path.
     #[must_use]
-    pub fn with_path(path: impl Into<PathBuf>) -> RestoreWindowsPluginCustomPath {
+    pub fn with_path(path: impl Into<PathBuf>) -> impl Plugin {
         RestoreWindowsPluginCustomPath { path: path.into() }
     }
 }
@@ -105,7 +105,7 @@ impl Plugin for RestoreWindowsPlugin {
 }
 
 /// Plugin variant with a custom state file path.
-pub struct RestoreWindowsPluginCustomPath {
+struct RestoreWindowsPluginCustomPath {
     path: PathBuf,
 }
 
