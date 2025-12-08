@@ -16,7 +16,8 @@
       "Bash(cat:*)",
       "Bash(find:*)",
       "WebSearch",
-      "Bash(cargo tree:*)"
+      "Bash(cargo tree:*)",
+      "Bash(mkdir:*)"
     ],
     "deny": [],
     "ask": []
