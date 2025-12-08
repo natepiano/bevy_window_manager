@@ -103,6 +103,14 @@ pub struct WinitInfo {
     pub window_decoration:      WindowDecoration,
 }
 
+impl WinitInfo {
+    /// Get window decoration dimensions as a `UVec2`.
+    #[must_use]
+    pub const fn decoration(&self) -> UVec2 {
+        UVec2::new(self.window_decoration.width, self.window_decoration.height)
+    }
+}
+
 /// State for `MonitorScaleStrategy::HigherToLower` (high→low DPI restore).
 ///
 /// When restoring from a high-DPI to low-DPI monitor, we must set position BEFORE size
@@ -154,16 +162,25 @@ pub enum MonitorScaleStrategy {
 ///
 /// All values are pre-computed with proper types. Casting from saved state
 /// happens once during loading, not scattered throughout the restore logic.
+///
+/// # Outer vs Inner Dimensions
+///
+/// Window dimensions come in two forms:
+/// - **Outer**: Total window size including title bar and borders (what we save/restore)
+/// - **Inner**: Content area only (what Bevy's `Window.resolution` represents)
+///
+/// We save outer dimensions because the window position refers to the top-left of the
+/// outer frame. To properly clamp windows within monitor bounds, we need the full size.
+/// When applying via `set_physical_resolution()`, we convert back to inner dimensions.
 #[derive(Resource)]
 pub struct TargetPosition {
     /// Final clamped position (adjusted to fit within target monitor).
     pub x:                      i32,
     pub y:                      i32,
-    /// Target outer size (including window decoration).
-    pub width:                  u32,
-    pub height:                 u32,
-    /// Window entity being restored.
-    pub entity:                 Entity,
+    /// Target outer width (including window decoration).
+    pub outer_width:            u32,
+    /// Target outer height (including window decoration).
+    pub outer_height:           u32,
     /// Scale factor of the target monitor.
     pub target_scale:           f64,
     /// Scale factor of the monitor where the window starts (keyboard focus monitor).
@@ -172,6 +189,19 @@ pub struct TargetPosition {
     pub monitor_scale_strategy: MonitorScaleStrategy,
     /// Window mode to restore.
     pub mode:                   SavedWindowMode,
+}
+
+impl TargetPosition {
+    /// Calculate inner dimensions by subtracting window decoration from outer dimensions.
+    ///
+    /// Inner dimensions are what Bevy's `Window.resolution` represents (content area only).
+    #[must_use]
+    pub const fn inner_size(&self, decoration: UVec2) -> UVec2 {
+        UVec2::new(
+            self.outer_width.saturating_sub(decoration.x),
+            self.outer_height.saturating_sub(decoration.y),
+        )
+    }
 }
 
 /// Configuration for the `RestoreWindowPlugin`.

@@ -24,6 +24,7 @@ use bevy::window::VideoModeSelection;
 use bevy::window::WindowMode;
 use bevy_restore_windows::Monitors;
 use bevy_restore_windows::RestoreWindowsPlugin;
+use bevy_restore_windows::WindowExt;
 
 fn main() {
     App::new()
@@ -79,18 +80,17 @@ fn update_display(
         return;
     };
 
-    // Get window position
+    // Get window position for display
     let pos = match window.position {
         bevy::window::WindowPosition::At(p) => p,
         _ => IVec2::ZERO,
     };
 
-    // Determine current monitor - use MonitorSelection from fullscreen mode if available
-    let current_monitor_index = get_current_monitor_index(&window, pos, &monitors_res);
+    // Determine current monitor from position
+    let current_monitor_index = monitors_res.at(pos.x, pos.y).map_or(0, |m| m.index);
 
-    // Detect effective mode which may differ from Bevy's window.mode in the case of
-    // BorderlessFullscreen
-    let detected = monitors_res.detect_effective_mode(&window);
+    // Detect effective mode which may differ from Bevy's window.mode (e.g., macOS green button)
+    let detected = window.effective_mode(&monitors_res);
 
     // Get Bevy's window.mode
     let bevy_mode = format!("{:?}", window.mode);
@@ -190,14 +190,12 @@ fn handle_input(
     monitors_res: Res<Monitors>,
     mut selected: ResMut<SelectedVideoMode>,
 ) {
-    // Get window position
+    // Determine current monitor from position
     let pos = match window.position {
         bevy::window::WindowPosition::At(p) => p,
         _ => IVec2::ZERO,
     };
-
-    // Determine current monitor - use MonitorSelection from fullscreen mode if available
-    let current_monitor_index = get_current_monitor_index(&window, pos, &monitors_res);
+    let current_monitor_index = monitors_res.at(pos.x, pos.y).map_or(0, |m| m.index);
 
     // Get video modes for current monitor by matching position
     let current_monitor_pos = monitors_res
@@ -242,26 +240,4 @@ fn handle_input(
     if keys.just_pressed(KeyCode::KeyW) || keys.just_pressed(KeyCode::Escape) {
         window.mode = WindowMode::Windowed;
     }
-}
-
-/// Get the current monitor index, using the `MonitorSelection` from fullscreen mode if available.
-fn get_current_monitor_index(window: &Window, pos: IVec2, monitors: &Monitors) -> usize {
-    // If in fullscreen, extract the monitor index from the MonitorSelection
-    match &window.mode {
-        WindowMode::Fullscreen(selection, _) | WindowMode::BorderlessFullscreen(selection) => {
-            match selection {
-                MonitorSelection::Index(idx) => return *idx,
-                MonitorSelection::Primary => return 0,
-                MonitorSelection::Current | MonitorSelection::Entity(_) => {
-                    // Fall through to position-based lookup
-                },
-            }
-        },
-        WindowMode::Windowed => {},
-    }
-
-    // Fall back to position-based lookup
-    monitors
-        .at(pos.x, pos.y)
-        .map_or_else(|| monitors.infer_index(pos.x, pos.y), |m| m.index)
 }

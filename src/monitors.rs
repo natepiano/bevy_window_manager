@@ -5,10 +5,70 @@
 
 use bevy::prelude::*;
 use bevy::window::Monitor;
+use bevy::window::MonitorSelection;
 use bevy::window::WindowMode;
 use bevy::window::WindowPosition;
 
-use crate::SavedWindowMode;
+/// Extension trait for `Window` that provides monitor-aware methods.
+///
+/// Import this trait to access additional window functionality that requires
+/// monitor information.
+pub trait WindowExt {
+    /// Detect the effective window mode, including macOS green button detection.
+    ///
+    /// On macOS, clicking the green "maximize" button makes the window fill the
+    /// screen, but `window.mode` remains `Windowed`. This method detects that case
+    /// and returns `BorderlessFullscreen` with the correct monitor selection.
+    ///
+    /// # Returns
+    ///
+    /// A properly populated [`WindowMode`]:
+    /// - If `window.mode` is already fullscreen, returns it unchanged
+    /// - If window fills a monitor (macOS green button), returns `BorderlessFullscreen` with
+    ///   [`MonitorSelection::Index`] set to the correct monitor
+    /// - Otherwise returns `Windowed`
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use bevy_restore_windows::WindowExt;
+    ///
+    /// fn check_mode(window: &Window, monitors: Res<Monitors>) {
+    ///     let effective = window.effective_mode(&monitors);
+    ///     // effective reflects what the user actually sees,
+    ///     // even if window.mode says Windowed
+    /// }
+    /// ```
+    fn effective_mode(&self, monitors: &Monitors) -> WindowMode;
+}
+
+impl WindowExt for Window {
+    fn effective_mode(&self, monitors: &Monitors) -> WindowMode {
+        // If Bevy knows it's fullscreen, return as-is
+        if !matches!(self.mode, WindowMode::Windowed) {
+            return self.mode;
+        }
+
+        // Check for macOS green button (fills monitor but mode says Windowed)
+        let WindowPosition::At(pos) = self.position else {
+            return WindowMode::Windowed;
+        };
+
+        let Some(monitor) = monitors.at(pos.x, pos.y) else {
+            return WindowMode::Windowed;
+        };
+
+        let at_origin = pos.x == monitor.position.x && pos.y == monitor.position.y;
+        let fills_monitor =
+            self.physical_width() == monitor.size.x && self.physical_height() == monitor.size.y;
+
+        if at_origin && fills_monitor {
+            WindowMode::BorderlessFullscreen(MonitorSelection::Index(monitor.index))
+        } else {
+            WindowMode::Windowed
+        }
+    }
+}
 
 /// Plugin that manages the `Monitors` resource.
 pub struct MonitorPlugin;
@@ -104,48 +164,6 @@ impl Monitors {
             })
             .map_or(0, |(idx, _)| idx)
     }
-
-    /// Detect the effective window mode, including macOS green button detection.
-    ///
-    /// On macOS, clicking the green "maximize" button makes the window fill the
-    /// screen, but Bevy's `window.mode` remains `Windowed`. This method detects
-    /// that case by checking if the window fills a monitor.
-    ///
-    /// # Detection order
-    ///
-    /// 1. If `window.mode` is `Fullscreen` or `BorderlessFullscreen`, returns that
-    /// 2. If window is at a monitor's origin and fills it, returns `BorderlessFullscreen`
-    /// 3. Otherwise returns `Windowed`
-    ///
-    /// This is primarily useful on macOS. On other platforms, `window.mode` is
-    /// typically accurate and this method will just return the same value.
-    #[must_use]
-    pub fn detect_effective_mode(&self, window: &Window) -> SavedWindowMode {
-        // If Bevy knows it's fullscreen, use that
-        if !matches!(window.mode, WindowMode::Windowed) {
-            return (&window.mode).into();
-        }
-
-        // Empirical detection for macOS green button (mode stays Windowed but fills monitor)
-        let pos = match window.position {
-            WindowPosition::At(p) => p,
-            _ => return SavedWindowMode::Windowed,
-        };
-
-        let Some(monitor) = self.at(pos.x, pos.y) else {
-            return SavedWindowMode::Windowed;
-        };
-
-        let at_origin = pos.x == monitor.position.x && pos.y == monitor.position.y;
-        let fills_monitor =
-            window.physical_width() == monitor.size.x && window.physical_height() == monitor.size.y;
-
-        if at_origin && fills_monitor {
-            SavedWindowMode::BorderlessFullscreen
-        } else {
-            SavedWindowMode::Windowed
-        }
-    }
 }
 
 /// Get sort key for monitor (primary at 0,0 first, then by position).
@@ -179,12 +197,12 @@ fn build_monitors(monitors: &Query<&Monitor>) -> Monitors {
 /// Initialize `Monitors` resource at startup.
 pub fn init_monitors(mut commands: Commands, monitors: Query<&Monitor>) {
     let monitors_resource = build_monitors(&monitors);
-    info!(
+    debug!(
         "[init_monitors] Found {} monitors",
         monitors_resource.list.len()
     );
     for mon in &monitors_resource.list {
-        info!(
+        debug!(
             "[init_monitors] Monitor {}: pos=({}, {}) size={}x{} scale={}",
             mon.index, mon.position.x, mon.position.y, mon.size.x, mon.size.y, mon.scale
         );
