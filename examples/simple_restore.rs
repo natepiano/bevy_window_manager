@@ -1,4 +1,4 @@
-//! Simple example demonstrating `RestoreWindowsPlugin`.
+//! Simple example demonstrating `WindowManagerPlugin`.
 //!
 //! Run with: `cargo run --example simple_restore`
 //!
@@ -14,9 +14,9 @@
 use bevy::prelude::*;
 use bevy::window::Monitor;
 use bevy::window::PrimaryWindow;
-use bevy_restore_windows::Monitors;
-use bevy_restore_windows::RestoreWindowsPlugin;
-use bevy_restore_windows::WindowExt;
+use bevy_window_manager::Monitors;
+use bevy_window_manager::WindowExt;
+use bevy_window_manager::WindowManagerPlugin;
 
 fn main() {
     App::new()
@@ -27,7 +27,7 @@ fn main() {
             }),
             ..default()
         }))
-        .add_plugins(RestoreWindowsPlugin)
+        .add_plugins(WindowManagerPlugin)
         .add_systems(Startup, setup)
         .add_systems(Update, update_info_text)
         .run();

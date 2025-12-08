@@ -17,10 +17,10 @@ Initial release.
 
 ### Added
 
-- `RestoreWindowsPlugin` for saving and restoring window position and size across sessions
+- `WindowManagerPlugin` for saving and restoring window position and size across sessions
 - Multi-monitor support with proper scale factor handling
 - Automatic state persistence to platform-specific config directories
 - Simple example demonstrating plugin usage
 
-[Unreleased]: https://github.com/natemccoy/bevy_restore_windows/compare/v0.17.0...HEAD
-[0.17.0]: https://github.com/natemccoy/bevy_restore_windows/releases/tag/v0.17.0
+[Unreleased]: https://github.com/natemccoy/bevy_window_manager/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/natemccoy/bevy_window_manager/releases/tag/v0.17.0

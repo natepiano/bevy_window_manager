@@ -1,11 +1,11 @@
-# bevy_restore_windows
+# bevy_window_manager
 
-[![License](https://img.shields.io/badge/license-MIT%2FApache-blue.svg)](https://github.com/natemccoy/bevy_restore_windows#license)
-[![Crates.io](https://img.shields.io/crates/v/bevy_restore_windows.svg)](https://crates.io/crates/bevy_restore_windows)
-[![Downloads](https://img.shields.io/crates/d/bevy_restore_windows.svg)](https://crates.io/crates/bevy_restore_windows)
+[![License](https://img.shields.io/badge/license-MIT%2FApache-blue.svg)](https://github.com/natemccoy/bevy_window_manager#license)
+[![Crates.io](https://img.shields.io/crates/v/bevy_window_manager.svg)](https://crates.io/crates/bevy_window_manager)
+[![Downloads](https://img.shields.io/crates/d/bevy_window_manager.svg)](https://crates.io/crates/bevy_window_manager)
 
 
-A Bevy plugin that saves and restores the primary window position and size across application sessions.
+A Bevy plugin for window state management, multi-monitor support, and position restoration.
 
 ## Motivation
 
@@ -19,21 +19,21 @@ See the documentation in [`src/lib.rs`](src/lib.rs) for technical details.
 
 ```rust
 use bevy::prelude::*;
-use bevy_restore_windows::RestoreWindowsPlugin;
+use bevy_window_manager::WindowManagerPlugin;
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(RestoreWindowPlugin::new("my_app"))
+        .add_plugins(WindowManagerPlugin)
         .run();
 }
 ```
 
 ## Version Compatibility
 
-| bevy_restore_windows | Bevy |
-|----------------------|------|
-| 0.17                 | 0.17 |
+| bevy_window_manager | Bevy |
+|---------------------|------|
+| 0.17                | 0.17 |
 
 ## Platform Support
 
@@ -55,7 +55,7 @@ This issue will be fixed upstream in Bevy: https://github.com/bevyengine/bevy/pu
 
 ## License
 
-bevy_restore_windows is free, open source and permissively licensed!
+bevy_window_manager is free, open source and permissively licensed!
 Except where noted (below and/or in individual files), all code in this repository is dual-licensed under either:
 
 * MIT License ([LICENSE-MIT](LICENSE-MIT) or [http://opensource.org/licenses/MIT](http://opensource.org/licenses/MIT))

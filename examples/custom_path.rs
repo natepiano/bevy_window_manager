@@ -1,4 +1,4 @@
-//! Example demonstrating explicit path configuration with `RestoreWindowPlugin`.
+//! Example demonstrating explicit path configuration with `WindowManagerPlugin`.
 //!
 //! Run with: `cargo run --example custom_path`
 //!
@@ -14,9 +14,9 @@
 use bevy::prelude::*;
 use bevy::window::Monitor;
 use bevy::window::PrimaryWindow;
-use bevy_restore_windows::Monitors;
-use bevy_restore_windows::RestoreWindowsPlugin;
-use bevy_restore_windows::WindowExt;
+use bevy_window_manager::Monitors;
+use bevy_window_manager::WindowExt;
+use bevy_window_manager::WindowManagerPlugin;
 
 #[expect(
     clippy::expect_used,
@@ -37,7 +37,7 @@ fn main() {
             }),
             ..default()
         }))
-        .add_plugins(RestoreWindowsPlugin::with_path(config_path))
+        .add_plugins(WindowManagerPlugin::with_path(config_path))
         .add_systems(Startup, setup)
         .add_systems(Update, update_info_text)
         .run();

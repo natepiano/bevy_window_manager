@@ -1,6 +1,6 @@
 # Release Command
 
-Perform a release for bevy_restore_windows.
+Perform a release for bevy_window_manager.
 
 ## Usage
 - `/release_version X.Y.Z-rc.N` - Release as RC version (e.g., `0.17.0-rc.1`)
@@ -149,8 +149,8 @@ git push origin "v${VERSION}"
 
 ```bash
 gh release create "v${VERSION}" \
-  --repo natemccoy/bevy_restore_windows \
-  --title "bevy_restore_windows v${VERSION}" \
+  --repo natemccoy/bevy_window_manager \
+  --title "bevy_window_manager v${VERSION}" \
   --notes "Release notes from CHANGELOG"
 ```
 → **Auto-check**: Continue if release created successfully, stop if fails
@@ -160,7 +160,7 @@ gh release create "v${VERSION}" \
 ## STEP 7: Post-Release Verification
 
 ```bash
-curl -s "https://crates.io/api/v1/crates/bevy_restore_windows" | jq '.crate.max_version'
+curl -s "https://crates.io/api/v1/crates/bevy_window_manager" | jq '.crate.max_version'
 ```
 → **Manual verification**: Shows version ${VERSION}
   - Type **continue** to proceed

@@ -22,9 +22,9 @@ use bevy::window::PrimaryWindow;
 use bevy::window::VideoMode;
 use bevy::window::VideoModeSelection;
 use bevy::window::WindowMode;
-use bevy_restore_windows::Monitors;
-use bevy_restore_windows::RestoreWindowsPlugin;
-use bevy_restore_windows::WindowExt;
+use bevy_window_manager::Monitors;
+use bevy_window_manager::WindowExt;
+use bevy_window_manager::WindowManagerPlugin;
 
 fn main() {
     App::new()
@@ -35,7 +35,7 @@ fn main() {
             }),
             ..default()
         }))
-        .add_plugins(RestoreWindowsPlugin)
+        .add_plugins(WindowManagerPlugin)
         .init_resource::<SelectedVideoMode>()
         .add_systems(Startup, setup)
         .add_systems(Update, (update_display, handle_input))

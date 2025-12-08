@@ -1,7 +1,7 @@
-//! Window position and size restoration plugin for Bevy.
+//! Window management plugin for Bevy.
 //!
-//! This plugin saves and restores window position and size across application sessions,
-//! with proper handling for multi-monitor setups with different scale factors.
+//! This plugin provides multi-monitor support, window state persistence, and utilities
+//! for managing window position and size across application sessions.
 //!
 //! # The Problem
 //!
@@ -29,12 +29,12 @@
 //!
 //! ```no_run
 //! use bevy::prelude::*;
-//! use bevy_restore_windows::RestoreWindowsPlugin;
+//! use bevy_window_manager::WindowManagerPlugin;
 //!
 //! App::new()
 //!     .add_plugins(DefaultPlugins)
 //!     // Uses executable name for config directory
-//!     .add_plugins(RestoreWindowsPlugin)
+//!     .add_plugins(WindowManagerPlugin)
 //!     .run();
 //! ```
 //!
@@ -69,10 +69,10 @@ pub use window_ext::WindowExt;
 /// - Linux: `~/.config/<exe_name>/windows.ron`
 /// - Windows: `C:\Users\<User>\AppData\Roaming\<exe_name>\windows.ron`
 ///
-/// Unit struct version for convenience using `.add_plugins(RestoreWindowsPlugin)`.
-pub struct RestoreWindowsPlugin;
+/// Unit struct version for convenience using `.add_plugins(WindowManagerPlugin)`.
+pub struct WindowManagerPlugin;
 
-impl RestoreWindowsPlugin {
+impl WindowManagerPlugin {
     /// Create a plugin with a custom app name.
     ///
     /// Uses `config_dir()/<app_name>/windows.ron`.
@@ -83,7 +83,7 @@ impl RestoreWindowsPlugin {
     #[must_use]
     #[expect(clippy::expect_used, reason = "fail fast if path cannot be determined")]
     pub fn with_app_name(app_name: impl Into<String>) -> impl Plugin {
-        RestoreWindowsPluginCustomPath {
+        WindowManagerPluginCustomPath {
             path: state::get_state_path_for_app(&app_name.into())
                 .expect("Could not determine state file path"),
         }
@@ -92,11 +92,11 @@ impl RestoreWindowsPlugin {
     /// Create a plugin with a custom state file path.
     #[must_use]
     pub fn with_path(path: impl Into<PathBuf>) -> impl Plugin {
-        RestoreWindowsPluginCustomPath { path: path.into() }
+        WindowManagerPluginCustomPath { path: path.into() }
     }
 }
 
-impl Plugin for RestoreWindowsPlugin {
+impl Plugin for WindowManagerPlugin {
     #[expect(clippy::expect_used, reason = "fail fast if path cannot be determined")]
     fn build(&self, app: &mut App) {
         let path = state::get_default_state_path().expect("Could not determine state file path");
@@ -105,11 +105,11 @@ impl Plugin for RestoreWindowsPlugin {
 }
 
 /// Plugin variant with a custom state file path.
-struct RestoreWindowsPluginCustomPath {
+struct WindowManagerPluginCustomPath {
     path: PathBuf,
 }
 
-impl Plugin for RestoreWindowsPluginCustomPath {
+impl Plugin for WindowManagerPluginCustomPath {
     fn build(&self, app: &mut App) { build_plugin(app, self.path.clone()); }
 }
 

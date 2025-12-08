@@ -1,4 +1,4 @@
-//! Example demonstrating custom app name with `RestoreWindowPlugin`.
+//! Example demonstrating custom app name with `WindowManagerPlugin`.
 //!
 //! Run with: `cargo run --example custom_app_name`
 //!
@@ -10,15 +10,15 @@
 //! - Linux: `~/.config/my_awesome_game/windows.ron`
 //! - Windows: `C:\Users\{user}\AppData\Roaming\my_awesome_game\windows.ron`
 //!
-//! For full control over file placement, use `RestoreWindowPlugin::with_path()` instead.
+//! For full control over file placement, use `WindowManagerPlugin::with_path()` instead.
 //! See the `custom_path` example for details.
 
 use bevy::prelude::*;
 use bevy::window::Monitor;
 use bevy::window::PrimaryWindow;
-use bevy_restore_windows::Monitors;
-use bevy_restore_windows::RestoreWindowsPlugin;
-use bevy_restore_windows::WindowExt;
+use bevy_window_manager::Monitors;
+use bevy_window_manager::WindowExt;
+use bevy_window_manager::WindowManagerPlugin;
 
 fn main() {
     App::new()
@@ -29,7 +29,7 @@ fn main() {
             }),
             ..default()
         }))
-        .add_plugins(RestoreWindowsPlugin::with_app_name("my_awesome_game"))
+        .add_plugins(WindowManagerPlugin::with_app_name("my_awesome_game"))
         .add_systems(Startup, setup)
         .add_systems(Update, update_info_text)
         .run();

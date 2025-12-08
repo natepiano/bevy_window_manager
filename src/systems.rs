@@ -68,12 +68,12 @@ pub fn load_target_position(
     config: Res<RestoreWindowConfig>,
 ) {
     let Some(state) = state::load_state(&config.path) else {
-        debug!("[load_target_position] No saved bevy_restore_windows state");
+        debug!("[load_target_position] No saved bevy_window_manager state");
         return;
     };
 
     let Some((saved_x, saved_y)) = state.position else {
-        debug!("[load_target_position] No saved bevy_restore_windows position");
+        debug!("[load_target_position] No saved bevy_window_manager position");
         return;
     };
 

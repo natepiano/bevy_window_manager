@@ -20,7 +20,7 @@ pub trait WindowExt {
     /// # Example
     ///
     /// ```ignore
-    /// use bevy_restore_windows::WindowExt;
+    /// use bevy_window_manager::WindowExt;
     ///
     /// fn show_monitor(window: &Window, monitors: Res<Monitors>) {
     ///     let monitor = window.monitor(&monitors);
@@ -46,7 +46,7 @@ pub trait WindowExt {
     /// # Example
     ///
     /// ```ignore
-    /// use bevy_restore_windows::WindowExt;
+    /// use bevy_window_manager::WindowExt;
     ///
     /// fn check_mode(window: &Window, monitors: Res<Monitors>) {
     ///     let effective = window.effective_mode(&monitors);

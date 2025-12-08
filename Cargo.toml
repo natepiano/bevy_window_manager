@@ -1,11 +1,11 @@
 [package]
-name = "bevy_restore_windows"
+name = "bevy_window_manager"
 version = "0.17.0"
 edition = "2024"
-description = "Bevy plugin to save and restore window position and size across sessions"
+description = "Bevy plugin for window state management, multi-monitor support, and position restoration"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/natemccoy/bevy_restore_windows"
-keywords = ["bevy", "window", "restore", "position", "gamedev"]
+repository = "https://github.com/natemccoy/bevy_window_manager"
+keywords = ["bevy", "window", "monitor", "multi-monitor", "gamedev"]
 categories = ["game-development", "gui"]
 
 [lints.clippy]
@@ -29,7 +29,7 @@ cast_possible_truncation = "allow"
 cast_sign_loss = "allow"
 
 [lib]
-name = "bevy_restore_windows"
+name = "bevy_window_manager"
 path = "src/lib.rs"
 
 [dependencies]
