@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.17.0] - 2025-12-08
 
 ### Added
 
@@ -16,3 +16,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Monitors` resource for querying available monitors by position or index
 - `MonitorInfo` struct exposing monitor scale, position, and size
 - `WindowExt` extension trait for window-to-monitor queries and effective mode detection
+
+[0.17.0]: https://github.com/natepiano/bevy_window_manager/releases/tag/v0.17.0
