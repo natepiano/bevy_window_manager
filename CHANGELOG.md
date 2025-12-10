@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Windows platform support with proper multi-monitor window restore
+
+### Fixed
+
+- Monitor detection for maximized/snapped windows now uses window center instead of top-left, which could fall outside visible monitor bounds due to Windows invisible border offset ([winit #4296](https://github.com/rust-windowing/winit/issues/4296))
+- Windows position restoration accounts for invisible border offset (workaround for [winit #4107](https://github.com/rust-windowing/winit/issues/4107))
+- Fullscreen windows now correctly restore to the saved target monitor on all platforms
+- Windows exclusive fullscreen restore now waits one frame for surface creation (workaround for [winit #3124](https://github.com/rust-windowing/winit/issues/3124), [bevy #5485](https://github.com/bevyengine/bevy/issues/5485))
+
 ## [0.17.0] - 2025-12-08
 
 ### Added

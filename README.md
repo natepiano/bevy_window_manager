@@ -73,10 +73,10 @@ Requires `use bevy_window_manager::WindowExt`:
 | Platform | Status |
 |----------|--------|
 | macOS    | Tested |
-| Windows  | Untested |
+| Windows  | Tested |
 | Linux    | Untested |
 
-**Warning:** This plugin was developed for and tested on macOS. It may work on Windows and Linux, but there are no guarantees as I don't yet have a setup to test on those platforms. If you try it and it works for you, please let me know. If it doesn't work, PR's welcome!
+This plugin was originally created to handle a MacBook Pro with external monitors at different scale factors, which caused window position/size corruption. Windows testing revealed additional issues with multi-monitor and multi-scale setups that have been fixed (see [CHANGELOG](CHANGELOG.md)). Linux support is untested - if you try it, please let me know how it goes. PRs welcome!
 
 ## macOS Fullscreen Crash Fix
 

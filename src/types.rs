@@ -124,6 +124,22 @@ pub enum WindowRestoreState {
     ApplySize,
 }
 
+/// State for fullscreen restore on Windows (DX12/DXGI workaround).
+///
+/// Exclusive fullscreen crashes on startup with DX12 due to DXGI flip model
+/// limitations (see <https://github.com/rust-windowing/winit/issues/3124>).
+/// A similar issue exists on X11 Linux (see <https://github.com/bevyengine/bevy/issues/5485>).
+/// We wait one frame for `create_surfaces` to create a windowed surface first,
+/// then switch to fullscreen.
+#[cfg(target_os = "windows")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FullscreenRestoreState {
+    /// Waiting for first frame to render (surface creation).
+    WaitingForSurface,
+    /// Surface created, ready to apply fullscreen mode.
+    ApplyFullscreen,
+}
+
 /// Restore strategy based on scale factor relationship between launch and target monitors.
 ///
 /// # Platform Differences
@@ -201,20 +217,23 @@ pub enum MonitorScaleStrategy {
 #[derive(Resource)]
 pub struct TargetPosition {
     /// Final clamped position (adjusted to fit within target monitor).
-    pub x:                      i32,
-    pub y:                      i32,
+    pub x:                         i32,
+    pub y:                         i32,
     /// Target width (content area, excluding window decoration).
-    pub width:                  u32,
+    pub width:                     u32,
     /// Target height (content area, excluding window decoration).
-    pub height:                 u32,
+    pub height:                    u32,
     /// Scale factor of the target monitor.
-    pub target_scale:           f64,
+    pub target_scale:              f64,
     /// Scale factor of the monitor where the window starts (keyboard focus monitor).
-    pub starting_scale:         f64,
+    pub starting_scale:            f64,
     /// Strategy for handling scale factor differences between monitors.
-    pub monitor_scale_strategy: MonitorScaleStrategy,
+    pub monitor_scale_strategy:    MonitorScaleStrategy,
     /// Window mode to restore.
-    pub mode:                   SavedWindowMode,
+    pub mode:                      SavedWindowMode,
+    /// Fullscreen restore state (Windows only, DX12/DXGI workaround).
+    #[cfg(target_os = "windows")]
+    pub fullscreen_restore_state:  FullscreenRestoreState,
 }
 
 impl TargetPosition {

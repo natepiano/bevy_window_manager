@@ -18,6 +18,8 @@ use crate::types::TargetPosition;
 use crate::types::WindowDecoration;
 use crate::types::WindowRestoreState;
 use crate::types::WinitInfo;
+#[cfg(target_os = "windows")]
+use crate::types::FullscreenRestoreState;
 use crate::window_ext::WindowExt;
 
 /// Populate `WinitInfo` resource from winit (decoration and starting monitor).
@@ -182,6 +184,8 @@ pub fn load_target_position(
         starting_scale,
         monitor_scale_strategy: strategy,
         mode: state.mode,
+        #[cfg(target_os = "windows")]
+        fullscreen_restore_state: FullscreenRestoreState::WaitingForSurface,
     });
 }
 
@@ -300,6 +304,16 @@ pub fn restore_primary_window(
         debug!("[Restore] ScaleChanged received, transitioning to WindowRestoreState::ApplySize");
         target.monitor_scale_strategy =
             MonitorScaleStrategy::HigherToLower(WindowRestoreState::ApplySize);
+    }
+
+    // Windows: transition fullscreen state after first frame (DX12/DXGI workaround)
+    #[cfg(target_os = "windows")]
+    if target.mode.is_fullscreen()
+        && target.fullscreen_restore_state == FullscreenRestoreState::WaitingForSurface
+    {
+        debug!("[Restore] First frame passed, transitioning to ApplyFullscreen");
+        target.fullscreen_restore_state = FullscreenRestoreState::ApplyFullscreen;
+        return; // Wait one more frame for the state change to take effect
     }
 
     if matches!(
