@@ -45,13 +45,13 @@
 
 #[cfg(target_os = "macos")]
 mod macos_fullscreen_fix;
-#[cfg(target_os = "windows")]
-mod windows_dpi_fix;
 mod monitors;
 mod state;
 mod systems;
 mod types;
 mod window_ext;
+#[cfg(target_os = "windows")]
+mod windows_dpi_fix;
 
 use std::path::PathBuf;
 

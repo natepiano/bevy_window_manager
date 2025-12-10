@@ -11,10 +11,10 @@
 //! - Linux: `~/.config/simple_restore/windows.ron`
 //! - Windows: `C:\Users\{user}\AppData\Roaming\simple_restore\windows.ron`
 
+use bevy::ecs::message::MessageReader;
 use bevy::prelude::*;
 use bevy::window::Monitor;
 use bevy::window::PrimaryWindow;
-use bevy::ecs::message::MessageReader;
 use bevy::window::WindowScaleFactorChanged;
 use bevy_window_manager::Monitors;
 use bevy_window_manager::WindowExt;

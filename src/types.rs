@@ -176,21 +176,21 @@ pub enum FullscreenRestoreState {
 ///
 /// # Variants
 ///
-/// - **`ApplyUnchanged`**: Apply position and size directly without compensation.
-///   Used on macOS when scales match.
+/// - **`ApplyUnchanged`**: Apply position and size directly without compensation. Used on macOS
+///   when scales match.
 ///
-/// - **`CompensateSizeOnly`**: Windows only. Apply position directly, but compensate size
-///   by multiplying by `starting_scale / target_scale`. This is needed because Bevy's
-///   `set_physical_resolution` still applies scale conversion based on the current monitor,
-///   even though Windows handles position coordinates correctly.
+/// - **`CompensateSizeOnly`**: Windows only. Apply position directly, but compensate size by
+///   multiplying by `starting_scale / target_scale`. This is needed because Bevy's
+///   `set_physical_resolution` still applies scale conversion based on the current monitor, even
+///   though Windows handles position coordinates correctly.
 ///
-/// - **`LowerToHigher`**: macOS only. Low→High DPI (1x→2x, ratio < 1). Multiply both
-///   position and size by ratio before applying so that after winit divides by launch
-///   scale, we get the correct result.
+/// - **`LowerToHigher`**: macOS only. Low→High DPI (1x→2x, ratio < 1). Multiply both position and
+///   size by ratio before applying so that after winit divides by launch scale, we get the correct
+///   result.
 ///
 /// - **`HigherToLower`**: macOS only. High→Low DPI (2x→1x, ratio > 1). Cannot use simple
-///   compensation because the compensated size would exceed monitor bounds and get clamped
-///   by macOS. Instead uses a two-phase approach via `WindowRestoreState`:
+///   compensation because the compensated size would exceed monitor bounds and get clamped by
+///   macOS. Instead uses a two-phase approach via `WindowRestoreState`:
 ///   1. Move a 1x1 window to the final position (compensated) to trigger scale change
 ///   2. After scale changes, apply size without compensation (position already correct)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -217,23 +217,23 @@ pub enum MonitorScaleStrategy {
 #[derive(Resource)]
 pub struct TargetPosition {
     /// Final clamped position (adjusted to fit within target monitor).
-    pub x:                         i32,
-    pub y:                         i32,
+    pub x:                        i32,
+    pub y:                        i32,
     /// Target width (content area, excluding window decoration).
-    pub width:                     u32,
+    pub width:                    u32,
     /// Target height (content area, excluding window decoration).
-    pub height:                    u32,
+    pub height:                   u32,
     /// Scale factor of the target monitor.
-    pub target_scale:              f64,
+    pub target_scale:             f64,
     /// Scale factor of the monitor where the window starts (keyboard focus monitor).
-    pub starting_scale:            f64,
+    pub starting_scale:           f64,
     /// Strategy for handling scale factor differences between monitors.
-    pub monitor_scale_strategy:    MonitorScaleStrategy,
+    pub monitor_scale_strategy:   MonitorScaleStrategy,
     /// Window mode to restore.
-    pub mode:                      SavedWindowMode,
+    pub mode:                     SavedWindowMode,
     /// Fullscreen restore state (Windows only, DX12/DXGI workaround).
     #[cfg(target_os = "windows")]
-    pub fullscreen_restore_state:  FullscreenRestoreState,
+    pub fullscreen_restore_state: FullscreenRestoreState,
 }
 
 impl TargetPosition {
@@ -289,4 +289,6 @@ pub struct WindowState {
     pub height:        u32,
     pub monitor_index: usize,
     pub mode:          SavedWindowMode,
+    #[serde(default)]
+    pub app_name:      String,
 }

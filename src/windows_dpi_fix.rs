@@ -26,9 +26,9 @@ use windows::Win32::Foundation::WPARAM;
 use windows::Win32::UI::Shell::DefSubclassProc;
 use windows::Win32::UI::Shell::RemoveWindowSubclass;
 use windows::Win32::UI::Shell::SetWindowSubclass;
-use windows::Win32::UI::WindowsAndMessaging::SetWindowPos;
 use windows::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE;
 use windows::Win32::UI::WindowsAndMessaging::SWP_NOZORDER;
+use windows::Win32::UI::WindowsAndMessaging::SetWindowPos;
 use windows::Win32::UI::WindowsAndMessaging::WM_DPICHANGED;
 
 const SUBCLASS_ID: usize = 1;
@@ -119,8 +119,7 @@ pub struct DpiFixGuard {
 impl Drop for DpiFixGuard {
     fn drop(&mut self) {
         // SAFETY: RemoveWindowSubclass is safe with valid HWND and matching subclass ID
-        let result =
-            unsafe { RemoveWindowSubclass(self.hwnd.0, Some(subclass_proc), SUBCLASS_ID) };
+        let result = unsafe { RemoveWindowSubclass(self.hwnd.0, Some(subclass_proc), SUBCLASS_ID) };
         if result.as_bool() {
             debug!("[windows_dpi_fix] Removed DPI fix subclass");
         }
@@ -143,13 +142,13 @@ pub fn install_dpi_fix(
 
     if result.as_bool() {
         debug!("[windows_dpi_fix] Installed DPI change workaround");
-        commands.insert_resource(DpiFixGuard { hwnd: SendSyncHwnd(hwnd) });
+        commands.insert_resource(DpiFixGuard {
+            hwnd: SendSyncHwnd(hwnd),
+        });
     } else {
         warn!("[windows_dpi_fix] Failed to install subclass");
     }
 }
 
 /// Initialize the Windows DPI fix.
-pub fn init(app: &mut App) {
-    app.add_systems(Startup, install_dpi_fix);
-}
+pub fn init(app: &mut App) { app.add_systems(Startup, install_dpi_fix); }

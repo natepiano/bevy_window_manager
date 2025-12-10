@@ -34,7 +34,8 @@
       "Bash(cmd /c \"dir %APPDATA%\\simple_restore /s 2>nul\")",
       "Bash(cmd /c \"set RUST_LOG=bevy_window_manager=debug && cargo run --example simple_restore 2>&1\")",
       "Bash(zed:*)",
-      "Bash(cmd /c:*)"
+      "Bash(cmd /c:*)",
+      "Bash(git diff:*)"
     ],
     "deny": [],
     "ask": []

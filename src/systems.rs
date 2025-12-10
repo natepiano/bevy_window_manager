@@ -12,14 +12,14 @@ use super::state;
 use super::types::RestoreWindowConfig;
 use super::types::WindowState;
 use crate::monitors::Monitors;
+#[cfg(target_os = "windows")]
+use crate::types::FullscreenRestoreState;
 use crate::types::MonitorScaleStrategy;
 use crate::types::SavedWindowMode;
 use crate::types::TargetPosition;
 use crate::types::WindowDecoration;
 use crate::types::WindowRestoreState;
 use crate::types::WinitInfo;
-#[cfg(target_os = "windows")]
-use crate::types::FullscreenRestoreState;
 use crate::window_ext::WindowExt;
 
 /// Populate `WinitInfo` resource from winit (decoration and starting monitor).
@@ -276,12 +276,19 @@ pub fn save_window_state(
         pos.x, pos.y, width, height, monitor_index, mode
     );
 
+    let app_name = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.file_stem().map(|s| s.to_owned()))
+        .and_then(|s| s.to_str().map(|s| (*s).to_string()))
+        .unwrap_or_default();
+
     let state = WindowState {
         position: Some((pos.x, pos.y)),
         width,
         height,
         monitor_index,
         mode,
+        app_name,
     };
     state::save_state(&config.path, &state);
 }
@@ -389,7 +396,11 @@ fn try_apply_restore(
             let size = target.compensated_size();
             debug!(
                 "[try_apply_restore] position=({}, {}) size={}x{} (CompensateSizeOnly, ratio={})",
-                position.x, position.y, size.x, size.y, target.ratio()
+                position.x,
+                position.y,
+                size.x,
+                size.y,
+                target.ratio()
             );
             primary_window.set_position_and_size(position, size);
         },
