@@ -30,36 +30,41 @@ del $env:APPDATA\fullscreen_modes\windows.ron
 
 ## macOS Tests
 
+`using simple_restore example`
+
 ### Restore: Same Monitor (Monitor 0 → 0)
-- [ ] Move window on Monitor 0, resize, close
-- [ ] Relaunch → window restores to same position/size
+- [x] Move window on Monitor 0, resize, close
+- [x] Relaunch → window restores to same position/size
+- [x] Repeat for Monitor 1 -> 1
 
 ### Restore: Cross-Monitor Low→High DPI (Monitor 1 → 0)
 *Tests: winit #2645 coordinate bug, LowerToHigher strategy*
-- [ ] Move window to Monitor 1, resize, close
-- [ ] Relaunch (launches on Monitor 0) → window moves to Monitor 1 with correct size
+- [x] Move launch window to Monitor 1, resize window on Monitor 0, close - without compensation this would not restore at correct size
+- [x] Relaunch (launches on Monitor 1) → window launches on Monitor 0 with correct size and position
+- [x] Validate at various dock positions (left, right, maximized)
 
 ### Restore: Cross-Monitor High→Low DPI (Monitor 0 → 1)
 *Tests: winit #2645, HigherToLower two-phase strategy*
-- [ ] Move window to Monitor 0, resize, close
-- [ ] Relaunch from Monitor 1 (click Dock from external) → window moves to Monitor 0 with correct size
+- [x] Move launch window to Monitor 0, move test window to monitor 1 resize, close
+- [x] Relaunch from Monitor 0 → window moves to Monitor 1 with correct size
+- [x] Validate at various dock positions (left, right, maximized)
 
-### Fullscreen: Borderless
-- [ ] Press B for borderless on Monitor 0, close
-- [ ] Relaunch → restores to borderless on Monitor 0
+### Fullscreen: Borderless - MacOS Green Button
+- [x] Press green button for borderless on Monitor 0, close (command-Q)
+- [x] Relaunch → restores to borderless on Monitor 0
+- [x] Repeat on Monitor 1
 
+`using fullscreen_modes example`
 ### Fullscreen: Exclusive
-- [ ] Press F for exclusive, select video mode, close
+- [ ] move to Monitor 0, Press 1 for exclusive, select video mode, close (command-Q)
 - [ ] Relaunch → restores to exclusive fullscreen
+- [ ] Repeat on Monitor 1
+- **Note** this also tests bevy #22060 TLS panic - if it doesn't panic on quit, we're good
 
-### Fullscreen: macOS Green Button
-- [ ] Click green button (creates new Space), close
-- [ ] Relaunch → restores correctly (detected as borderless)
-
-### Fullscreen: Quit Crash Fix
-*Tests: bevy #22060 TLS panic*
-- [ ] Enter exclusive fullscreen (F)
-- [ ] Quit app (Cmd+Q or close window) → **no crash**
+### Fullscreen: programmatic Borderless
+- [ ] Move to Monitor 0, Press 2 for borderless, close
+- [ ] Relaunch → restores correctly programatically set as borderless launch
+- [ ] Repeat for Monitor 1
 
 ---
 

@@ -9,11 +9,17 @@ A Bevy plugin for window state persistence and multi-monitor utilities.
 
 ## Motivation
 
-On macOS with multiple monitors that have different scale factors (e.g., a MacBook Pro Retina display at scale 2.0 and an external monitor at scale 1.0), Bevy's window positioning has issues with scale factor conversion that corrupt window size and position when attempting to restore a window to its last known position when launching from a monitor with a different scale factor.
+Originally created as a mechanism to restore a window to its last known position when launching. I quickly discovered that on my MacBook Pro with Retina display (scale factor 2.0) and my external monitor with a scale factor 1.0, there were numerous issues with saving. Especially painful is the situation that winit uses the scale factor of where you're typing (launching) the application so that when it lands on a different monitor, you cannot reliably restore the window to its last known position when launching from a monitor with a different scale factor than the application window's target monitor.  Painful.
 
-This plugin works around those issues by using winit directly to capture actual window positions and compensate for scale factor conversions.
+`bevy_window_manager` plugin works around these issues by using winit directly to capture actual window positions and compensate for scale factor conversions. See the documentation in [`src/lib.rs`](src/lib.rs) for technical details.
 
-See the documentation in [`src/lib.rs`](src/lib.rs) for technical details.
+I wrote `bevy_window_manager` and released it for MacOS and left a note (below) that it's not yet tested on Windows and Linux. PRs Welcome. But it bothered me enough that i decided to install Windows in a virtual machine on my Mac and discovered that scale issue also plague windows. And there are even other issues with winit where there is an invisible border around a window, preventing precise placement.  
+
+If you're trying this out with Windows from 0.17.0 published on crates.io, and you have differently scaled monitors (something Windows gives you far more control over than MacOS), then you'll experience the same issues - and in fact **0.17.0 of this plugin is broken for Windows** when restoring the primary window across differently scaled monitors so don't use this if that's your setup! I don't yet know about Linux. 
+
+With that said, I'vemade a bunch of fixes for Windows and I'm testing it here on 0.17.1 - I _think_ this version will work for you on Windows if you want to refer to it on github directly in your Cargo.toml. Once I finish testing it I will publish 0.17.1.  
+
+Then if I can get Linux running in a VM that will work with my monitors I will test it there also.
 
 Future directions include comprehensive multi-monitor lifecycle support.
 
@@ -84,7 +90,7 @@ This plugin includes a workaround for a Bevy bug on macOS where quitting the app
 
 This plugin prevents the crash by exiting fullscreen before TLS destruction begins. See [docs/bevy-issue-macos-fullscreen-panic.md](docs/bevy-issue-macos-fullscreen-panic.md) for full technical details.
 
-This issue will be fixed upstream in Bevy: https://github.com/bevyengine/bevy/pull/22060
+This issue will be fixed upstream in Bevy: https://github.com/bevyengine/bevy/pull/22060 - currently merged in bevy 0.18.0-dev.
 
 ## Windows DPI Drag Fix
 

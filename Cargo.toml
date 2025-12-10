@@ -1,6 +1,6 @@
 [package]
 name = "bevy_window_manager"
-version = "0.17.0"
+version = "0.17.1"
 edition = "2024"
 description = "Bevy plugin for window state management, multi-monitor support, and position restoration"
 license = "MIT OR Apache-2.0"
@@ -41,10 +41,10 @@ serde = { version = "1.0", features = ["derive"] }
 [target.'cfg(windows)'.dependencies]
 raw-window-handle = "0.6"
 windows = { version = "0.58", features = [
-    "Win32_Foundation",
-    "Win32_UI_WindowsAndMessaging",
-    "Win32_UI_Shell",
-    "Win32_Graphics_Gdi",
+  "Win32_Foundation",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_UI_Shell",
+  "Win32_Graphics_Gdi",
 ] }
 
 [profile.dev.package."*"]
