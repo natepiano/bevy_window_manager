@@ -126,31 +126,66 @@ pub enum WindowRestoreState {
 
 /// Restore strategy based on scale factor relationship between launch and target monitors.
 ///
-/// The strategy depends on how winit/macOS handle coordinate scaling:
-/// - Winit uses the "keyboard focus monitor's" scale factor for coordinate math
+/// # Platform Differences
+///
+/// Window coordinate handling differs significantly between platforms due to how winit
+/// interacts with each OS's DPI system:
+///
+/// ## macOS
+///
+/// Winit's coordinate handling on macOS is fundamentally broken for multi-monitor setups
+/// with different scale factors. Desktop/window coordinates are internally closer to
+/// logical positions, but winit converts them using the *current* monitor's scale factor,
+/// incorrectly assuming all monitors have the same scale.
+///
+/// This means:
 /// - When setting position/size, values are divided by the launch monitor's scale
-/// - This means we must compensate when scales differ
+/// - We must compensate when scales differ between launch and target monitors
+/// - The `LowerToHigher` and `HigherToLower` strategies exist to work around this
+///
+/// See: <https://github.com/rust-windowing/winit/issues/2645>
+///
+/// ## Windows
+///
+/// Windows handles DPI correctly at the OS level. Winit uses physical coordinates
+/// directly without applying incorrect scale factor conversions. No compensation
+/// is needed when moving windows between monitors with different scales.
+///
+/// On Windows, we always use `ApplyUnchanged` regardless of scale factor differences.
+///
+/// Note: Windows does have a separate issue where `GetWindowRect` includes an invisible
+/// resize border (~7-11 pixels), causing reported positions to be slightly negative
+/// when windows are snapped to screen edges. This is tracked in:
+/// <https://github.com/rust-windowing/winit/issues/4107>
 ///
 /// # Variants
 ///
-/// - **`ApplyUnchanged`**: Same scale on both monitors (1→1 or 2→2). Apply position and size
-///   directly without compensation.
+/// - **`ApplyUnchanged`**: Apply position and size directly without compensation.
+///   Used on macOS when scales match.
 ///
-/// - **`LowerToHigher`**: Low→High DPI (1x→2x, ratio < 1). Multiply values by ratio before applying
-///   so that after winit divides by launch scale, we get the correct result.
+/// - **`CompensateSizeOnly`**: Windows only. Apply position directly, but compensate size
+///   by multiplying by `starting_scale / target_scale`. This is needed because Bevy's
+///   `set_physical_resolution` still applies scale conversion based on the current monitor,
+///   even though Windows handles position coordinates correctly.
 ///
-/// - **`HigherToLower`**: High→Low DPI (2x→1x, ratio > 1). Cannot use simple compensation because
-///   the compensated size would exceed monitor bounds and get clamped by macOS. Instead uses a
-///   two-phase approach via `WindowRestoreState`:
+/// - **`LowerToHigher`**: macOS only. Low→High DPI (1x→2x, ratio < 1). Multiply both
+///   position and size by ratio before applying so that after winit divides by launch
+///   scale, we get the correct result.
+///
+/// - **`HigherToLower`**: macOS only. High→Low DPI (2x→1x, ratio > 1). Cannot use simple
+///   compensation because the compensated size would exceed monitor bounds and get clamped
+///   by macOS. Instead uses a two-phase approach via `WindowRestoreState`:
 ///   1. Move a 1x1 window to the final position (compensated) to trigger scale change
 ///   2. After scale changes, apply size without compensation (position already correct)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MonitorScaleStrategy {
     /// Same scale - apply position and size directly.
     ApplyUnchanged,
-    /// Low→High DPI (1x→2x) - apply with compensation (ratio < 1).
+    /// Windows only: apply position directly, compensate size only.
+    CompensateSizeOnly,
+    /// Low→High DPI (1x→2x) - apply with compensation (ratio < 1). macOS only.
     LowerToHigher,
-    /// High→Low DPI (2x→1x) - requires two phases (see enum docs).
+    /// High→Low DPI (2x→1x) - requires two phases (see enum docs). macOS only.
     HigherToLower(WindowRestoreState),
 }
 

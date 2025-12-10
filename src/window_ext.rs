@@ -68,7 +68,13 @@ impl WindowExt for Window {
         let WindowPosition::At(pos) = self.position else {
             return monitors.primary();
         };
-        monitors.closest_to(pos.x, pos.y)
+        // Use window center for monitor detection to avoid issues with:
+        // - Windows invisible border offset (winit issue #4296) causing top-left
+        //   to be outside monitor bounds for maximized/snapped windows
+        // - Windows spanning monitor boundaries (center determines "owning" monitor)
+        let center_x = pos.x + (self.physical_width() / 2) as i32;
+        let center_y = pos.y + (self.physical_height() / 2) as i32;
+        monitors.closest_to(center_x, center_y)
     }
 
     fn effective_mode(&self, monitors: &Monitors) -> WindowMode {

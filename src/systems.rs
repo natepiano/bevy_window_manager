@@ -101,37 +101,71 @@ pub fn load_target_position(
     let outer_width = width + decoration.x;
     let outer_height = height + decoration.y;
 
-    // Determine monitor scale strategy based on scale relationship
-    let strategy = if (starting_scale - target_scale).abs() < 0.01 {
+    // Determine monitor scale strategy based on scale relationship and platform.
+    //
+    // On Windows, winit handles position coordinates correctly, but Bevy's
+    // set_physical_resolution still applies scale conversion. We use CompensateSizeOnly
+    // when scales differ, or ApplyUnchanged when they match.
+    //
+    // On macOS, winit's coordinate handling is broken for multi-monitor setups with
+    // different scale factors (see https://github.com/rust-windowing/winit/issues/2645).
+    // We must compensate both position and size based on the scale factor relationship.
+    let strategy = if cfg!(target_os = "windows") {
+        if (starting_scale - target_scale).abs() < 0.01 {
+            // Windows: same scale, no compensation needed
+            MonitorScaleStrategy::ApplyUnchanged
+        } else {
+            // Windows: different scales, compensate size only (not position)
+            MonitorScaleStrategy::CompensateSizeOnly
+        }
+    } else if (starting_scale - target_scale).abs() < 0.01 {
+        // macOS: same scale on both monitors
         MonitorScaleStrategy::ApplyUnchanged
     } else if starting_scale < target_scale {
+        // macOS: low DPI -> high DPI
         MonitorScaleStrategy::LowerToHigher
     } else {
+        // macOS: high DPI -> low DPI
         MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange)
     };
 
-    // Calculate final clamped position (using outer dimensions for accurate bounds)
-    let mon_right = target_info.position.x + target_info.size.x as i32;
-    let mon_bottom = target_info.position.y + target_info.size.y as i32;
+    // Calculate final position, with optional clamping.
+    //
+    // On macOS, we clamp to monitor bounds because macOS may resize/reposition windows
+    // that extend beyond the screen.
+    //
+    // On Windows, users can legitimately position windows partially off-screen,
+    // and the invisible border offset means saved positions may be slightly outside
+    // monitor bounds. We skip clamping to preserve the exact saved position.
+    let (x, y) = if cfg!(target_os = "windows") {
+        // Windows: use saved position directly, no clamping
+        (saved_x, saved_y)
+    } else {
+        // macOS: clamp to monitor bounds (using outer dimensions for accurate bounds)
+        let mon_right = target_info.position.x + target_info.size.x as i32;
+        let mon_bottom = target_info.position.y + target_info.size.y as i32;
 
-    let mut x = saved_x;
-    let mut y = saved_y;
+        let mut x = saved_x;
+        let mut y = saved_y;
 
-    if x + outer_width as i32 > mon_right {
-        x = mon_right - outer_width as i32;
-    }
-    if y + outer_height as i32 > mon_bottom {
-        y = mon_bottom - outer_height as i32;
-    }
-    x = x.max(target_info.position.x);
-    y = y.max(target_info.position.y);
+        if x + outer_width as i32 > mon_right {
+            x = mon_right - outer_width as i32;
+        }
+        if y + outer_height as i32 > mon_bottom {
+            y = mon_bottom - outer_height as i32;
+        }
+        x = x.max(target_info.position.x);
+        y = y.max(target_info.position.y);
 
-    if x != saved_x || y != saved_y {
-        debug!(
-            "[load_target_position] Clamped position: ({}, {}) -> ({}, {}) for outer size {}x{}",
-            saved_x, saved_y, x, y, outer_width, outer_height
-        );
-    }
+        if x != saved_x || y != saved_y {
+            debug!(
+                "[load_target_position] Clamped position: ({}, {}) -> ({}, {}) for outer size {}x{}",
+                saved_x, saved_y, x, y, outer_width, outer_height
+            );
+        }
+
+        (x, y)
+    };
 
     debug!(
         "[load_target_position] Starting monitor={} scale={}, Target monitor={} scale={}, strategy={:?}",
@@ -153,20 +187,27 @@ pub fn load_target_position(
 
 /// Move window to target monitor at 1x1 size (`PreStartup`).
 ///
-/// Uses pre-computed `TargetPosition` to move the window. For `HigherToLower` strategy,
-/// the position is compensated because winit divides by launch scale.
+/// Uses pre-computed `TargetPosition` to move the window.
 ///
-/// Skipped for fullscreen modes - they don't need position/size setup.
+/// On macOS with `HigherToLower` strategy, the position is compensated because winit
+/// divides coordinates by the launch monitor's scale factor.
+///
+/// On Windows, this compensation is never needed (strategy is always `ApplyUnchanged`).
+///
+/// For fullscreen modes, we still move to the target monitor so the fullscreen mode
+/// is applied on the correct monitor when `try_apply_restore` runs.
 pub fn move_to_target_monitor(
     mut window: Single<&mut Window, With<PrimaryWindow>>,
     target: Res<TargetPosition>,
 ) {
-    // Skip for fullscreen modes - they don't need the 1x1 positioning trick
+    // For fullscreen modes, just move to target monitor position (no 1x1 size)
+    // The fullscreen mode will be applied later in try_apply_restore
     if target.mode.is_fullscreen() {
         debug!(
-            "[move_to_target_monitor] Skipping for fullscreen mode {:?}",
-            target.mode
+            "[move_to_target_monitor] Moving to target position ({}, {}) for fullscreen mode {:?}",
+            target.x, target.y, target.mode
         );
+        window.position = WindowPosition::At(IVec2::new(target.x, target.y));
         return;
     }
 
@@ -287,12 +328,17 @@ fn try_apply_restore(
 
     // Handle fullscreen modes - just set the mode and we're done
     if target.mode.is_fullscreen() {
+        let window_mode = target.mode.to_window_mode(target_mon.index);
         debug!(
-            "[Restore] Applying fullscreen mode {:?} on monitor {}",
-            target.mode, target_mon.index
+            "[Restore] Applying fullscreen mode {:?} on monitor {} -> WindowMode::{:?}",
+            target.mode, target_mon.index, window_mode
+        );
+        debug!(
+            "[Restore] Current window state: position={:?} mode={:?}",
+            primary_window.position, primary_window.mode
         );
 
-        primary_window.mode = target.mode.to_window_mode(target_mon.index);
+        primary_window.mode = window_mode;
         return RestoreStatus::Complete;
     }
 
@@ -322,6 +368,16 @@ fn try_apply_restore(
                 target.x, target.y, size.x, size.y
             );
             primary_window.set_position_and_size(target.position(), size);
+        },
+        MonitorScaleStrategy::CompensateSizeOnly => {
+            // Windows: position is correct, but size needs compensation
+            let position = target.position();
+            let size = target.compensated_size();
+            debug!(
+                "[try_apply_restore] position=({}, {}) size={}x{} (CompensateSizeOnly, ratio={})",
+                position.x, position.y, size.x, size.y, target.ratio()
+            );
+            primary_window.set_position_and_size(position, size);
         },
         MonitorScaleStrategy::LowerToHigher => {
             let position = target.compensated_position();
