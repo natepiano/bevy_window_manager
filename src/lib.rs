@@ -45,6 +45,8 @@
 
 #[cfg(target_os = "macos")]
 mod macos_fullscreen_fix;
+#[cfg(target_os = "windows")]
+mod windows_dpi_fix;
 mod monitors;
 mod state;
 mod systems;
@@ -119,6 +121,9 @@ impl Plugin for WindowManagerPluginCustomPath {
 fn build_plugin(app: &mut App, path: PathBuf) {
     #[cfg(target_os = "macos")]
     macos_fullscreen_fix::init(app);
+
+    #[cfg(target_os = "windows")]
+    windows_dpi_fix::init(app);
 
     app.add_plugins(MonitorPlugin)
         .insert_resource(RestoreWindowConfig { path })

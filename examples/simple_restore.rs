@@ -14,6 +14,8 @@
 use bevy::prelude::*;
 use bevy::window::Monitor;
 use bevy::window::PrimaryWindow;
+use bevy::ecs::message::MessageReader;
+use bevy::window::WindowScaleFactorChanged;
 use bevy_window_manager::Monitors;
 use bevy_window_manager::WindowExt;
 use bevy_window_manager::WindowManagerPlugin;
@@ -29,8 +31,17 @@ fn main() {
         }))
         .add_plugins(WindowManagerPlugin)
         .add_systems(Startup, setup)
-        .add_systems(Update, update_info_text)
+        .add_systems(Update, (update_info_text, log_scale_changes))
         .run();
+}
+
+fn log_scale_changes(mut events: MessageReader<WindowScaleFactorChanged>) {
+    for event in events.read() {
+        info!(
+            "[ScaleFactorChanged] window={:?} scale={}",
+            event.window, event.scale_factor
+        );
+    }
 }
 
 #[derive(Component)]
