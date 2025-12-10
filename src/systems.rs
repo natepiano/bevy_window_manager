@@ -230,22 +230,34 @@ pub fn move_to_target_monitor(
         (target.x, target.y)
     };
 
+    // For HigherToLower, set the actual target size instead of 1x1 to avoid
+    // macOS caching the tiny size and applying it later during monitor transitions.
+    let (width, height) = if matches!(
+        target.monitor_scale_strategy,
+        MonitorScaleStrategy::HigherToLower(_)
+    ) {
+        (target.width, target.height)
+    } else {
+        (1, 1)
+    };
+
     debug!(
-        "[move_to_target_monitor] position=({}, {}) size=1x1",
-        move_x, move_y
+        "[move_to_target_monitor] position=({}, {}) size={}x{}",
+        move_x, move_y, width, height
     );
 
     window.position = bevy::window::WindowPosition::At(IVec2::new(move_x, move_y));
-    window.resolution.set_physical_resolution(1, 1);
+    window.resolution.set_physical_resolution(width, height);
 }
 
 /// Cached window state for change detection comparison.
 #[derive(Default)]
 pub struct CachedWindowState {
-    position: Option<IVec2>,
-    width:    u32,
-    height:   u32,
-    mode:     Option<SavedWindowMode>,
+    position:      Option<IVec2>,
+    width:         u32,
+    height:        u32,
+    mode:          Option<SavedWindowMode>,
+    monitor_index: Option<usize>,
 }
 
 /// Save window state when position, size, or mode changes. Runs only when not restoring.
@@ -265,7 +277,34 @@ pub fn save_window_state(
     let width = window.resolution.physical_width();
     let height = window.resolution.physical_height();
     let mode: SavedWindowMode = (&window.effective_mode(&monitors)).into();
-    let monitor_index = window.monitor(&monitors).index;
+    let monitor_info = window.monitor(&monitors);
+    let monitor_index = monitor_info.index;
+    let monitor_scale = monitor_info.scale;
+
+    // Log monitor transitions with detailed info
+    let monitor_changed = cached.monitor_index != Some(monitor_index);
+    if monitor_changed {
+        let prev_scale = cached
+            .monitor_index
+            .and_then(|i| monitors.by_index(i))
+            .map(|m| m.scale);
+        debug!(
+            "[save_window_state] MONITOR CHANGE: {:?} (scale={:?}) -> {} (scale={})",
+            cached.monitor_index, prev_scale, monitor_index, monitor_scale
+        );
+        debug!(
+            "[save_window_state]   physical: {}x{}, logical: {}x{}, scale_factor: {}",
+            width,
+            height,
+            window.resolution.width(),
+            window.resolution.height(),
+            window.resolution.scale_factor()
+        );
+        debug!(
+            "[save_window_state]   cached size was: {}x{}",
+            cached.width, cached.height
+        );
+    }
 
     // Only save if position, size, or mode actually changed
     let position_changed = cached.position != Some(pos);
@@ -273,6 +312,7 @@ pub fn save_window_state(
     let mode_changed = cached.mode.as_ref() != Some(&mode);
 
     if !position_changed && !size_changed && !mode_changed {
+        cached.monitor_index = Some(monitor_index);
         return;
     }
 
@@ -281,10 +321,11 @@ pub fn save_window_state(
     cached.width = width;
     cached.height = height;
     cached.mode = Some(mode.clone());
+    cached.monitor_index = Some(monitor_index);
 
     debug!(
-        "[save_window_state] pos=({}, {}) size={}x{} monitor={} mode={:?}",
-        pos.x, pos.y, width, height, monitor_index, mode
+        "[save_window_state] pos=({}, {}) size={}x{} monitor={} scale={} mode={:?}",
+        pos.x, pos.y, width, height, monitor_index, monitor_scale, mode
     );
 
     let app_name = std::env::current_exe()
