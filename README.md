@@ -37,6 +37,12 @@ fn main() {
 }
 ```
 
+For a complete interactive example with fullscreen mode switching, run:
+
+```bash
+cargo run --example restore_window
+```
+
 ## API
 
 This crate exposes several types for working with monitors and windows beyond the plugin itself. See [docs.rs](https://docs.rs/bevy_window_manager) for full API documentation.

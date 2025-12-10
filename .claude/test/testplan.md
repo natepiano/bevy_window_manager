@@ -56,9 +56,9 @@ del $env:APPDATA\fullscreen_modes\windows.ron
 
 `using fullscreen_modes example`
 ### Fullscreen: Exclusive
-- [ ] move to Monitor 0, Press 1 for exclusive, select video mode, close (command-Q)
-- [ ] Relaunch → restores to exclusive fullscreen
-- [ ] Repeat on Monitor 1
+- [x] move to Monitor 0, Press 1 for exclusive, select video mode, close (command-Q)
+- [x] Relaunch → restores to exclusive fullscreen
+- [x] Repeat on Monitor 1
 - **Note** this also tests bevy #22060 TLS panic - if it doesn't panic on quit, we're good
 
 ### Fullscreen: programmatic Borderless

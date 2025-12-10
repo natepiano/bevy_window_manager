@@ -3,8 +3,6 @@
 use bevy::ecs::system::NonSendMarker;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use bevy::window::WindowMoved;
-use bevy::window::WindowResized;
 use bevy::window::WindowScaleFactorChanged;
 use bevy::winit::WINIT_WINDOWS;
 
@@ -241,22 +239,31 @@ pub fn move_to_target_monitor(
     window.resolution.set_physical_resolution(1, 1);
 }
 
-/// Save window state on move/resize. Runs only when not restoring.
+/// Cached window state for change detection comparison.
+#[derive(Default)]
+pub struct CachedWindowState {
+    position:         Option<IVec2>,
+    width:            u32,
+    height:           u32,
+    mode:             Option<SavedWindowMode>,
+    /// Track monitor index to detect cross-monitor transitions.
+    monitor_index:    Option<usize>,
+    /// Cooldown timer after monitor changes to avoid saving mid-transition sizes.
+    monitor_cooldown: f32,
+}
+
+/// Seconds to wait after a monitor change before saving state.
+/// This prevents saving incorrect sizes during scale factor transitions.
+const MONITOR_CHANGE_COOLDOWN: f32 = 0.3;
+
+/// Save window state when position, size, or mode changes. Runs only when not restoring.
 pub fn save_window_state(
-    mut moved_messages: MessageReader<WindowMoved>,
-    mut resized_messages: MessageReader<WindowResized>,
     config: Res<RestoreWindowConfig>,
     monitors: Res<Monitors>,
-    window: Single<&Window, With<PrimaryWindow>>,
+    window: Single<&Window, (With<PrimaryWindow>, Changed<Window>)>,
+    time: Res<Time>,
+    mut cached: Local<CachedWindowState>,
 ) {
-    // Check if any relevant messages arrived
-    let moved = moved_messages.read().last().is_some();
-    let resized = resized_messages.read().last().is_some();
-
-    if !moved && !resized {
-        return;
-    }
-
     let Some(pos) = (match window.position {
         bevy::window::WindowPosition::At(p) => Some(p),
         _ => None,
@@ -266,10 +273,46 @@ pub fn save_window_state(
 
     let width = window.resolution.physical_width();
     let height = window.resolution.physical_height();
-
+    let mode: SavedWindowMode = (&window.effective_mode(&monitors)).into();
     let monitor_index = window.monitor(&monitors).index;
 
-    let mode: SavedWindowMode = (&window.effective_mode(&monitors)).into();
+    // Detect monitor change and start cooldown
+    if cached.monitor_index != Some(monitor_index) {
+        if cached.monitor_index.is_some() {
+            // Monitor changed - start cooldown to avoid saving mid-transition sizes
+            debug!(
+                "[save_window_state] Monitor changed from {:?} to {}, starting cooldown",
+                cached.monitor_index, monitor_index
+            );
+            cached.monitor_cooldown = MONITOR_CHANGE_COOLDOWN;
+        }
+        cached.monitor_index = Some(monitor_index);
+    }
+
+    // Tick down cooldown timer
+    if cached.monitor_cooldown > 0.0 {
+        cached.monitor_cooldown -= time.delta_secs();
+        if cached.monitor_cooldown > 0.0 {
+            // Still in cooldown, don't save yet
+            return;
+        }
+        debug!("[save_window_state] Monitor change cooldown complete");
+    }
+
+    // Only save if position, size, or mode actually changed
+    let position_changed = cached.position != Some(pos);
+    let size_changed = cached.width != width || cached.height != height;
+    let mode_changed = cached.mode.as_ref() != Some(&mode);
+
+    if !position_changed && !size_changed && !mode_changed {
+        return;
+    }
+
+    // Update cache
+    cached.position = Some(pos);
+    cached.width = width;
+    cached.height = height;
+    cached.mode = Some(mode.clone());
 
     debug!(
         "[save_window_state] pos=({}, {}) size={}x{} monitor={} mode={:?}",

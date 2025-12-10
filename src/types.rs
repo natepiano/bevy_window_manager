@@ -11,7 +11,7 @@ use serde::Deserialize;
 use serde::Serialize;
 
 /// Saved video mode for exclusive fullscreen.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SavedVideoMode {
     pub physical_size:           UVec2,
     pub bit_depth:               u16,
@@ -31,7 +31,7 @@ impl SavedVideoMode {
 }
 
 /// Serializable window mode.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SavedWindowMode {
     Windowed,
     BorderlessFullscreen,
