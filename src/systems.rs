@@ -242,26 +242,17 @@ pub fn move_to_target_monitor(
 /// Cached window state for change detection comparison.
 #[derive(Default)]
 pub struct CachedWindowState {
-    position:         Option<IVec2>,
-    width:            u32,
-    height:           u32,
-    mode:             Option<SavedWindowMode>,
-    /// Track monitor index to detect cross-monitor transitions.
-    monitor_index:    Option<usize>,
-    /// Cooldown timer after monitor changes to avoid saving mid-transition sizes.
-    monitor_cooldown: f32,
+    position: Option<IVec2>,
+    width:    u32,
+    height:   u32,
+    mode:     Option<SavedWindowMode>,
 }
-
-/// Seconds to wait after a monitor change before saving state.
-/// This prevents saving incorrect sizes during scale factor transitions.
-const MONITOR_CHANGE_COOLDOWN: f32 = 0.3;
 
 /// Save window state when position, size, or mode changes. Runs only when not restoring.
 pub fn save_window_state(
     config: Res<RestoreWindowConfig>,
     monitors: Res<Monitors>,
     window: Single<&Window, (With<PrimaryWindow>, Changed<Window>)>,
-    time: Res<Time>,
     mut cached: Local<CachedWindowState>,
 ) {
     let Some(pos) = (match window.position {
@@ -275,29 +266,6 @@ pub fn save_window_state(
     let height = window.resolution.physical_height();
     let mode: SavedWindowMode = (&window.effective_mode(&monitors)).into();
     let monitor_index = window.monitor(&monitors).index;
-
-    // Detect monitor change and start cooldown
-    if cached.monitor_index != Some(monitor_index) {
-        if cached.monitor_index.is_some() {
-            // Monitor changed - start cooldown to avoid saving mid-transition sizes
-            debug!(
-                "[save_window_state] Monitor changed from {:?} to {}, starting cooldown",
-                cached.monitor_index, monitor_index
-            );
-            cached.monitor_cooldown = MONITOR_CHANGE_COOLDOWN;
-        }
-        cached.monitor_index = Some(monitor_index);
-    }
-
-    // Tick down cooldown timer
-    if cached.monitor_cooldown > 0.0 {
-        cached.monitor_cooldown -= time.delta_secs();
-        if cached.monitor_cooldown > 0.0 {
-            // Still in cooldown, don't save yet
-            return;
-        }
-        debug!("[save_window_state] Monitor change cooldown complete");
-    }
 
     // Only save if position, size, or mode actually changed
     let position_changed = cached.position != Some(pos);
