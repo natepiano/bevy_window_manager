@@ -36,7 +36,8 @@
       "Bash(zed:*)",
       "Bash(cmd /c:*)",
       "Bash(git diff:*)",
-      "WebFetch(domain:www.gridbugs.org)"
+      "WebFetch(domain:www.gridbugs.org)",
+      "Bash(git fetch:*)"
     ],
     "deny": [],
     "ask": []
