@@ -35,7 +35,8 @@
       "Bash(cmd /c \"set RUST_LOG=bevy_window_manager=debug && cargo run --example simple_restore 2>&1\")",
       "Bash(zed:*)",
       "Bash(cmd /c:*)",
-      "Bash(git diff:*)"
+      "Bash(git diff:*)",
+      "WebFetch(domain:www.gridbugs.org)"
     ],
     "deny": [],
     "ask": []
