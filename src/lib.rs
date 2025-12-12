@@ -50,7 +50,7 @@ mod state;
 mod systems;
 mod types;
 mod window_ext;
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", feature = "workaround-winit-4341"))]
 mod windows_dpi_fix;
 
 use std::path::PathBuf;
@@ -122,7 +122,7 @@ fn build_plugin(app: &mut App, path: PathBuf) {
     #[cfg(target_os = "macos")]
     macos_fullscreen_fix::init(app);
 
-    #[cfg(target_os = "windows")]
+    #[cfg(all(target_os = "windows", feature = "workaround-winit-4341"))]
     windows_dpi_fix::init(app);
 
     app.add_plugins(MonitorPlugin)
