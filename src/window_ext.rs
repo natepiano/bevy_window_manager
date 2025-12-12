@@ -68,10 +68,10 @@ impl WindowExt for Window {
         let WindowPosition::At(pos) = self.position else {
             return monitors.primary();
         };
-        // Use window center for monitor detection to avoid issues with:
-        // - Windows invisible border offset (winit issue #4296) causing top-left to be outside
-        //   monitor bounds for maximized/snapped windows
-        // - Windows spanning monitor boundaries (center determines "owning" monitor)
+        // Use window center for monitor detection because:
+        // - It correctly handles windows spanning monitor boundaries
+        // - It avoids Windows invisible border offset (winit #4107) where maximized/snapped windows
+        //   report top-left outside monitor bounds
         let center_x = pos.x + (self.physical_width() / 2) as i32;
         let center_y = pos.y + (self.physical_height() / 2) as i32;
         monitors.closest_to(center_x, center_y)

@@ -128,10 +128,9 @@ pub enum WindowRestoreState {
 ///
 /// Exclusive fullscreen crashes on startup with DX12 due to DXGI flip model
 /// limitations (see <https://github.com/rust-windowing/winit/issues/3124>).
-/// A similar issue exists on X11 Linux (see <https://github.com/bevyengine/bevy/issues/5485>).
 /// We wait one frame for `create_surfaces` to create a windowed surface first,
 /// then switch to fullscreen.
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FullscreenRestoreState {
     /// Waiting for first frame to render (surface creation).
@@ -198,6 +197,7 @@ pub enum MonitorScaleStrategy {
     /// Same scale - apply position and size directly.
     ApplyUnchanged,
     /// Windows only: apply position directly, compensate size only.
+    #[cfg(target_os = "windows")]
     CompensateSizeOnly,
     /// Low→High DPI (1x→2x) - apply with compensation (ratio < 1). macOS only.
     LowerToHigher,
@@ -232,7 +232,7 @@ pub struct TargetPosition {
     /// Window mode to restore.
     pub mode:                     SavedWindowMode,
     /// Fullscreen restore state (Windows only, DX12/DXGI workaround).
-    #[cfg(target_os = "windows")]
+    #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
     pub fullscreen_restore_state: FullscreenRestoreState,
 }
 

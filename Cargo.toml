@@ -29,7 +29,7 @@ cast_possible_truncation = "allow"
 cast_sign_loss = "allow"
 
 [features]
-default = ["workaround-winit-4341"]
+default = ["workaround-winit-4341", "workaround-winit-3124", "workaround-bevy-22060", "workaround-macos-scale-compensation"]
 
 # Windows DPI drag bounce workaround - remove when winit includes PR #4341
 # Issue: https://github.com/rust-windowing/winit/issues/4041
@@ -39,12 +39,51 @@ default = ["workaround-winit-4341"]
 # Test with workaround:    cargo run --example restore_window
 workaround-winit-4341 = []
 
+# macOS scale factor compensation workaround
+# Bevy processes window size changes before position changes. On macOS, winit's
+# request_inner_size uses the current monitor's scale factor for conversion.
+# When moving to a different-scale monitor, the size is set before the window
+# moves, using the wrong scale factor.
+#
+# This workaround compensates position/size based on scale factor ratios and
+# uses a two-phase approach for high→low DPI transitions.
+#
+# Test without workaround: cargo run --example restore_window --no-default-features --features workaround-winit-4341
+# Test with workaround:    cargo run --example restore_window
+workaround-macos-scale-compensation = []
+
+# Windows DX12/DXGI exclusive fullscreen crash workaround
+# Issue: https://github.com/rust-windowing/winit/issues/3124
+#
+# DXGI flip model surfaces (used by DX12) don't support exclusive fullscreen at
+# startup. We defer fullscreen until after surface creation.
+#
+# Winit closed this as "not planned" because the swapchain is created by wgpu, not
+# winit. There's no Bevy issue for this yet - Bevy is the right place to fix it
+# since it orchestrates both window creation (winit) and surface creation (wgpu).
+#
+# Test without workaround: cargo run --example restore_window --no-default-features --features workaround-winit-4341,workaround-macos-scale-compensation
+# Test with workaround:    cargo run --example restore_window
+workaround-winit-3124 = []
+
+# macOS TLS panic on quit from exclusive fullscreen workaround
+# Issue: https://github.com/bevyengine/bevy/issues/22060
+# Fix: https://github.com/bevyengine/bevy/pull/22060
+#
+# When exiting while in exclusive fullscreen, winit's Window::drop calls
+# set_fullscreen(None), triggering a macOS callback that accesses TLS after
+# destruction - causing a panic. We exit fullscreen during world.clear_all()
+# before TLS destruction.
+#
+# Remove when using Bevy 0.18+, which includes the fix.
+workaround-bevy-22060 = []
+
 [lib]
 name = "bevy_window_manager"
 path = "src/lib.rs"
 
 [dependencies]
-bevy = "0.17.3"
+bevy = { path = "../bevy" }
 dirs = "6.0"
 ron = "0.12"
 serde = { version = "1.0", features = ["derive"] }

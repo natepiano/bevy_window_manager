@@ -1,5 +1,7 @@
 //! Systems for window restoration.
 
+use std::ffi::OsStr;
+
 use bevy::ecs::system::NonSendMarker;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
@@ -10,7 +12,7 @@ use super::state;
 use super::types::RestoreWindowConfig;
 use super::types::WindowState;
 use crate::monitors::Monitors;
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
 use crate::types::FullscreenRestoreState;
 use crate::types::MonitorScaleStrategy;
 use crate::types::SavedWindowMode;
@@ -108,26 +110,13 @@ pub fn load_target_position(
     // when scales differ, or ApplyUnchanged when they match.
     //
     // On macOS, winit's coordinate handling is broken for multi-monitor setups with
-    // different scale factors (see https://github.com/rust-windowing/winit/issues/2645).
+    // different scale factors. Bevy processes size before position, so winit's
+    // request_inner_size uses the launch monitor's scale factor instead of the target's.
     // We must compensate both position and size based on the scale factor relationship.
-    let strategy = if cfg!(target_os = "windows") {
-        if (starting_scale - target_scale).abs() < 0.01 {
-            // Windows: same scale, no compensation needed
-            MonitorScaleStrategy::ApplyUnchanged
-        } else {
-            // Windows: different scales, compensate size only (not position)
-            MonitorScaleStrategy::CompensateSizeOnly
-        }
-    } else if (starting_scale - target_scale).abs() < 0.01 {
-        // macOS: same scale on both monitors
-        MonitorScaleStrategy::ApplyUnchanged
-    } else if starting_scale < target_scale {
-        // macOS: low DPI -> high DPI
-        MonitorScaleStrategy::LowerToHigher
-    } else {
-        // macOS: high DPI -> low DPI
-        MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange)
-    };
+    //
+    // The macOS compensation can be disabled via feature flag to test if upstream
+    // fixes (e.g., Bevy processing position before size) resolve the issue.
+    let strategy = determine_scale_strategy(starting_scale, target_scale);
 
     // Calculate final position, with optional clamping.
     //
@@ -182,7 +171,7 @@ pub fn load_target_position(
         starting_scale,
         monitor_scale_strategy: strategy,
         mode: state.mode,
-        #[cfg(target_os = "windows")]
+        #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
         fullscreen_restore_state: FullscreenRestoreState::WaitingForSurface,
     });
 }
@@ -330,7 +319,7 @@ pub fn save_window_state(
 
     let app_name = std::env::current_exe()
         .ok()
-        .and_then(|p| p.file_stem().map(|s| s.to_owned()))
+        .and_then(|p| p.file_stem().map(OsStr::to_owned))
         .and_then(|s| s.to_str().map(|s| (*s).to_string()))
         .unwrap_or_default();
 
@@ -366,7 +355,7 @@ pub fn restore_primary_window(
     }
 
     // Windows: transition fullscreen state after first frame (DX12/DXGI workaround)
-    #[cfg(target_os = "windows")]
+    #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
     if target.mode.is_fullscreen()
         && target.fullscreen_restore_state == FullscreenRestoreState::WaitingForSurface
     {
@@ -442,6 +431,7 @@ fn try_apply_restore(
             );
             primary_window.set_position_and_size(target.position(), size);
         },
+        #[cfg(target_os = "windows")]
         MonitorScaleStrategy::CompensateSizeOnly => {
             // Windows: position is correct, but size needs compensation
             let position = target.position();
@@ -490,4 +480,44 @@ fn try_apply_restore(
 
     // if we're here then we're good to go
     RestoreStatus::Complete
+}
+
+/// Determine the monitor scale strategy based on platform and scale factors.
+/// Windows: compensate size only when scales differ.
+#[cfg(target_os = "windows")]
+fn determine_scale_strategy(starting_scale: f64, target_scale: f64) -> MonitorScaleStrategy {
+    if (starting_scale - target_scale).abs() < 0.01 {
+        MonitorScaleStrategy::ApplyUnchanged
+    } else {
+        MonitorScaleStrategy::CompensateSizeOnly
+    }
+}
+
+/// Determine the monitor scale strategy based on platform and scale factors.
+/// macOS with workaround: compensate position and size based on scale relationship.
+#[cfg(all(
+    not(target_os = "windows"),
+    feature = "workaround-macos-scale-compensation"
+))]
+fn determine_scale_strategy(starting_scale: f64, target_scale: f64) -> MonitorScaleStrategy {
+    if (starting_scale - target_scale).abs() < 0.01 {
+        MonitorScaleStrategy::ApplyUnchanged
+    } else if starting_scale < target_scale {
+        // Low DPI -> high DPI
+        MonitorScaleStrategy::LowerToHigher
+    } else {
+        // High DPI -> low DPI
+        MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange)
+    }
+}
+
+/// Determine the monitor scale strategy based on platform and scale factors.
+/// macOS without workaround: always use `ApplyUnchanged`.
+#[cfg(all(
+    not(target_os = "windows"),
+    not(feature = "workaround-macos-scale-compensation")
+))]
+fn determine_scale_strategy(_starting_scale: f64, _target_scale: f64) -> MonitorScaleStrategy {
+    // Without workaround, assume upstream fixes handle scale factor correctly
+    MonitorScaleStrategy::ApplyUnchanged
 }

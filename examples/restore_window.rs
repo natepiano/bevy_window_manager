@@ -130,62 +130,9 @@ fn update_display(
     }
 
     // Build video modes display (show 5 modes, centered appropriately)
-    let video_modes_display = if video_modes.is_empty() {
-        "  (no video modes available)".into()
-    } else {
-        let selected_idx = selected
-            .get(monitor.index)
-            .min(video_modes.len().saturating_sub(1));
-        let len = video_modes.len();
-
-        // Determine the visible window start position
-        let start = if len <= 5 {
-            // Show all modes if 5 or fewer
-            0
-        } else {
-            // Center on active mode (slot 3 of 5) if it exists, otherwise center on selected
-            let center_target = active_mode_idx.unwrap_or(selected_idx);
-
-            // But always ensure selected is visible by adjusting if needed
-            let ideal_start = center_target.saturating_sub(2);
-            let ideal_end = ideal_start + 5;
-
-            // Check if selected would be outside the ideal window
-            if selected_idx < ideal_start {
-                // Selected is above the window, scroll up to show it
-                selected_idx.saturating_sub(2)
-            } else if selected_idx >= ideal_end {
-                // Selected is below the window, scroll down to show it
-                (selected_idx + 3).saturating_sub(5)
-            } else {
-                // Selected is visible, use the ideal centering on active
-                ideal_start
-            }
-            .min(len.saturating_sub(5))
-        };
-        let end = (start + 5).min(len);
-
-        video_modes[start..end]
-            .iter()
-            .enumerate()
-            .map(|(i, mode)| {
-                let actual_idx = start + i;
-                let left_marker = if actual_idx == selected_idx { ">" } else { " " };
-                let right_marker = if Some(actual_idx) == active_mode_idx {
-                    " <- active"
-                } else {
-                    ""
-                };
-                format!(
-                    "  {left_marker} {}x{} @ {}Hz{right_marker}",
-                    mode.physical_size.x,
-                    mode.physical_size.y,
-                    mode.refresh_rate_millihertz / 1000
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
+    let selected_idx = selected.get(monitor.index);
+    let video_modes_display =
+        build_video_modes_display(&video_modes, selected_idx, active_mode_idx);
 
     // Row 1: Monitor info all on one line
     let primary_marker = if monitor.index == 0 {
@@ -198,24 +145,21 @@ fn update_display(
         monitor.index, monitor.scale,
     );
 
-    // Extract window position coordinates or show named variant
-    let (window_pos_str, window_pos_coords) = match window.position {
-        WindowPosition::At(pos) => (None, Some((pos.x, pos.y))),
-        WindowPosition::Automatic => (Some("Automatic".to_string()), None),
-        WindowPosition::Centered(mon_sel) => (Some(format!("Centered({mon_sel:?})")), None),
-    };
-
-    // Format aligned position and size strings
-    let (monitor_pos, window_pos) = if let Some(coords) = window_pos_coords {
-        format_aligned_pair(
+    // Format aligned position strings based on window position variant
+    let (monitor_pos, window_pos) = match window.position {
+        WindowPosition::At(pos) => format_aligned_pair(
             (monitor.position.x, monitor.position.y),
-            coords,
+            (pos.x, pos.y),
             Delimiter::Parens,
-        )
-    } else {
-        // Window position is a named variant, no alignment needed
-        let monitor_pos = format!("({}, {})", monitor.position.x, monitor.position.y);
-        (monitor_pos, window_pos_str.unwrap())
+        ),
+        WindowPosition::Automatic => {
+            let monitor_pos = format!("({}, {})", monitor.position.x, monitor.position.y);
+            (monitor_pos, "Automatic".to_string())
+        },
+        WindowPosition::Centered(mon_sel) => {
+            let monitor_pos = format!("({}, {})", monitor.position.x, monitor.position.y);
+            (monitor_pos, format!("Centered({mon_sel:?})"))
+        },
     };
 
     let (monitor_size, window_size) = format_aligned_pair(
@@ -334,7 +278,7 @@ enum Delimiter {
 }
 
 /// Formats two pairs of values (monitor and window) with right-aligned numbers.
-/// Returns (monitor_str, window_str) with matching widths.
+/// Returns (`monitor_str`, `window_str`) with matching widths.
 fn format_aligned_pair(
     monitor_vals: (i32, i32),
     window_vals: (i32, i32),
@@ -349,12 +293,74 @@ fn format_aligned_pair(
 
     match delimiter {
         Delimiter::Parens => (
-            format!("({:>width1$}, {:>width2$})", m1, m2),
-            format!("({:>width1$}, {:>width2$})", w1, w2),
+            format!("({m1:>width1$}, {m2:>width2$})"),
+            format!("({w1:>width1$}, {w2:>width2$})"),
         ),
         Delimiter::None => (
-            format!("{:>width1$}x{:>width2$}", m1, m2),
-            format!("{:>width1$}x{:>width2$}", w1, w2),
+            format!("{m1:>width1$}x{m2:>width2$}"),
+            format!("{w1:>width1$}x{w2:>width2$}"),
         ),
     }
+}
+
+/// Builds the video modes display string showing a scrollable window of modes.
+fn build_video_modes_display(
+    video_modes: &[&VideoMode],
+    selected_idx: usize,
+    active_mode_idx: Option<usize>,
+) -> String {
+    if video_modes.is_empty() {
+        return "  (no video modes available)".into();
+    }
+
+    let selected_idx = selected_idx.min(video_modes.len().saturating_sub(1));
+    let len = video_modes.len();
+
+    // Determine the visible window start position
+    let start = if len <= 5 {
+        // Show all modes if 5 or fewer
+        0
+    } else {
+        // Center on active mode (slot 3 of 5) if it exists, otherwise center on selected
+        let center_target = active_mode_idx.unwrap_or(selected_idx);
+
+        // But always ensure selected is visible by adjusting if needed
+        let ideal_start = center_target.saturating_sub(2);
+        let ideal_end = ideal_start + 5;
+
+        // Check if selected would be outside the ideal window
+        if selected_idx < ideal_start {
+            // Selected is above the window, scroll up to show it
+            selected_idx.saturating_sub(2)
+        } else if selected_idx >= ideal_end {
+            // Selected is below the window, scroll down to show it
+            (selected_idx + 3).saturating_sub(5)
+        } else {
+            // Selected is visible, use the ideal centering on active
+            ideal_start
+        }
+        .min(len.saturating_sub(5))
+    };
+    let end = (start + 5).min(len);
+
+    video_modes[start..end]
+        .iter()
+        .enumerate()
+        .map(|(i, mode)| {
+            let actual_idx = start + i;
+            let left_marker = if actual_idx == selected_idx { ">" } else { " " };
+            let right_marker = if Some(actual_idx) == active_mode_idx {
+                " <- active"
+            } else {
+                ""
+            };
+            format!(
+                "  {left_marker} {}x{} @ {}Hz{right_marker}",
+                mode.physical_size.x,
+                mode.physical_size.y,
+                mode.refresh_rate_millihertz / 1000
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }

@@ -43,7 +43,7 @@
 //!
 //! See `examples/custom_path.rs` for how to override the full path to the state file.
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "workaround-bevy-22060"))]
 mod macos_fullscreen_fix;
 mod monitors;
 mod state;
@@ -119,7 +119,7 @@ impl Plugin for WindowManagerPluginCustomPath {
 /// subsequent positions saves - which we dont' want to do until AFTER we've done
 /// the initial restore.
 fn build_plugin(app: &mut App, path: PathBuf) {
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "workaround-bevy-22060"))]
     macos_fullscreen_fix::init(app);
 
     #[cfg(all(target_os = "windows", feature = "workaround-winit-4341"))]
