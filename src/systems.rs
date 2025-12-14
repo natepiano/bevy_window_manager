@@ -230,9 +230,17 @@ pub fn move_to_target_monitor(
         (1, 1)
     };
 
+    // Hide window during HigherToLower two-phase restore to avoid visual flash
+    if matches!(
+        target.monitor_scale_strategy,
+        MonitorScaleStrategy::HigherToLower(_)
+    ) {
+        window.visible = false;
+    }
+
     debug!(
-        "[move_to_target_monitor] position=({}, {}) size={}x{}",
-        move_x, move_y, width, height
+        "[move_to_target_monitor] position=({}, {}) size={}x{} visible={}",
+        move_x, move_y, width, height, window.visible
     );
 
     window.position = bevy::window::WindowPosition::At(IVec2::new(move_x, move_y));
@@ -460,7 +468,7 @@ fn try_apply_restore(
             primary_window.set_position_and_size(position, size);
         },
         MonitorScaleStrategy::HigherToLower(WindowRestoreState::ApplySize) => {
-            // HigherToLower after scale changed: ONLY set size, position was set earlier
+            // HigherToLower after scale changed: set size and show window
             let size = target.size();
             debug!(
                 "[try_apply_restore] size={}x{} ONLY (HigherToLower::ApplySize, position already set)",
@@ -469,6 +477,7 @@ fn try_apply_restore(
             primary_window
                 .resolution
                 .set_physical_resolution(size.x, size.y);
+            primary_window.visible = true;
         },
         // in this case we haven't yet received the ScaleChanged message so we can't apply the size
         // yet - early return

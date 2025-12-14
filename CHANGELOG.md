@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- macOS high→low DPI restore no longer flashes incorrect size on first frame. Window is hidden during two-phase restore and shown after correct size is applied. **Note:** When restoring from high-DPI to low-DPI monitor, the first frame will not be visible.
 - Window state now saves when video mode refresh rate changes (e.g., switching from 75Hz to 60Hz at same resolution)
 - Monitor detection for maximized/snapped windows now uses window center instead of top-left, which could fall outside visible monitor bounds due to Windows invisible border offset ([winit #4296](https://github.com/rust-windowing/winit/issues/4296))
 - Windows position restoration accounts for invisible border offset (workaround for [winit #4107](https://github.com/rust-windowing/winit/issues/4107))

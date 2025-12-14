@@ -6,7 +6,7 @@ Tests are keyed to these tracked issues:
 
 | Key | Issue | Platform | Feature Flag | Description |
 |-----|-------|----------|--------------|-------------|
-| W1 | Related to [winit #2645](https://github.com/rust-windowing/winit/issues/2645) | macOS | `workaround-macos-scale-compensation` | Winit's `request_inner_size` uses `backingScaleFactor` from the window's current monitor. Bevy processes size before position, so when setting both, winit converts the size using the launch monitor's scale instead of the target monitor's scale. Test bevy fix when you get home from Allentown|
+| W1 | [winit #4440](https://github.com/rust-windowing/winit/issues/4440) | macOS | `workaround-macos-scale-compensation` | `set_outer_position` and `request_inner_size` use current monitor's scale factor instead of target monitor's. When restoring to a different-scale monitor, coordinates are converted incorrectly. |
 | W2 | [winit #4041](https://github.com/rust-windowing/winit/issues/4041) | Windows | `workaround-winit-4341` | DPI change causes window bounce/resize when dragging between mixed-DPI monitors. Fix in [winit #4341](https://github.com/rust-windowing/winit/pull/4341). |
 | W3 | [winit #3124](https://github.com/rust-windowing/winit/issues/3124) | Windows | `workaround-winit-3124` | Exclusive fullscreen crashes on startup with DX12 due to DXGI flip model limitations. We defer fullscreen until after surface creation via `FullscreenRestoreState`. There currently is not an open issue for this in bevy - once we validate our own fix we should open a bevy issue. |
 | B1 | [bevy PR #22060](https://github.com/bevyengine/bevy/pull/22060) | macOS | `workaround-bevy-22060` | TLS panic on quit from exclusive fullscreen. We exit fullscreen during `world.clear_all()` before TLS destruction. Remove when using Bevy 0.18+. |
@@ -40,14 +40,14 @@ del $env:APPDATA\restore_window\window_state.json
 ### Launch Monitor 0 Tests (High Scale - Primary)
 
 #### Restore: Same Monitor
-- [ ] Move app window on Launch Monitor 0, resize, close
-- [ ] Relaunch → app window restores to same position/size
+- [x] Move app window on Launch Monitor 0, resize, close
+- [x] Relaunch → app window restores to same position/size
 
 #### W1: Cross-Monitor High→Low DPI
 *Tests: HigherToLower two-phase strategy*
-- [ ] Launch from Monitor 0, move app window to Monitor 1, resize, close
-- [ ] Relaunch from Launch Monitor 0 → app window moves to Monitor 1 with correct size
-- [ ] Validate at various dock positions (left, right, maximized)
+- [x] Launch from Monitor 0, move app window to Monitor 1, resize, close
+- [x] Relaunch from Launch Monitor 0 → app window moves to Monitor 1 with correct size
+- [x] Validate at various dock positions (left, right, maximized)
 
 #### DPI Drag Size Stability
 - [ ] Launch from Monitor 0 (high scale), restore to Monitor 1 (low scale)

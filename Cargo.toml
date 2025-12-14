@@ -29,7 +29,12 @@ cast_possible_truncation = "allow"
 cast_sign_loss = "allow"
 
 [features]
-default = ["workaround-winit-4341", "workaround-winit-3124", "workaround-bevy-22060", "workaround-macos-scale-compensation"]
+default = [
+  "workaround-winit-4341",
+  "workaround-winit-3124",
+  "workaround-bevy-22060",
+  "workaround-macos-scale-compensation",
+]
 
 # Windows DPI drag bounce workaround - remove when winit includes PR #4341
 # Issue: https://github.com/rust-windowing/winit/issues/4041
@@ -40,10 +45,11 @@ default = ["workaround-winit-4341", "workaround-winit-3124", "workaround-bevy-22
 workaround-winit-4341 = []
 
 # macOS scale factor compensation workaround
-# Bevy processes window size changes before position changes. On macOS, winit's
-# request_inner_size uses the current monitor's scale factor for conversion.
-# When moving to a different-scale monitor, the size is set before the window
-# moves, using the wrong scale factor.
+# Issue: https://github.com/rust-windowing/winit/issues/4440
+#
+# `set_outer_position` and `request_inner_size` use the current monitor's scale
+# factor for coordinate conversion instead of the target monitor's. When restoring
+# a window to a different-scale monitor, coordinates are converted incorrectly.
 #
 # This workaround compensates position/size based on scale factor ratios and
 # uses a two-phase approach for high→low DPI transitions.
@@ -83,7 +89,8 @@ name = "bevy_window_manager"
 path = "src/lib.rs"
 
 [dependencies]
-bevy = { path = "../bevy" }
+# bevy = { path = "../bevy" }
+bevy = "0.17.3"
 dirs = "6.0"
 ron = "0.12"
 serde = { version = "1.0", features = ["derive"] }
