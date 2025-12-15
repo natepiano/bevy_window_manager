@@ -90,6 +90,44 @@ Requires `use bevy_window_manager::WindowExt`:
 
 This plugin was originally created to handle a MacBook Pro with external monitors at different scale factors, which caused window position/size corruption. Windows testing revealed additional issues with multi-monitor and multi-scale setups that have been fixed (see [CHANGELOG](CHANGELOG.md)). Linux support is untested - if you try it, please let me know how it goes. PRs welcome!
 
+## Feature Flags (Platform Workarounds)
+
+This plugin includes workarounds for known issues in winit and Bevy. Each workaround is behind a feature flag, and **all are enabled by default**.
+
+This design allows:
+- **Easy testing of upstream fixes** - disable a workaround to verify an upstream fix works
+- **Opt-out flexibility** - if a workaround doesn't suit your setup, you can exclude it
+- **Minimal code when not needed** - platform-specific workarounds are compiled out on other platforms
+
+### Available Feature Flags
+
+| Feature | Platform | Issue | Description |
+|---------|----------|-------|-------------|
+| `workaround-winit-4341` | Windows | [winit #4041](https://github.com/rust-windowing/winit/issues/4041) | DPI drag bounce fix |
+| `workaround-winit-3124` | Windows | [winit #3124](https://github.com/rust-windowing/winit/issues/3124) | DX12/DXGI fullscreen crash fix |
+| `workaround-macos-scale-compensation` | macOS | [winit #4440](https://github.com/rust-windowing/winit/issues/4440) | Multi-monitor scale factor compensation |
+| `workaround-macos-drag-back-reset` | macOS | [winit #4441](https://github.com/rust-windowing/winit/issues/4441) | Window size reset on drag-back fix |
+| `workaround-bevy-22060` | macOS | [bevy #22060](https://github.com/bevyengine/bevy/issues/22060) | Fullscreen quit panic fix |
+
+### Disabling Workarounds
+
+To test without a specific workaround (e.g., to verify an upstream fix):
+
+```bash
+# Disable all workarounds
+cargo run --example restore_window --no-default-features
+
+# Disable only the macOS drag-back workaround
+cargo run --example restore_window --no-default-features --features workaround-winit-4341,workaround-winit-3124,workaround-macos-scale-compensation,workaround-bevy-22060
+```
+
+In your `Cargo.toml`, you can selectively enable features:
+
+```toml
+[dependencies]
+bevy_window_manager = { version = "0.17", default-features = false, features = ["workaround-winit-4341"] }
+```
+
 ## macOS Fullscreen Crash Fix
 
 This plugin includes a workaround for a Bevy bug on macOS where quitting the application while in exclusive fullscreen mode causes a panic. The crash occurs because Bevy stores windows in thread-local storage (TLS), and when windows are dropped during TLS destruction, winit's cleanup code triggers a macOS callback that tries to access already-destroyed TLS.

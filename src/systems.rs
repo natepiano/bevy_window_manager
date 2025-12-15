@@ -482,7 +482,10 @@ fn try_apply_restore(
             );
             primary_window.set_position_and_size(position, size);
         },
-        #[cfg(all(not(target_os = "windows"), feature = "workaround-macos-scale-compensation"))]
+        #[cfg(all(
+            not(target_os = "windows"),
+            feature = "workaround-macos-scale-compensation"
+        ))]
         MonitorScaleStrategy::LowerToHigher => {
             let position = target.compensated_position();
             let size = target.compensated_size();
