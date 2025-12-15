@@ -34,6 +34,7 @@ default = [
   "workaround-winit-3124",
   "workaround-bevy-22060",
   "workaround-macos-scale-compensation",
+  "workaround-macos-drag-back-reset",
 ]
 
 # Windows DPI drag bounce workaround - remove when winit includes PR #4341
@@ -84,6 +85,22 @@ workaround-winit-3124 = []
 # Remove when using Bevy 0.18+, which includes the fix.
 workaround-bevy-22060 = []
 
+# macOS W4 drag-back size reset workaround
+# Issue: https://github.com/rust-windowing/winit/issues/4441
+#
+# When restoring a window from High DPI to Low DPI, AppKit caches the Phase 1
+# wrong-scale size. When the user drags the window back to the High DPI monitor,
+# AppKit resets the window to that cached size. This workaround detects the
+# drag-back and re-applies the correct size.
+#
+# Trade-off: Causes a brief visual flash when the correction is applied. This only
+# occurs in the specific scenario of: launching from a high-scale monitor, restoring
+# to a low-scale monitor, then dragging the window back to the high-scale monitor.
+# The flash is unavoidable without an upstream fix to winit #4441.
+#
+# Requires: workaround-macos-scale-compensation (the two-phase restore creates the W4 scenario)
+workaround-macos-drag-back-reset = ["workaround-macos-scale-compensation"]
+
 [lib]
 name = "bevy_window_manager"
 path = "src/lib.rs"
@@ -104,6 +121,7 @@ windows = { version = "0.58", features = [
   "Win32_UI_Shell",
   "Win32_Graphics_Gdi",
 ] }
+
 
 [profile.dev.package."*"]
 opt-level = 3

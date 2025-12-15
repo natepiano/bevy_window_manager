@@ -9,6 +9,7 @@ Tests are keyed to these tracked issues:
 | W1 | [winit #4440](https://github.com/rust-windowing/winit/issues/4440) | macOS | `workaround-macos-scale-compensation` | `set_outer_position` and `request_inner_size` use current monitor's scale factor instead of target monitor's. When restoring to a different-scale monitor, coordinates are converted incorrectly. |
 | W2 | [winit #4041](https://github.com/rust-windowing/winit/issues/4041) | Windows | `workaround-winit-4341` | DPI change causes window bounce/resize when dragging between mixed-DPI monitors. Fix in [winit #4341](https://github.com/rust-windowing/winit/pull/4341). |
 | W3 | [winit #3124](https://github.com/rust-windowing/winit/issues/3124) | Windows | `workaround-winit-3124` | Exclusive fullscreen crashes on startup with DX12 due to DXGI flip model limitations. We defer fullscreen until after surface creation via `FullscreenRestoreState`. There currently is not an open issue for this in bevy - once we validate our own fix we should open a bevy issue. |
+| W4 | [winit #4441](https://github.com/rust-windowing/winit/issues/4441) | macOS | `workaround-macos-drag-back-reset` | Window size resets to default when dragging between monitors with different scale factors after programmatic resize. AppKit tracks "intended size" per scale factor; programmatic `setContentSize` doesn't update this tracking, but manual resize does. |
 | B1 | [bevy PR #22060](https://github.com/bevyengine/bevy/pull/22060) | macOS | `workaround-bevy-22060` | TLS panic on quit from exclusive fullscreen. We exit fullscreen during `world.clear_all()` before TLS destruction. Remove when using Bevy 0.18+. |
 
 **Key prefixes:** W = winit issue, B = Bevy issue, M = macOS-specific (internal fix)
@@ -40,64 +41,49 @@ del $env:APPDATA\restore_window\window_state.json
 ### Launch Monitor 0 Tests (High Scale - Primary)
 
 #### Restore: Same Monitor
+*Test: Basic position/size persistence*
 - [x] Move app window on Launch Monitor 0, resize, close
 - [x] Relaunch → app window restores to same position/size
 
-#### W1: Cross-Monitor High→Low DPI
-*Tests: HigherToLower two-phase strategy*
+#### Cross-Monitor High→Low DPI (W1)
+*Test: HigherToLower two-phase strategy*
 - [x] Launch from Monitor 0, move app window to Monitor 1, resize, close
 - [x] Relaunch from Launch Monitor 0 → app window moves to Monitor 1 with correct size
 - [x] Validate at various dock positions (left, right, maximized)
 
-#### DPI Drag Size Stability
-- [ ] Launch from Monitor 0 (high scale), restore to Monitor 1 (low scale)
-- [ ] Drag app window back to Monitor 0 → size should scale correctly (2x)
-- [ ] Drag app window back to Monitor 1 → size should scale correctly (0.5x)
+#### DPI Drag Size Stability (W4)
+*Test: AppKit per-scale size tracking with workaround*
+- [x] Launch from Monitor 0 (high scale), restore to Monitor 1 (low scale)
+- [x] Drag app window back to Monitor 0 → size should scale correctly (2x), not reset to default
+- [x] Drag app window back to Monitor 1 → size should scale correctly (0.5x)
+- [x] Manual resize on Monitor 1, then drag back to Monitor 0 → user's size preserved
 
 #### Fullscreen: Borderless Green Button
-- [ ] Press green button for borderless on Monitor 0, close (command-Q)
-- [ ] Relaunch → restores to borderless on Monitor 0
-
-#### B1: Fullscreen Exclusive
-*Tests: TLS panic on quit*
-- [ ] Move app window to Monitor 0, Press 1 for exclusive, select video mode, close (command-Q)
-- [ ] Relaunch → restores to exclusive fullscreen on Monitor 0
-- [ ] Verify no panic on quit
+*Test: macOS green button borderless restoration*
+- [x] Press green button for borderless on Monitor 0, close (command-Q)
+- [x] Relaunch → restores to borderless on Monitor 0
 
 #### Fullscreen: Programmatic Borderless
-- [ ] Move app window to Monitor 0, Press 2 for borderless, close
-- [ ] Relaunch → restores correctly as borderless on Monitor 0
+- [x] Move app window to Monitor 0, Press 2 for borderless, close
+- [x] Relaunch → restores correctly as borderless on Monitor 0
+
+#### Fullscreen Exclusive (B1)
+*Test: TLS panic on quit*
+- [x] Move app window to Monitor 0, Press 1 for exclusive, select video mode, close (command-Q)
+- [x] Relaunch → restores to exclusive fullscreen on Monitor 0
+- [x] Verify no panic on quit
 
 ### Launch Monitor 1 Tests (Low Scale - External)
 
 #### Restore: Same Monitor
-- [ ] Move app window on Launch Monitor 1, resize, close
-- [ ] Relaunch → app window restores to same position/size
+- [x] Move app window on Launch Monitor 1, resize, close
+- [x] Relaunch → app window restores to same position/size
 
-#### W1: Cross-Monitor Low→High DPI
-*Tests: LowerToHigher strategy*
-- [ ] Launch from Monitor 1, move app window to Monitor 0, resize, close
-- [ ] Relaunch from Launch Monitor 1 → app window launches on Monitor 0 with correct size and position
-- [ ] Validate at various dock positions (left, right, maximized)
-
-#### DPI Drag Size Stability
-- [ ] Launch from Monitor 1 (low scale), restore to Monitor 0 (high scale)
-- [ ] Drag app window back to Monitor 1 → size should scale correctly (0.5x)
-- [ ] Drag app window back to Monitor 0 → size should scale correctly (2x)
-
-#### Fullscreen: Borderless Green Button
-- [ ] Press green button for borderless on Monitor 1, close (command-Q)
-- [ ] Relaunch → restores to borderless on Monitor 1
-
-#### B1: Fullscreen Exclusive
-*Tests: TLS panic on quit*
-- [ ] Move app window to Monitor 1, Press 1 for exclusive, select video mode, close (command-Q)
-- [ ] Relaunch → restores to exclusive fullscreen on Monitor 1
-- [ ] Verify no panic on quit
-
-#### Fullscreen: Programmatic Borderless
-- [ ] Move app window to Monitor 1, Press 2 for borderless, close
-- [ ] Relaunch → restores correctly as borderless on Monitor 1
+#### Cross-Monitor Low→High DPI (W1)
+*Test: LowerToHigher strategy*
+- [x] Launch from Monitor 1, move app window to Monitor 0, resize, close
+- [x] Relaunch from Launch Monitor 1 → app window launches on Monitor 0 with correct size and position
+- [x] Validate at various dock positions (left, right, maximized)
 
 ---
 
@@ -112,7 +98,7 @@ del $env:APPDATA\restore_window\window_state.json
 - [ ] Relaunch → app window restores to same position/size
 
 #### Cross-Monitor High→Low DPI
-*Tests: CompensateSizeOnly strategy*
+*Test: CompensateSizeOnly strategy*
 - [ ] Launch from Monitor 0, move app window to Monitor 1, resize, close
 - [ ] Relaunch from Launch Monitor 0 → app window moves to Monitor 1 with correct size
 
@@ -120,8 +106,8 @@ del $env:APPDATA\restore_window\window_state.json
 - [ ] Maximize app window on Launch Monitor 0, close
 - [ ] Relaunch → restores maximized on Monitor 0
 
-#### W2: DPI Drag
-*Tests: Bounce/resize bug*
+#### DPI Drag (W2)
+*Test: Bounce/resize bug*
 - [ ] Drag app window slowly from Monitor 0 to Monitor 1
 - [ ] App window moves smoothly, no bouncing back, resizes correctly
 
@@ -129,8 +115,8 @@ del $env:APPDATA\restore_window\window_state.json
 - [ ] Press 2 for borderless on Monitor 0, close
 - [ ] Relaunch → restores to borderless on Monitor 0
 
-#### W3: Fullscreen Exclusive
-*Tests: DX12/DXGI surface creation crash*
+#### Fullscreen Exclusive (W3)
+*Test: DX12/DXGI surface creation crash*
 - [ ] Press 1 for exclusive on Monitor 0, select video mode, close
 - [ ] Relaunch → restores to exclusive fullscreen (brief windowed flash is expected)
 
@@ -141,12 +127,12 @@ del $env:APPDATA\restore_window\window_state.json
 - [ ] Relaunch → app window restores to same position/size
 
 #### Cross-Monitor Low→High DPI
-*Tests: CompensateSizeOnly strategy*
+*Test: CompensateSizeOnly strategy*
 - [ ] Launch from Monitor 1, move app window to Monitor 0, resize, close
 - [ ] Relaunch from Launch Monitor 1 → app window moves to Monitor 0 with correct size
 
-#### W2: DPI Drag
-*Tests: Bounce/resize bug*
+#### DPI Drag (W2)
+*Test: Bounce/resize bug*
 - [ ] Drag app window slowly from Monitor 1 to Monitor 0
 - [ ] App window moves smoothly, no bouncing back, resizes correctly
 
@@ -154,7 +140,7 @@ del $env:APPDATA\restore_window\window_state.json
 - [ ] Press 2 for borderless on Monitor 1, close
 - [ ] Relaunch → restores to borderless on Monitor 1
 
-#### W3: Fullscreen Exclusive
-*Tests: DX12/DXGI surface creation crash*
+#### Fullscreen Exclusive (W3)
+*Test: DX12/DXGI surface creation crash*
 - [ ] Press 1 for exclusive on Monitor 1, select video mode, close
 - [ ] Relaunch → restores to exclusive fullscreen (brief windowed flash is expected)

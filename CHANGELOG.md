@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Windows platform support with proper multi-monitor window restore
 - Windows DPI drag fix: workaround for window bouncing/resizing bug when dragging between monitors with different scale factors ([winit #4041](https://github.com/rust-windowing/winit/issues/4041), fix in [PR #4341](https://github.com/rust-windowing/winit/pull/4341) not yet released)
+- macOS drag-back size fix: workaround for window size resetting when dragging back to launch monitor after cross-DPI restore ([winit #4441](https://github.com/rust-windowing/winit/issues/4441)). **Trade-off:** Causes a brief visual flash in this rare scenario (launching from high-scale, restoring to low-scale, then dragging back to high-scale). Controlled by `workaround-macos-drag-back-reset` feature flag.
 - `app_name` field in `WindowState` to track which application saved the state file
 
 ### Fixed

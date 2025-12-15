@@ -11,6 +11,8 @@ use bevy::winit::WINIT_WINDOWS;
 use super::state;
 use super::types::RestoreWindowConfig;
 use super::types::WindowState;
+#[cfg(all(target_os = "macos", feature = "workaround-macos-drag-back-reset"))]
+use crate::macos_drag_back_fix::DragBackSizeProtection;
 use crate::monitors::Monitors;
 #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
 use crate::types::FullscreenRestoreState;
@@ -372,10 +374,36 @@ pub fn restore_primary_window(
         return; // Wait one more frame for the state change to take effect
     }
 
+    // Check if this is a HigherToLower restore about to complete (for W4 protection)
+    #[cfg(all(target_os = "macos", feature = "workaround-macos-drag-back-reset"))]
+    let was_higher_to_lower = matches!(
+        target.monitor_scale_strategy,
+        MonitorScaleStrategy::HigherToLower(WindowRestoreState::ApplySize)
+    );
+
     if matches!(
         try_apply_restore(&target, &monitors, &mut primary_window),
         RestoreStatus::Complete
     ) {
+        // Insert W4 drag-back protection for HigherToLower restores
+        #[cfg(all(target_os = "macos", feature = "workaround-macos-drag-back-reset"))]
+        if was_higher_to_lower {
+            debug!(
+                "[Restore] Inserting DragBackSizeProtection: size={}x{} launch_scale={} restored_scale={}",
+                target.width, target.height, target.starting_scale, target.target_scale
+            );
+            // Phase 1 cached size is the physical size we set at launch scale before moving.
+            // This is what AppKit will cache and restore when dragging back (W4 behavior).
+            let phase1_cached_size = UVec2::new(target.width, target.height);
+            commands.insert_resource(DragBackSizeProtection {
+                expected_physical_size: UVec2::new(target.width, target.height),
+                launch_scale: target.starting_scale,
+                restored_scale: target.target_scale,
+                phase1_cached_size,
+                state: crate::macos_drag_back_fix::CorrectionState::WaitingForDragBack,
+            });
+        }
+
         commands.remove_resource::<TargetPosition>();
     }
 }
