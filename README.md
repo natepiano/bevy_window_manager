@@ -126,22 +126,6 @@ In your `Cargo.toml`, you can selectively enable features:
 bevy_window_manager = { version = "0.17", default-features = false, features = ["workaround-winit-4341"] }
 ```
 
-## macOS Fullscreen Crash Fix
-
-This plugin includes a workaround for a Bevy bug on macOS where quitting the application while in exclusive fullscreen mode causes a panic. The crash occurs because Bevy stores windows in thread-local storage (TLS), and when windows are dropped during TLS destruction, winit's cleanup code triggers a macOS callback that tries to access already-destroyed TLS.
-
-This plugin prevents the crash by exiting fullscreen before TLS destruction begins. See [docs/bevy-issue-macos-fullscreen-panic.md](docs/bevy-issue-macos-fullscreen-panic.md) for full technical details.
-
-This issue will be fixed upstream in Bevy: https://github.com/bevyengine/bevy/pull/22060 - currently merged in bevy 0.18.0-dev.
-
-## Windows DPI Drag Fix
-
-On Windows with multiple monitors that have **different scale factors** (e.g., a 4K monitor at 200% and a 1440p monitor at 175%), winit has a bug where dragging a window between monitors causes the window to bounce back or resize incorrectly. This is particularly noticeable on Windows 11 24H2.
-
-This plugin automatically installs a window subclass that intercepts `WM_DPICHANGED` messages and handles them using Microsoft's recommended approach, allowing smooth window dragging between monitors with different DPI scales.
-
-This issue is tracked in [winit #4041](https://github.com/rust-windowing/winit/issues/4041) and fixed in [PR #4341](https://github.com/rust-windowing/winit/pull/4341) (merged but not yet released). This workaround will be removed when winit releases the fix.
-
 ## License
 
 bevy_window_manager is free, open source and permissively licensed!
