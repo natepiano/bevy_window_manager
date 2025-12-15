@@ -9,17 +9,11 @@ A Bevy plugin for window state persistence and multi-monitor utilities.
 
 ## Motivation
 
-Originally created as a mechanism to restore a window to its last known position when launching. I quickly discovered that on my MacBook Pro with Retina display (scale factor 2.0) and my external monitor with a scale factor 1.0, there were numerous issues with saving. Especially painful is the situation that winit uses the scale factor of where you're typing (launching) the application so that when it lands on a different monitor, you cannot reliably restore the window to its last known position when launching from a monitor with a different scale factor than the application window's target monitor.  Painful.
+Originally created as a mechanism to restore a window to its last known position when launching. I quickly discovered that on my MacBook Pro with Retina display (scale factor 2.0) and my external monitor with a scale factor 1.0, there were numerous issues with saving. Especially painful is the situation that winit uses the scale factor of where you're typing (launching) the application so that when it lands on a different monitor, you cannot reliably restore the window to its last known position when launching from a monitor with a different scale factor than the application window's target monitor.
 
 `bevy_window_manager` plugin works around these issues by using winit directly to capture actual window positions and compensate for scale factor conversions. See the documentation in [`src/lib.rs`](src/lib.rs) for technical details.
 
-I wrote `bevy_window_manager` and released it for MacOS and left a note (below) that it's not yet tested on Windows and Linux. PRs Welcome. But it bothered me enough that i decided to install Windows in a virtual machine on my Mac and discovered that scale issue also plague windows. And there are even other issues with winit where there is an invisible border around a window, preventing precise placement.  
-
-If you're trying this out with Windows from 0.17.0 published on crates.io, and you have differently scaled monitors (something Windows gives you far more control over than MacOS), then you'll experience the same issues - and in fact **0.17.0 of this plugin is broken for Windows** when restoring the primary window across differently scaled monitors so don't use this if that's your setup! I don't yet know about Linux. 
-
-With that said, I'vemade a bunch of fixes for Windows and I'm testing it here on 0.17.1 - I _think_ this version will work for you on Windows if you want to refer to it on github directly in your Cargo.toml. Once I finish testing it I will publish 0.17.1.  
-
-Then if I can get Linux running in a VM that will work with my monitors I will test it there also.
+Windows has similar scale factor issues, plus additional quirks like invisible window borders that prevent precise placement. As of 0.17.1, this plugin includes workarounds for Windows multi-monitor setups with monitors at different scale factors (see [Platform Support](#platform-support) for testing notes).
 
 Future directions include comprehensive multi-monitor lifecycle support.
 
@@ -82,13 +76,17 @@ Requires `use bevy_window_manager::WindowExt`:
 
 ## Platform Support
 
-| Platform | Status |
-|----------|--------|
-| macOS    | Tested |
-| Windows  | Tested |
-| Linux    | Untested |
+| Platform | Status | Notes |
+|----------|--------|-------|
+| macOS    | ✅ Tested | Native hardware with multiple monitors at different scales |
+| Windows  | ✅ Tested | VMware VM with multi-monitor, different scale factors |
+| Linux    | ❓ Untested | PRs welcome! |
 
-This plugin was originally created to handle a MacBook Pro with external monitors at different scale factors, which caused window position/size corruption. Windows testing revealed additional issues with multi-monitor and multi-scale setups that have been fixed (see [CHANGELOG](CHANGELOG.md)). Linux support is untested - if you try it, please let me know how it goes. PRs welcome!
+This plugin was originally created to handle a MacBook Pro with external monitors at different scale factors, which caused window position/size corruption. Windows multi-monitor setups with monitors at different scale factors are now supported as of 0.17.1 (see [CHANGELOG](CHANGELOG.md)).
+
+**Note on Windows testing**: Windows support has been tested in a VMware virtual machine with multiple monitors at different scale factors. Native Windows installations may behave differently - if you encounter issues, please open an issue with details about your monitor configuration.
+
+Linux support is untested - if you try it, please let me know how it goes. PRs welcome!
 
 ## Feature Flags (Platform Workarounds)
 

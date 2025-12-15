@@ -93,24 +93,29 @@ head -20 CHANGELOG.md
 <BumpVersion>
 ## STEP 3: Bump Version
 
-→ **I will update `Cargo.toml` version to ${VERSION}**
+→ **I will check and update version if needed**
 
 ```bash
 grep "^version" Cargo.toml
 ```
 
-**Update Cargo.toml:**
-Set `version = "${VERSION}"`
+**Check current version:**
+- If Cargo.toml already has `version = "${VERSION}"`, skip the Cargo.toml update
+- If version differs, update `version = "${VERSION}"`
 
 **Update CHANGELOG.md:**
 Change `## [Unreleased]` to `## [${VERSION}] - $(date +%Y-%m-%d)` if present
 
-**Commit the version bump:**
+**Commit changes (if any):**
+- Only add files that were actually modified
+- If Cargo.toml was unchanged, only add CHANGELOG.md (if it changed)
+- If no files changed, skip the commit entirely and continue to next step
+
 ```bash
 git add Cargo.toml Cargo.lock CHANGELOG.md
 git commit -m "chore: bump version to ${VERSION}"
 ```
-→ **Auto-check**: Continue if commit succeeds
+→ **Auto-check**: Continue if commit succeeds OR if no changes needed (version already correct)
 </BumpVersion>
 
 <PublishCrate>
