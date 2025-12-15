@@ -200,6 +200,7 @@ pub enum MonitorScaleStrategy {
     #[cfg(target_os = "windows")]
     CompensateSizeOnly,
     /// Low→High DPI (1x→2x) - apply with compensation (ratio < 1). macOS only.
+    #[cfg(all(not(target_os = "windows"), feature = "workaround-macos-scale-compensation"))]
     LowerToHigher,
     /// High→Low DPI (2x→1x) - requires two phases (see enum docs). macOS only.
     HigherToLower(WindowRestoreState),
@@ -252,6 +253,7 @@ impl TargetPosition {
     /// Position compensated for scale factor differences.
     ///
     /// Multiplies position by the ratio to account for winit dividing by launch scale.
+    #[cfg(all(not(target_os = "windows"), feature = "workaround-macos-scale-compensation"))]
     #[must_use]
     pub fn compensated_position(&self) -> IVec2 {
         let ratio = self.ratio();

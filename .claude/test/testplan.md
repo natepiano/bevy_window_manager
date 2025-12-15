@@ -94,53 +94,53 @@ del $env:APPDATA\restore_window\window_state.json
 ### Launch Monitor 0 Tests (High Scale - Primary)
 
 #### Restore: Same Monitor
-- [ ] Move app window on Launch Monitor 0, resize, close
-- [ ] Relaunch → app window restores to same position/size
+- [x] Move app window on Launch Monitor 0, resize, close
+- [x] Relaunch → app window restores to same position/size
 
 #### Cross-Monitor High→Low DPI
 *Test: CompensateSizeOnly strategy*
-- [ ] Launch from Monitor 0, move app window to Monitor 1, resize, close
-- [ ] Relaunch from Launch Monitor 0 → app window moves to Monitor 1 with correct size
+- [x] Launch from Monitor 0, move app window to Monitor 1, resize, close
+- [x] Relaunch from Launch Monitor 0 → app window moves to Monitor 1 with correct size
 
 #### Restore Maximized Window
-- [ ] Maximize app window on Launch Monitor 0, close
-- [ ] Relaunch → restores maximized on Monitor 0
+- [x] Maximize app window on Launch Monitor 0, close
+- [x] Relaunch → restores maximized on Monitor 0
 
 #### DPI Drag (W2)
 *Test: Bounce/resize bug*
-- [ ] Drag app window slowly from Monitor 0 to Monitor 1
-- [ ] App window moves smoothly, no bouncing back, resizes correctly
+- [x] Drag app window slowly from Monitor 0 to Monitor 1
+- [x] App window moves smoothly, no bouncing back, resizes correctly
 
 #### Fullscreen: Borderless
-- [ ] Press 2 for borderless on Monitor 0, close
-- [ ] Relaunch → restores to borderless on Monitor 0
+- [x] Press 2 for borderless on Monitor 0, close
+- [x] Relaunch → restores to borderless on Monitor 0
 
 #### Fullscreen Exclusive (W3)
 *Test: DX12/DXGI surface creation crash*
-- [ ] Press 1 for exclusive on Monitor 0, select video mode, close
-- [ ] Relaunch → restores to exclusive fullscreen (brief windowed flash is expected)
+- [x] Press 1 for exclusive on Monitor 0, select video mode, close
+- [x] Relaunch → restores to exclusive fullscreen (brief windowed flash is expected)
 
 ### Launch Monitor 1 Tests (Low Scale - External)
 
 #### Restore: Same Monitor
-- [ ] Move app window on Launch Monitor 1, resize, close
-- [ ] Relaunch → app window restores to same position/size
+- [x] Move app window on Launch Monitor 1, resize, close
+- [x] Relaunch → app window restores to same position/size
 
 #### Cross-Monitor Low→High DPI
 *Test: CompensateSizeOnly strategy*
-- [ ] Launch from Monitor 1, move app window to Monitor 0, resize, close
-- [ ] Relaunch from Launch Monitor 1 → app window moves to Monitor 0 with correct size
+- [x] Launch from Monitor 1, move app window to Monitor 0, resize, close
+- [x] Relaunch from Launch Monitor 1 → app window moves to Monitor 0 with correct size
 
 #### DPI Drag (W2)
 *Test: Bounce/resize bug*
-- [ ] Drag app window slowly from Monitor 1 to Monitor 0
-- [ ] App window moves smoothly, no bouncing back, resizes correctly
+- [x] Drag app window slowly from Monitor 1 to Monitor 0
+- [x] App window moves smoothly, no bouncing back, resizes correctly
 
 #### Fullscreen: Borderless
-- [ ] Press 2 for borderless on Monitor 1, close
-- [ ] Relaunch → restores to borderless on Monitor 1
+- [x] Press 2 for borderless on Monitor 1, close
+- [x] Relaunch → restores to borderless on Monitor 1
 
 #### Fullscreen Exclusive (W3)
 *Test: DX12/DXGI surface creation crash*
-- [ ] Press 1 for exclusive on Monitor 1, select video mode, close
-- [ ] Relaunch → restores to exclusive fullscreen (brief windowed flash is expected)
+- [x] Press 1 for exclusive on Monitor 1, select video mode, close
+- [x] Relaunch → restores to exclusive fullscreen (brief windowed flash is expected)
