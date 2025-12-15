@@ -8,7 +8,11 @@ This crate tracks Bevy's release cycle:
 - **Major.Minor** matches Bevy version (e.g., `0.17.x` for Bevy 0.17)
 - **Patch** versions are independent (bug fixes, features that don't require Bevy changes)
 
-When releasing a new minor version (e.g., `0.17.0`), a release branch is created (`release/0.17`) to support patch releases while `main` can move forward to the next Bevy version.
+Each release gets both a tag and a release branch with 1:1 correspondence to crates.io:
+- Tag: `v0.17.1`
+- Branch: `release-0.17.1`
+
+This follows Bevy's release model and ensures every published version can be easily referenced.
 
 ## Usage
 - `/release_version X.Y.Z-rc.N` - Release as RC version (e.g., `0.17.0-rc.1`)
@@ -34,7 +38,7 @@ Before starting the release, verify:
     **STEP 3:** Execute <BumpVersion/>
     **STEP 4:** Execute <PublishCrate/>
     **STEP 5:** Execute <PushToGit/>
-    **STEP 6:** Execute <CreateReleaseBranch/> (only for X.Y.0 releases)
+    **STEP 6:** Execute <CreateReleaseBranch/>
     **STEP 7:** Execute <CreateGitHubRelease/>
     **STEP 8:** Execute <PostReleaseVerification/>
     **STEP 9:** Execute <PrepareNextReleaseCycle/>
@@ -149,28 +153,25 @@ git push origin "v${VERSION}"
 </PushToGit>
 
 <CreateReleaseBranch>
-## STEP 6: Create Release Branch (X.Y.0 releases only)
+## STEP 6: Create Release Branch
 
 **Skip this step if:**
-- This is a patch release (X.Y.Z where Z > 0)
 - This is an RC release (X.Y.Z-rc.N)
 
-**For new minor versions (X.Y.0)**, create a release branch to support future patch releases while `main` moves to the next Bevy version:
+**Create a release branch** with 1:1 correspondence to the crates.io version:
 
 ```bash
-git branch release/X.Y v${VERSION}
-git push origin release/X.Y
+git branch release-${VERSION} v${VERSION}
+git push origin release-${VERSION}
 ```
 
-Example for version 0.17.0:
+Example for version 0.17.1:
 ```bash
-git branch release/0.17 v0.17.0
-git push origin release/0.17
+git branch release-0.17.1 v0.17.1
+git push origin release-0.17.1
 ```
 
 → **Auto-check**: Continue if branch created and pushed successfully
-
-**Note**: Future patch releases (0.17.1, 0.17.2) should be made from this branch, not `main`.
 </CreateReleaseBranch>
 
 <CreateGitHubRelease>
@@ -219,14 +220,13 @@ git push origin main
 **✅ Release complete!**
 </PrepareNextReleaseCycle>
 
-## Patch Release Workflow
+## Development Workflow
 
-For patch releases on an existing minor version (e.g., 0.17.1):
+Development happens on `main`. Each release creates its own `release-X.Y.Z` branch with 1:1 correspondence to the published crates.io version.
 
-1. Checkout the release branch: `git checkout release/0.17`
-2. Cherry-pick or apply fixes
-3. Run `/release_version 0.17.1`
-4. Skip the "Create Release Branch" step (branch already exists)
+To reference a specific release:
+- Use the tag: `git checkout v0.17.1`
+- Use the branch: `git checkout release-0.17.1`
 
 ## Rollback Instructions
 
@@ -238,6 +238,10 @@ git tag -d "v${VERSION}"
 
 # Delete remote tag
 git push origin ":refs/tags/v${VERSION}"
+
+# Delete release branch (if created)
+git branch -d "release-${VERSION}"
+git push origin ":release-${VERSION}"
 
 # Revert the version bump commit
 git revert HEAD
