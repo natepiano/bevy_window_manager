@@ -4,7 +4,7 @@ version = "0.17.2"
 edition = "2024"
 description = "Bevy plugin for window state management, multi-monitor support, and position restoration"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/natemccoy/bevy_window_manager"
+repository = "https://github.com/natepiano/bevy_window_manager"
 keywords = ["bevy", "window", "monitor", "multi-monitor", "gamedev"]
 categories = ["game-development", "gui"]
 
