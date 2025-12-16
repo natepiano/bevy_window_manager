@@ -16,6 +16,7 @@
 
 use std::collections::HashMap;
 
+use bevy::ecs::system::NonSendMarker;
 use bevy::prelude::*;
 use bevy::window::Monitor;
 use bevy::window::MonitorSelection;
@@ -24,6 +25,7 @@ use bevy::window::VideoMode;
 use bevy::window::VideoModeSelection;
 use bevy::window::WindowMode;
 use bevy::window::WindowPosition;
+use bevy::winit::WINIT_WINDOWS;
 use bevy_brp_extras::BrpExtrasPlugin;
 use bevy_window_manager::Monitors;
 use bevy_window_manager::WindowExt;
@@ -42,7 +44,15 @@ fn main() {
         .add_plugins(BrpExtrasPlugin::default())
         .init_resource::<SelectedVideoModes>()
         .add_systems(Startup, setup)
-        .add_systems(Update, (update_display, handle_input))
+        .add_systems(
+            Update,
+            (
+                update_display,
+                handle_input,
+                debug_winit_monitor,
+                debug_window_changed,
+            ),
+        )
         .run();
 }
 
@@ -185,7 +195,7 @@ fn update_display(
          {row2}\n\
          {row3}\n\
          \n\
-         Mode: {:?} (set value only, not dynamically updated)\n\
+         Mode:           {:?} (set value only, not dynamically updated)\n\
          Effective Mode: {:?}\n\
          \n\
          Video Modes (Up/Down to select):\n\
@@ -365,4 +375,91 @@ fn build_video_modes_display(
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+// --- Debug: Winit Monitor Detection ---
+
+/// Debug system that runs every frame and logs winit-detected monitor changes.
+fn debug_winit_monitor(
+    window: Single<Entity, With<PrimaryWindow>>,
+    monitors: Res<Monitors>,
+    mut cached_monitor: Local<Option<usize>>,
+    _non_send: NonSendMarker,
+) {
+    let window_entity = *window;
+
+    let winit_monitor_index: Option<usize> = WINIT_WINDOWS.with(|ww| {
+        let ww = ww.borrow();
+        ww.get_window(window_entity).and_then(|winit_window| {
+            winit_window.current_monitor().and_then(|current_monitor| {
+                let pos = current_monitor.position();
+                monitors.at(pos.x, pos.y).map(|mon| mon.index)
+            })
+        })
+    });
+
+    if *cached_monitor != winit_monitor_index {
+        info!(
+            "[debug_winit_monitor] Monitor changed: {:?} -> {:?}",
+            *cached_monitor, winit_monitor_index
+        );
+        *cached_monitor = winit_monitor_index;
+    }
+}
+
+/// Cached state for detecting what changed in Window component.
+#[derive(Default)]
+struct CachedWindowDebug {
+    position: Option<WindowPosition>,
+    width:    u32,
+    height:   u32,
+    mode:     Option<WindowMode>,
+    focused:  bool,
+}
+
+/// Debug system that logs when Changed<Window> fires and what changed.
+fn debug_window_changed(
+    window: Single<&Window, (With<PrimaryWindow>, Changed<Window>)>,
+    mut cached: Local<CachedWindowDebug>,
+) {
+    let w = *window;
+
+    let position_changed = cached.position.as_ref() != Some(&w.position);
+    let size_changed = cached.width != w.physical_width() || cached.height != w.physical_height();
+    let mode_changed = cached.mode.as_ref() != Some(&w.mode);
+    let focused_changed = cached.focused != w.focused;
+
+    let mut changes = Vec::new();
+    if position_changed {
+        changes.push(format!(
+            "position: {:?} -> {:?}",
+            cached.position, w.position
+        ));
+    }
+    if size_changed {
+        changes.push(format!(
+            "size: {}x{} -> {}x{}",
+            cached.width,
+            cached.height,
+            w.physical_width(),
+            w.physical_height()
+        ));
+    }
+    if mode_changed {
+        changes.push(format!("mode: {:?} -> {:?}", cached.mode, w.mode));
+    }
+    if focused_changed {
+        changes.push(format!("focused: {} -> {}", cached.focused, w.focused));
+    }
+
+    if !changes.is_empty() {
+        info!("[debug_window_changed] {}", changes.join(", "));
+    }
+
+    // Update cache
+    cached.position = Some(w.position.clone());
+    cached.width = w.physical_width();
+    cached.height = w.physical_height();
+    cached.mode = Some(w.mode.clone());
+    cached.focused = w.focused;
 }

@@ -7,6 +7,7 @@ Run automated integration tests for bevy_window_manager using BRP.
 **Examples**:
 - `/test macos 0` - Run macOS tests on monitor 0
 - `/test windows 1` - Run Windows tests on monitor 1
+- `/test linux 0` - Run Linux tests (Wayland + X11) on monitor 0
 
 **Arguments**: $ARGUMENTS
 
@@ -32,7 +33,7 @@ Do NOT continue running more tests after a failure. Stop, explain what happened,
 <ParseArguments>
 Parse $ARGUMENTS → extract platform and monitor_index.
 
-Valid platforms: macos, windows, x11, wayland
+Valid platforms: macos, windows, linux
 
 Store as ${PLATFORM} and ${MONITOR_INDEX}.
 </ParseArguments>
@@ -41,26 +42,63 @@ Store as ${PLATFORM} and ${MONITOR_INDEX}.
 Load `.claude/config/${PLATFORM}_monitor${MONITOR_INDEX}.json`
 
 Extract: platform, launch_monitor, example_ron_path, test_ron_dir, tests array.
+
+Open the RON file in Zed for inspection: `zed ${example_ron_path}`
 </LoadTestConfig>
 
 <DiscoverMonitors>
-1. Backup RON: `mv "${example_ron_path}" "${example_ron_path}.backup" 2>/dev/null || true`
+1. Launch with `mcp__brp__brp_launch_bevy_example` target_name "restore_window"
 
-2. Launch with `mcp__brp__brp_launch_bevy_example` target_name "restore_window"
-
-3. Query `mcp__brp__world_get_resources` resource "bevy_window_manager::monitors::Monitors"
+2. Query `mcp__brp__world_get_resources` resource "bevy_window_manager::monitors::Monitors"
    - Store ${MONITORS} array with: index, scale, position, size
 
-4. Detect terminal monitor (macOS):
-   - `osascript -e 'tell application "System Events" to get position of first window of process "Zed"'`
-   - Find which monitor contains this position → ${DETECTED_MONITOR}
+3. Query for video modes using `mcp__brp__world_query`:
+   - data: `{"components": ["bevy_window::monitor::Monitor"]}`
+   - filter: `{}`
+   - For each monitor, extract the `video_modes` array
+   - Randomly select one video mode per monitor
+   - Store all discovered values as <TemplateVariables/>
+
+   **Linux X11 video modes**: Video modes differ between Wayland and X11/XWayland.
+   - Shutdown the Wayland app
+   - Relaunch with `WAYLAND_DISPLAY= cargo run --example restore_window` (background)
+   - Wait for BRP ready, then query Monitor component again
+   - Store X11-specific video modes as `${MONITOR_X_X11_VIDEO_MODE_*}` variables
+   - Shutdown the X11 app
+
+4. Detect terminal monitor:
+   - **macOS**: `osascript -e 'tell application "System Events" to get position of first window of process "Zed"'`
+     - Find which monitor contains this position → ${DETECTED_MONITOR}
+   - **Linux**: Skip detection (single monitor 0 for now)
 
 5. Shutdown with `mcp__brp__brp_shutdown`
 
 6. If ${DETECTED_MONITOR} != ${MONITOR_INDEX}: STOP with error
+   - **Linux**: Skip this check (no detection available)
 
 Compute: ${NUM_MONITORS}, ${DIFFERENT_SCALES}
 </DiscoverMonitors>
+
+<TemplateVariables>
+Monitor properties (X = monitor index):
+- `${MONITOR_X_POS_X}` → Monitor X position X coordinate
+- `${MONITOR_X_POS_Y}` → Monitor X position Y coordinate
+- `${MONITOR_X_WIDTH}` → Monitor X width
+- `${MONITOR_X_HEIGHT}` → Monitor X height
+- `${MONITOR_X_SCALE}` → Monitor X scale factor
+
+Video mode properties (randomly selected per monitor):
+- `${MONITOR_X_VIDEO_MODE_WIDTH}` → Video mode width
+- `${MONITOR_X_VIDEO_MODE_HEIGHT}` → Video mode height
+- `${MONITOR_X_VIDEO_MODE_DEPTH}` → Video mode bit depth
+- `${MONITOR_X_VIDEO_MODE_REFRESH}` → Video mode refresh rate (millihertz)
+
+Linux X11-specific video modes (differ from Wayland):
+- `${MONITOR_X_X11_VIDEO_MODE_WIDTH}` → X11 video mode width
+- `${MONITOR_X_X11_VIDEO_MODE_HEIGHT}` → X11 video mode height
+- `${MONITOR_X_X11_VIDEO_MODE_DEPTH}` → X11 video mode bit depth
+- `${MONITOR_X_X11_VIDEO_MODE_REFRESH}` → X11 video mode refresh rate (millihertz)
+</TemplateVariables>
 
 <RunTests>
 For each test in order:
@@ -92,17 +130,38 @@ Check which fields exist:
 ## Step 2: Write RON File
 
 1. Read the RON template from `${test_ron_dir}/${test.ron_file}`
-2. Substitute template variables with discovered monitor values:
-   - `${MONITOR_X_POS_X}` → Monitor X position X coordinate
-   - `${MONITOR_X_POS_Y}` → Monitor X position Y coordinate
-   - `${MONITOR_X_WIDTH}` → Monitor X width
-   - `${MONITOR_X_HEIGHT}` → Monitor X height
-   - `${MONITOR_X_SCALE}` → Monitor X scale factor
+2. Substitute <TemplateVariables/> with discovered monitor values
+   - **Linux X11 tests**: For tests with `backend: "x11"`, substitute `${MONITOR_X_VIDEO_MODE_*}`
+     with the X11-specific values (`${MONITOR_X_X11_VIDEO_MODE_*}`) instead
 3. Write the substituted content to `${example_ron_path}`
 
 Use Read tool then Write tool (NEVER heredoc).
 
 ## Step 3: Launch App
+
+**Linux backend handling** (if platform is Linux and test has `backend` field):
+
+For `backend: "x11"`:
+- Prepend `WAYLAND_DISPLAY= ` to force X11/XWayland mode
+- Command: `WAYLAND_DISPLAY= cargo run --example restore_window ${FEATURE_FLAGS}`
+
+For `backend: "wayland"`:
+- Use standard launch (no env modification)
+
+**If test has `expected_log_warning`**:
+- Must launch with Bash to capture logs (not mcp__brp__brp_launch_bevy_example)
+- Use Bash with `run_in_background: true`:
+  ```
+  RUST_LOG=bevy_window_manager=warn cargo run --example restore_window
+  ```
+  **CRITICAL**: The command must be EXACTLY this. Do NOT add:
+  - No `2>&1` redirects
+  - No `&` backgrounding (use `run_in_background: true` parameter instead)
+  - No `sleep` commands
+  - No `echo` commands
+  - No pipes or additional shell commands
+- Wait for BRP ready: poll `mcp__brp__brp_status` with app_name "restore_window" until status is "running_with_brp"
+- After shutdown, use `TaskOutput` to retrieve logs and check for expected warning string
 
 **If test has `workaround_validation`**:
 - Determine feature flags from `workaround_validation.build_without` or default
@@ -114,7 +173,7 @@ Use Read tool then Write tool (NEVER heredoc).
   The command must be EXACTLY: `cargo run --example restore_window ${FEATURE_FLAGS}`
 - Wait for BRP ready: poll `mcp__brp__brp_status` with app_name "restore_window" until status is "running_with_brp"
 
-**Otherwise** (no workaround_validation):
+**Otherwise** (no workaround_validation, no expected_log_warning):
 - Use `mcp__brp__brp_launch_bevy_example` with target_name "restore_window"
 
 ## Step 4: Validate Restore
@@ -134,9 +193,16 @@ Query Window: `mcp__brp__world_query`
 
 Check fields in `validate` array:
 - `"position"`: window.position matches {"At": [POS_X, POS_Y]}
+  - **Note**: On Wayland (`backend: "wayland"`), position is always `Automatic` - skip position validation
 - `"size"`: window.resolution.physical_width/height match expected
 - `"monitor_index"`: scale_factor matches target monitor's scale
 - `"mode"`: window.mode matches expected
+  - **If test has `expected_mode`**: verify window.mode matches `expected_mode` instead of RON file
+    (used when actual mode differs from requested, e.g., exclusive→borderless fallback)
+
+**If test has `expected_log_warning`**:
+- Check captured log output contains the expected warning string
+- PASS if warning found, FAIL if not
 
 Record validation result (PASS or FAIL with details).
 

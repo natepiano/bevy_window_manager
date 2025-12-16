@@ -60,7 +60,12 @@
       "mcp__brp__brp_list_logs",
       "mcp__brp__brp_read_log",
       "mcp__brp__brp_extras_send_keys",
-      "Bash(kill:*)"
+      "Bash(kill:*)",
+      "Bash(RUST_LOG=bevy_window_manager=warn cargo run:*)",
+      "Bash(WAYLAND_DISPLAY= cargo run:*)",
+      "Bash(xxd:*)",
+      "Bash(xrandr --query:*)",
+      "Bash(journalctl:*)"
     ],
     "deny": [],
     "ask": []

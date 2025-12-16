@@ -1,0 +1,108 @@
+{
+  "platform": "linux",
+  "launch_monitor": 0,
+  "example_ron_path": "~/.config/restore_window/windows.ron",
+  "test_ron_dir": ".claude/config/ron/linux_0",
+
+  "tests": [
+    {
+      "id": "wayland_size_restore",
+      "name": "Wayland: Size Restore",
+      "description": "Size persistence (position not available on Wayland)",
+      "automation": "full",
+      "backend": "wayland",
+      "ron_file": "size_restore.ron",
+      "mutation": {
+        "target_monitor": "launch",
+        "size": [1000, 700]
+      },
+      "validate": ["size", "mode"]
+    },
+    {
+      "id": "wayland_fullscreen_borderless",
+      "name": "Wayland: Fullscreen Borderless",
+      "description": "Borderless fullscreen restore on Wayland",
+      "automation": "full",
+      "backend": "wayland",
+      "ron_file": "fullscreen_borderless.ron",
+      "validate": ["mode"]
+    },
+    {
+      "id": "wayland_exclusive_fallback",
+      "name": "Wayland: Exclusive→Borderless Fallback",
+      "description": "Verifies exclusive fullscreen gracefully falls back to borderless on Wayland with warning",
+      "automation": "full",
+      "backend": "wayland",
+      "ron_file": "fullscreen_exclusive.ron",
+      "expected_log_warning": "Exclusive fullscreen is not supported on Wayland, restoring as BorderlessFullscreen",
+      "validate": ["mode"],
+      "expected_mode": "BorderlessFullscreen"
+    },
+    {
+      "id": "x11_position_size_restore",
+      "name": "X11: Position and Size Restore",
+      "description": "Basic position/size persistence on X11",
+      "automation": "full",
+      "backend": "x11",
+      "ron_file": "position_size_restore.ron",
+      "mutation": {
+        "target_monitor": "launch",
+        "position_offset": [200, 150],
+        "size": [1000, 700]
+      },
+      "validate": ["position", "size", "mode"]
+    },
+    {
+      "id": "x11_fullscreen_borderless",
+      "name": "X11: Fullscreen Borderless",
+      "description": "Borderless fullscreen restore on X11",
+      "automation": "full",
+      "backend": "x11",
+      "ron_file": "fullscreen_borderless.ron",
+      "validate": ["mode"]
+    },
+    {
+      "id": "x11_fullscreen_exclusive",
+      "name": "X11: Fullscreen Exclusive",
+      "description": "Exclusive fullscreen restore on X11",
+      "automation": "full",
+      "backend": "x11",
+      "ron_file": "fullscreen_exclusive.ron",
+      "validate": ["mode"]
+    },
+    {
+      "id": "x11_keyboard_snap",
+      "name": "X11: Keyboard Snap Position (W5)",
+      "description": "Position saved correctly after keyboard snap - tests workaround for winit #4443",
+      "automation": "human_only",
+      "backend": "x11",
+      "workaround_keys": ["W5"],
+      "workaround_validation": {
+        "feature_flag": "workaround-winit-4443",
+        "build_without": "--no-default-features",
+        "build_with": "",
+        "without_behavior": "Position not saved after keyboard snap (Meta+Arrow)",
+        "with_behavior": "Position saved correctly after keyboard snap"
+      },
+      "ron_file": "keyboard_snap.ron",
+      "instructions_without_workaround": [
+        "## PHASE 1: Testing WITHOUT workaround (expect bug)",
+        "1. App built WITHOUT workaround-winit-4443",
+        "2. Use keyboard snap (Meta+Arrow) to tile the window",
+        "3. Close the app",
+        "4. Relaunch and check if position was restored",
+        "5. **EXPECTED BUG**: Position NOT restored (only size)"
+      ],
+      "instructions_with_workaround": [
+        "## PHASE 2: Testing WITH workaround (expect fix)",
+        "1. App rebuilt WITH workaround-winit-4443",
+        "2. Use keyboard snap (Meta+Arrow) to tile the window",
+        "3. Close the app",
+        "4. Relaunch and check if position was restored",
+        "5. **EXPECTED**: Position IS restored correctly"
+      ],
+      "success_criteria_without": "Bug confirmed: Position not saved after keyboard snap",
+      "success_criteria_with": "Fix confirmed: Position saved and restored after keyboard snap"
+    }
+  ]
+}
