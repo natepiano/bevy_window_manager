@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Linux X11 support with position and size restoration
+- Linux Wayland support with size and fullscreen restoration (position not available on Wayland)
+- X11 keyboard snap position fix: workaround for missing `Moved` events when window manager moves window via keyboard shortcuts like Meta+Arrow ([winit #4443](https://github.com/rust-windowing/winit/issues/4443), related [bevy #17576](https://github.com/bevyengine/bevy/issues/17576)). Controlled by `workaround-winit-4443` feature flag.
+
 ## [0.17.1] - 2025-12-15
 
 ### Added

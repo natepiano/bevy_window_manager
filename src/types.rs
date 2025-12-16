@@ -221,8 +221,8 @@ pub enum MonitorScaleStrategy {
 #[derive(Resource)]
 pub struct TargetPosition {
     /// Final clamped position (adjusted to fit within target monitor).
-    pub x:                        i32,
-    pub y:                        i32,
+    /// None on Wayland where clients can't access window position.
+    pub position:                 Option<IVec2>,
     /// Target width (content area, excluding window decoration).
     pub width:                    u32,
     /// Target height (content area, excluding window decoration).
@@ -241,37 +241,42 @@ pub struct TargetPosition {
 }
 
 impl TargetPosition {
-    /// Get the target position as an `IVec2`.
+    /// Get the target position as an `IVec2`, if available.
     #[must_use]
-    pub const fn position(&self) -> IVec2 { IVec2::new(self.x, self.y) }
+    pub const fn position(&self) -> Option<IVec2> { self.position }
 
     /// Get the target size as a `UVec2`.
     #[must_use]
     pub const fn size(&self) -> UVec2 { UVec2::new(self.width, self.height) }
 
     /// Scale ratio between starting and target monitors.
+    #[cfg(any(target_os = "windows", feature = "workaround-macos-scale-compensation"))]
     #[must_use]
     pub fn ratio(&self) -> f64 { self.starting_scale / self.target_scale }
 
     /// Position compensated for scale factor differences.
     ///
     /// Multiplies position by the ratio to account for winit dividing by launch scale.
+    /// Returns None if position is not available (Wayland).
     #[cfg(all(
         not(target_os = "windows"),
         feature = "workaround-macos-scale-compensation"
     ))]
     #[must_use]
-    pub fn compensated_position(&self) -> IVec2 {
+    pub fn compensated_position(&self) -> Option<IVec2> {
         let ratio = self.ratio();
-        IVec2::new(
-            (f64::from(self.x) * ratio) as i32,
-            (f64::from(self.y) * ratio) as i32,
-        )
+        self.position.map(|pos| {
+            IVec2::new(
+                (f64::from(pos.x) * ratio) as i32,
+                (f64::from(pos.y) * ratio) as i32,
+            )
+        })
     }
 
     /// Size compensated for scale factor differences.
     ///
     /// Multiplies size by the ratio to account for winit dividing by launch scale.
+    #[cfg(any(target_os = "windows", feature = "workaround-macos-scale-compensation"))]
     #[must_use]
     pub fn compensated_size(&self) -> UVec2 {
         let ratio = self.ratio();

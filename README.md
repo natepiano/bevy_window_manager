@@ -80,13 +80,14 @@ Requires `use bevy_window_manager::WindowExt`:
 |----------|--------|-------|
 | macOS    | ✅ Tested | Native hardware with multiple monitors at different scales |
 | Windows  | ✅ Tested | VMware VM with multi-monitor, different scale factors |
-| Linux    | ❓ Untested | PRs welcome! |
+| Linux X11 | 🚧 In Progress | Single monitor tested; multi-monitor/scaling untested |
+| Linux Wayland | 🚧 In Progress | Size + fullscreen only (Wayland cannot query/set position) |
 
 This plugin was originally created to handle a MacBook Pro with external monitors at different scale factors, which caused window position/size corruption. Windows multi-monitor setups with monitors at different scale factors are now supported as of 0.17.1 (see [CHANGELOG](CHANGELOG.md)).
 
 **Note on Windows testing**: Windows support has been tested in a VMware virtual machine with multiple monitors at different scale factors. Native Windows installations may behave differently - if you encounter issues, please open an issue with details about your monitor configuration.
 
-Linux support is untested - if you try it, please let me know how it goes. PRs welcome!
+**Note on Linux support**: Linux support has begun with single-monitor testing on KDE Plasma (Asahi Linux). Multi-monitor setups with different scale factors are not yet tested. Wayland has an inherent limitation: clients cannot query or set window position, so only size and fullscreen state can be restored. If you encounter issues, please open an issue with details about your distribution, desktop environment, and monitor configuration.
 
 ## Feature Flags (Platform Workarounds)
 
@@ -103,6 +104,7 @@ This design allows:
 |---------|----------|-------|-------------|
 | `workaround-winit-4341` | Windows | [winit #4041](https://github.com/rust-windowing/winit/issues/4041) | DPI drag bounce fix |
 | `workaround-winit-3124` | Windows | [winit #3124](https://github.com/rust-windowing/winit/issues/3124) | DX12/DXGI fullscreen crash fix |
+| `workaround-winit-4443` | Linux X11 | [winit #4443](https://github.com/rust-windowing/winit/issues/4443) | Keyboard snap position fix |
 | `workaround-macos-scale-compensation` | macOS | [winit #4440](https://github.com/rust-windowing/winit/issues/4440) | Multi-monitor scale factor compensation |
 | `workaround-macos-drag-back-reset` | macOS | [winit #4441](https://github.com/rust-windowing/winit/issues/4441) | Window size reset on drag-back fix |
 | `workaround-bevy-22060` | macOS | [bevy #22060](https://github.com/bevyengine/bevy/issues/22060) | Fullscreen quit panic fix |

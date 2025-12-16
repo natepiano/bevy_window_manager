@@ -78,16 +78,19 @@ impl WindowExt for Window {
     }
 
     fn effective_mode(&self, monitors: &Monitors) -> WindowMode {
-        // Trust exclusive fullscreen - it's unambiguous
-        if matches!(self.mode, WindowMode::Fullscreen(_, _)) {
+        // Trust any fullscreen mode set programmatically
+        if matches!(
+            self.mode,
+            WindowMode::Fullscreen(_, _) | WindowMode::BorderlessFullscreen(_)
+        ) {
             return self.mode;
         }
 
-        // For Windowed and BorderlessFullscreen, check actual screen coverage.
-        // Bevy doesn't update window.mode when user exits via macOS green button,
-        // so we can't trust BorderlessFullscreen without verifying.
+        // For Windowed mode, check actual screen coverage to detect macOS green button
+        // fullscreen where Bevy doesn't update window.mode.
+        // On Wayland, position is unavailable so we can only trust self.mode.
         let WindowPosition::At(pos) = self.position else {
-            return WindowMode::Windowed;
+            return self.mode;
         };
 
         let monitor = self.monitor(monitors);

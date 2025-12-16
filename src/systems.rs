@@ -1,10 +1,12 @@
-//! Systems for window restoration.
+//! Systems for window restoration and state management.
 
 use std::ffi::OsStr;
 
 use bevy::ecs::system::NonSendMarker;
 use bevy::prelude::*;
+use bevy::window::MonitorSelection;
 use bevy::window::PrimaryWindow;
+use bevy::window::WindowMode;
 use bevy::window::WindowScaleFactorChanged;
 use bevy::winit::WINIT_WINDOWS;
 
@@ -76,10 +78,9 @@ pub fn load_target_position(
         return;
     };
 
-    let Some((saved_x, saved_y)) = state.position else {
-        debug!("[load_target_position] No saved bevy_window_manager position");
-        return;
-    };
+    // Position may be None on Wayland where clients can't access window position.
+    // We can still restore fullscreen mode, size, and monitor.
+    let saved_pos = state.position;
 
     // Get starting monitor from WinitInfo
     let starting_monitor_index = winit_info.starting_monitor_index;
@@ -121,6 +122,7 @@ pub fn load_target_position(
     let strategy = determine_scale_strategy(starting_scale, target_scale);
 
     // Calculate final position, with optional clamping.
+    // Position may be None on Wayland where clients can't access window position.
     //
     // On macOS, we clamp to monitor bounds because macOS may resize/reposition windows
     // that extend beyond the screen.
@@ -128,45 +130,51 @@ pub fn load_target_position(
     // On Windows, users can legitimately position windows partially off-screen,
     // and the invisible border offset means saved positions may be slightly outside
     // monitor bounds. We skip clamping to preserve the exact saved position.
-    let (x, y) = if cfg!(target_os = "windows") {
-        // Windows: use saved position directly, no clamping
-        (saved_x, saved_y)
-    } else {
-        // macOS: clamp to monitor bounds (using outer dimensions for accurate bounds)
-        let mon_right = target_info.position.x + target_info.size.x as i32;
-        let mon_bottom = target_info.position.y + target_info.size.y as i32;
+    let position = saved_pos.map(|(saved_x, saved_y)| {
+        if cfg!(target_os = "windows") {
+            // Windows: use saved position directly, no clamping
+            IVec2::new(saved_x, saved_y)
+        } else {
+            // macOS/Linux: clamp to monitor bounds (using outer dimensions for accurate bounds)
+            let mon_right = target_info.position.x + target_info.size.x as i32;
+            let mon_bottom = target_info.position.y + target_info.size.y as i32;
 
-        let mut x = saved_x;
-        let mut y = saved_y;
+            let mut x = saved_x;
+            let mut y = saved_y;
 
-        if x + outer_width as i32 > mon_right {
-            x = mon_right - outer_width as i32;
+            if x + outer_width as i32 > mon_right {
+                x = mon_right - outer_width as i32;
+            }
+            if y + outer_height as i32 > mon_bottom {
+                y = mon_bottom - outer_height as i32;
+            }
+            x = x.max(target_info.position.x);
+            y = y.max(target_info.position.y);
+
+            if x != saved_x || y != saved_y {
+                debug!(
+                    "[load_target_position] Clamped position: ({}, {}) -> ({}, {}) for outer size {}x{}",
+                    saved_x, saved_y, x, y, outer_width, outer_height
+                );
+            }
+
+            IVec2::new(x, y)
         }
-        if y + outer_height as i32 > mon_bottom {
-            y = mon_bottom - outer_height as i32;
-        }
-        x = x.max(target_info.position.x);
-        y = y.max(target_info.position.y);
-
-        if x != saved_x || y != saved_y {
-            debug!(
-                "[load_target_position] Clamped position: ({}, {}) -> ({}, {}) for outer size {}x{}",
-                saved_x, saved_y, x, y, outer_width, outer_height
-            );
-        }
-
-        (x, y)
-    };
+    });
 
     debug!(
-        "[load_target_position] Starting monitor={} scale={}, Target monitor={} scale={}, strategy={:?}",
-        starting_monitor_index, starting_scale, state.monitor_index, target_scale, strategy
+        "[load_target_position] Starting monitor={} scale={}, Target monitor={} scale={}, strategy={:?}, position={:?}",
+        starting_monitor_index,
+        starting_scale,
+        state.monitor_index,
+        target_scale,
+        strategy,
+        position
     );
 
     // Store inner dimensions - decoration is only needed for clamping above
     commands.insert_resource(TargetPosition {
-        x,
-        y,
+        position,
         width,
         height,
         target_scale,
@@ -196,29 +204,48 @@ pub fn move_to_target_monitor(
     // For fullscreen modes, just move to target monitor position (no 1x1 size)
     // The fullscreen mode will be applied later in try_apply_restore
     if target.mode.is_fullscreen() {
-        debug!(
-            "[move_to_target_monitor] Moving to target position ({}, {}) for fullscreen mode {:?}",
-            target.x, target.y, target.mode
-        );
-        window.position = WindowPosition::At(IVec2::new(target.x, target.y));
+        if let Some(pos) = target.position {
+            debug!(
+                "[move_to_target_monitor] Moving to target position {:?} for fullscreen mode {:?}",
+                pos, target.mode
+            );
+            window.position = WindowPosition::At(pos);
+        } else {
+            debug!(
+                "[move_to_target_monitor] No position available (Wayland), fullscreen mode {:?}",
+                target.mode
+            );
+        }
         return;
     }
 
+    // Position may be None on Wayland - skip position setting if unavailable
+    let Some(pos) = target.position else {
+        debug!(
+            "[move_to_target_monitor] No position available (Wayland), setting size only: {}x{}",
+            target.width, target.height
+        );
+        window
+            .resolution
+            .set_physical_resolution(target.width, target.height);
+        return;
+    };
+
     // For HigherToLower, compensate position because winit divides by launch scale
-    let (move_x, move_y) = if matches!(
+    let move_pos = if matches!(
         target.monitor_scale_strategy,
         MonitorScaleStrategy::HigherToLower(_)
     ) {
         let ratio = target.starting_scale / target.target_scale;
-        let comp_x = (f64::from(target.x) * ratio) as i32;
-        let comp_y = (f64::from(target.y) * ratio) as i32;
+        let comp_x = (f64::from(pos.x) * ratio) as i32;
+        let comp_y = (f64::from(pos.y) * ratio) as i32;
         debug!(
-            "[move_to_target_monitor] HigherToLower: compensating position ({}, {}) -> ({}, {}) (ratio={})",
-            target.x, target.y, comp_x, comp_y, ratio
+            "[move_to_target_monitor] HigherToLower: compensating position {:?} -> ({}, {}) (ratio={})",
+            pos, comp_x, comp_y, ratio
         );
-        (comp_x, comp_y)
+        IVec2::new(comp_x, comp_y)
     } else {
-        (target.x, target.y)
+        pos
     };
 
     // For HigherToLower, set the actual target size instead of 1x1 to avoid
@@ -241,11 +268,11 @@ pub fn move_to_target_monitor(
     }
 
     debug!(
-        "[move_to_target_monitor] position=({}, {}) size={}x{} visible={}",
-        move_x, move_y, width, height, window.visible
+        "[move_to_target_monitor] position={:?} size={}x{} visible={}",
+        move_pos, width, height, window.visible
     );
 
-    window.position = bevy::window::WindowPosition::At(IVec2::new(move_x, move_y));
+    window.position = WindowPosition::At(move_pos);
     window.resolution.set_physical_resolution(width, height);
 }
 
@@ -260,18 +287,42 @@ pub struct CachedWindowState {
 }
 
 /// Save window state when position, size, or mode changes. Runs only when not restoring.
+#[allow(clippy::type_complexity)]
 pub fn save_window_state(
     config: Res<RestoreWindowConfig>,
     monitors: Res<Monitors>,
-    window: Single<&Window, (With<PrimaryWindow>, Changed<Window>)>,
+    window: Single<(Entity, &Window), (With<PrimaryWindow>, Changed<Window>)>,
     mut cached: Local<CachedWindowState>,
+    _non_send: NonSendMarker,
 ) {
-    let Some(pos) = (match window.position {
+    let (window_entity, window) = *window;
+
+    // Get window position for saving state.
+    //
+    // On X11, bevy's cached window.position doesn't update when the window manager
+    // moves the window via keyboard shortcuts (winit #4443). When the workaround is
+    // enabled, we query winit's outer_position() directly which always returns the
+    // correct position.
+    //
+    // When the workaround is disabled, we use bevy's cached position which may be
+    // stale on X11 after keyboard snap operations. This allows testing whether winit
+    // has fixed the bug.
+    #[cfg(all(target_os = "linux", feature = "workaround-winit-4443"))]
+    let pos = WINIT_WINDOWS.with(|ww| {
+        let ww = ww.borrow();
+        ww.get_window(window_entity)
+            .and_then(|w| w.outer_position().ok())
+            .map(|p| IVec2::new(p.x, p.y))
+    });
+
+    #[cfg(not(all(target_os = "linux", feature = "workaround-winit-4443")))]
+    let pos = match window.position {
         bevy::window::WindowPosition::At(p) => Some(p),
         _ => None,
-    }) else {
-        return;
     };
+
+    // Suppress unused variable warning when workaround is enabled
+    let _ = window_entity;
 
     let width = window.resolution.physical_width();
     let height = window.resolution.physical_height();
@@ -306,7 +357,7 @@ pub fn save_window_state(
     }
 
     // Only save if position, size, or mode actually changed
-    let position_changed = cached.position != Some(pos);
+    let position_changed = cached.position != pos;
     let size_changed = cached.width != width || cached.height != height;
     let mode_changed = cached.mode.as_ref() != Some(&mode);
 
@@ -316,15 +367,15 @@ pub fn save_window_state(
     }
 
     // Update cache
-    cached.position = Some(pos);
+    cached.position = pos;
     cached.width = width;
     cached.height = height;
     cached.mode = Some(mode.clone());
     cached.monitor_index = Some(monitor_index);
 
     debug!(
-        "[save_window_state] pos=({}, {}) size={}x{} monitor={} scale={} mode={:?}",
-        pos.x, pos.y, width, height, monitor_index, monitor_scale, mode
+        "[save_window_state] pos={:?} size={}x{} monitor={} scale={} mode={:?}",
+        pos, width, height, monitor_index, monitor_scale, mode
     );
 
     let app_name = std::env::current_exe()
@@ -334,7 +385,7 @@ pub fn save_window_state(
         .unwrap_or_default();
 
     let state = WindowState {
-        position: Some((pos.x, pos.y)),
+        position: pos.map(|p| (p.x, p.y)),
         width,
         height,
         monitor_index,
@@ -416,91 +467,141 @@ enum RestoreStatus {
     Waiting,
 }
 
+/// Check if running on Wayland (matches winit's detection approach).
+fn is_wayland() -> bool {
+    cfg!(target_os = "linux")
+        && std::env::var("WAYLAND_DISPLAY")
+            .map(|v| !v.is_empty())
+            .unwrap_or(false)
+}
+
+/// Apply fullscreen mode, handling Wayland limitations.
+fn apply_fullscreen_restore(
+    target: &TargetPosition,
+    primary_window: &mut Window,
+    monitor_index: usize,
+) {
+    // On Wayland, exclusive fullscreen is ignored by winit, so we restore it as
+    // borderless fullscreen instead.
+    let window_mode = if is_wayland() && matches!(target.mode, SavedWindowMode::Fullscreen { .. }) {
+        warn!(
+            "Exclusive fullscreen is not supported on Wayland, restoring as BorderlessFullscreen"
+        );
+        WindowMode::BorderlessFullscreen(MonitorSelection::Index(monitor_index))
+    } else {
+        target.mode.to_window_mode(monitor_index)
+    };
+
+    debug!(
+        "[Restore] Applying fullscreen mode {:?} on monitor {} -> WindowMode::{:?}",
+        target.mode, monitor_index, window_mode
+    );
+    debug!(
+        "[Restore] Current window state: position={:?} mode={:?}",
+        primary_window.position, primary_window.mode
+    );
+
+    primary_window.mode = window_mode;
+}
+
+/// Apply position and/or size to window with logging.
+fn apply_window_geometry(
+    window: &mut Window,
+    position: Option<IVec2>,
+    size: UVec2,
+    strategy: &str,
+    ratio: Option<f64>,
+) {
+    if let Some(pos) = position {
+        if let Some(r) = ratio {
+            debug!(
+                "[try_apply_restore] position={:?} size={}x{} ({strategy}, ratio={r})",
+                pos, size.x, size.y
+            );
+        } else {
+            debug!(
+                "[try_apply_restore] position={:?} size={}x{} ({strategy})",
+                pos, size.x, size.y
+            );
+        }
+        window.set_position_and_size(pos, size);
+    } else {
+        if let Some(r) = ratio {
+            debug!(
+                "[try_apply_restore] size={}x{} only ({strategy}, ratio={r}, no position)",
+                size.x, size.y
+            );
+        } else {
+            debug!(
+                "[try_apply_restore] size={}x{} only ({strategy}, no position)",
+                size.x, size.y
+            );
+        }
+        window.resolution.set_physical_resolution(size.x, size.y);
+    }
+}
+
 /// Try to apply a pending window restore.
 fn try_apply_restore(
     target: &TargetPosition,
     monitors: &Monitors,
     primary_window: &mut Window,
 ) -> RestoreStatus {
-    let target_mon = monitors.closest_to(target.x, target.y);
+    // Find target monitor - use position if available, otherwise use first monitor
+    let target_mon = target.position.map_or_else(
+        || {
+            monitors
+                .by_index(0)
+                .unwrap_or_else(|| monitors.closest_to(0, 0))
+        },
+        |pos| monitors.closest_to(pos.x, pos.y),
+    );
 
     // Handle fullscreen modes - just set the mode and we're done
     if target.mode.is_fullscreen() {
-        let window_mode = target.mode.to_window_mode(target_mon.index);
-        debug!(
-            "[Restore] Applying fullscreen mode {:?} on monitor {} -> WindowMode::{:?}",
-            target.mode, target_mon.index, window_mode
-        );
-        debug!(
-            "[Restore] Current window state: position={:?} mode={:?}",
-            primary_window.position, primary_window.mode
-        );
-
-        primary_window.mode = window_mode;
+        apply_fullscreen_restore(target, primary_window, target_mon.index);
         return RestoreStatus::Complete;
     }
 
-    // the primary window may be on a monitor that is different than the target
-    // so the scale could be different - this difference is why we need this crate
-    let current_scale = primary_window.monitor(monitors).scale;
-
     debug!(
-        "[Restore] target_pos=({}, {}) current_scale={} target_scale={} strategy={:?}",
-        target.x, target.y, current_scale, target.target_scale, target.monitor_scale_strategy
+        "[Restore] target_pos={:?} target_scale={} strategy={:?}",
+        target.position, target.target_scale, target.monitor_scale_strategy
     );
-
-    // Not yet on target monitor (for ApplyUnchanged/LowerToHigher strategies)
-    // if !matches!(
-    //     target.monitor_scale_strategy,
-    //     MonitorScaleStrategy::HigherToLower(WindowRestoreState::ApplySize)
-    // ) && (current_scale - target.target_scale).abs() >= 0.01
-    // {
-    //     return RestoreStatus::Waiting;
-    // }
 
     match target.monitor_scale_strategy {
         MonitorScaleStrategy::ApplyUnchanged => {
-            let size = target.size();
-            debug!(
-                "[try_apply_restore] position=({}, {}) size={}x{} (ApplyUnchanged)",
-                target.x, target.y, size.x, size.y
+            apply_window_geometry(
+                primary_window,
+                target.position(),
+                target.size(),
+                "ApplyUnchanged",
+                None,
             );
-            primary_window.set_position_and_size(target.position(), size);
         },
         #[cfg(target_os = "windows")]
         MonitorScaleStrategy::CompensateSizeOnly => {
-            // Windows: position is correct, but size needs compensation
-            let position = target.position();
-            let size = target.compensated_size();
-            debug!(
-                "[try_apply_restore] position=({}, {}) size={}x{} (CompensateSizeOnly, ratio={})",
-                position.x,
-                position.y,
-                size.x,
-                size.y,
-                target.ratio()
+            apply_window_geometry(
+                primary_window,
+                target.position(),
+                target.compensated_size(),
+                "CompensateSizeOnly",
+                Some(target.ratio()),
             );
-            primary_window.set_position_and_size(position, size);
         },
         #[cfg(all(
             not(target_os = "windows"),
             feature = "workaround-macos-scale-compensation"
         ))]
         MonitorScaleStrategy::LowerToHigher => {
-            let position = target.compensated_position();
-            let size = target.compensated_size();
-            debug!(
-                "[try_apply_restore] position=({}, {}) size={}x{} (LowerToHigher, ratio={})",
-                position.x,
-                position.y,
-                size.x,
-                size.y,
-                target.ratio()
+            apply_window_geometry(
+                primary_window,
+                target.compensated_position(),
+                target.compensated_size(),
+                "LowerToHigher",
+                Some(target.ratio()),
             );
-            primary_window.set_position_and_size(position, size);
         },
         MonitorScaleStrategy::HigherToLower(WindowRestoreState::ApplySize) => {
-            // HigherToLower after scale changed: set size and show window
             let size = target.size();
             debug!(
                 "[try_apply_restore] size={}x{} ONLY (HigherToLower::ApplySize, position already set)",
@@ -511,15 +612,12 @@ fn try_apply_restore(
                 .set_physical_resolution(size.x, size.y);
             primary_window.visible = true;
         },
-        // in this case we haven't yet received the ScaleChanged message so we can't apply the size
-        // yet - early return
         MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange) => {
             debug!("[Restore] HigherToLower: waiting for ScaleChanged message");
             return RestoreStatus::Waiting;
         },
     }
 
-    // if we're here then we're good to go
     RestoreStatus::Complete
 }
 

@@ -39,7 +39,12 @@
       "WebFetch(domain:www.gridbugs.org)",
       "Bash(git fetch:*)",
       "Bash(cargo run:*)",
-      "Bash(gh run list:*)"
+      "Bash(gh run list:*)",
+      "Bash(echo:*)",
+      "Bash(RUST_LOG=bevy_window_manager=debug cargo run:*)",
+      "Bash(RUST_LOG=bevy_window_manager=debug timeout 5 cargo run:*)",
+      "Bash(gh api:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
