@@ -60,6 +60,7 @@ use std::path::PathBuf;
 use bevy::prelude::*;
 #[cfg(all(target_os = "macos", feature = "workaround-macos-drag-back-reset"))]
 pub use macos_drag_back_fix::DragBackSizeProtection;
+pub use monitors::CurrentMonitor;
 pub use monitors::MonitorInfo;
 use monitors::MonitorPlugin;
 pub use monitors::Monitors;
@@ -146,9 +147,25 @@ fn build_plugin(app: &mut App, path: PathBuf) {
         )
         .add_systems(
             Update,
-            (
-                systems::restore_primary_window.run_if(resource_exists::<TargetPosition>),
-                systems::save_window_state.run_if(not(resource_exists::<TargetPosition>)),
-            ),
+            systems::restore_primary_window.run_if(resource_exists::<TargetPosition>),
         );
+
+    // Linux: includes Wayland monitor detection with ordering constraint
+    #[cfg(target_os = "linux")]
+    app.add_systems(
+        Update,
+        (
+            systems::update_wayland_monitor.run_if(systems::is_wayland),
+            systems::save_window_state
+                .run_if(not(resource_exists::<TargetPosition>))
+                .after(systems::update_wayland_monitor),
+        ),
+    );
+
+    // Non-Linux: no Wayland handling needed
+    #[cfg(not(target_os = "linux"))]
+    app.add_systems(
+        Update,
+        systems::save_window_state.run_if(not(resource_exists::<TargetPosition>)),
+    );
 }

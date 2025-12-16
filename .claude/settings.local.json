@@ -65,7 +65,9 @@
       "Bash(WAYLAND_DISPLAY= cargo run:*)",
       "Bash(xxd:*)",
       "Bash(xrandr --query:*)",
-      "Bash(journalctl:*)"
+      "Bash(journalctl:*)",
+      "Bash(git mv:*)",
+      "WebFetch(domain:zed.dev)"
     ],
     "deny": [],
     "ask": []

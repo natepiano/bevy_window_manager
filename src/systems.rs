@@ -1,4 +1,26 @@
 //! Systems for window restoration and state management.
+//!
+//! # Wayland Monitor Detection
+//!
+//! On Wayland, `window.position` always returns `(0,0)` for security/privacy reasons.
+//! Position-based monitor detection (which works on X11/macOS/Windows) therefore always
+//! returns Monitor 0.
+//!
+//! ## Solution: The `CurrentMonitor` Component
+//!
+//! We use a `CurrentMonitor` component on the Window entity:
+//!
+//! - **Non-Wayland**: [`save_window_state`] detects via position and updates the component
+//! - **Wayland**: [`update_wayland_monitor`] polls winit's `current_monitor()` each frame
+//!
+//! ## Why focus matters
+//!
+//! On Wayland, [`save_window_state`] runs on `Changed<Window>` which fires on focus changes,
+//! cursor movement, etc. Since position-based detection always returns Monitor 0, we must
+//! preserve the existing `CurrentMonitor` component value rather than overwriting it.
+//!
+//! We only trust `current_monitor()` when the window has focus because testing showed
+//! incorrect values when unfocused (possibly our own bug, possibly winit behavior).
 
 use std::ffi::OsStr;
 
@@ -15,6 +37,7 @@ use super::types::RestoreWindowConfig;
 use super::types::WindowState;
 #[cfg(all(target_os = "macos", feature = "workaround-macos-drag-back-reset"))]
 use crate::macos_drag_back_fix::DragBackSizeProtection;
+use crate::monitors::CurrentMonitor;
 use crate::monitors::Monitors;
 #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
 use crate::types::FullscreenRestoreState;
@@ -49,12 +72,18 @@ pub fn init_winit_info(
                 .map(|p| IVec2::new(p.x, p.y))
                 .unwrap_or(IVec2::ZERO);
 
-            let starting_monitor_index = monitors.closest_to(pos.x, pos.y).index;
+            let starting_monitor = monitors.closest_to(pos.x, pos.y);
+            let starting_monitor_index = starting_monitor.index;
 
             debug!(
                 "[init_winit_info] decoration={}x{} pos=({}, {}) starting_monitor={}",
                 decoration.width, decoration.height, pos.x, pos.y, starting_monitor_index
             );
+
+            // Insert initial CurrentMonitor component on window entity
+            commands
+                .entity(*window_entity)
+                .insert(CurrentMonitor(*starting_monitor));
 
             commands.insert_resource(WinitInfo {
                 starting_monitor_index,
@@ -287,15 +316,23 @@ pub struct CachedWindowState {
 }
 
 /// Save window state when position, size, or mode changes. Runs only when not restoring.
-#[allow(clippy::type_complexity)]
+#[allow(
+    clippy::type_complexity,
+    clippy::too_many_lines,
+    clippy::option_if_let_else
+)]
 pub fn save_window_state(
+    mut commands: Commands,
     config: Res<RestoreWindowConfig>,
     monitors: Res<Monitors>,
-    window: Single<(Entity, &Window), (With<PrimaryWindow>, Changed<Window>)>,
+    window: Single<
+        (Entity, &Window, Option<&CurrentMonitor>),
+        (With<PrimaryWindow>, Changed<Window>),
+    >,
     mut cached: Local<CachedWindowState>,
     _non_send: NonSendMarker,
 ) {
-    let (window_entity, window) = *window;
+    let (window_entity, window, existing_monitor) = *window;
 
     // Get window position for saving state.
     //
@@ -321,15 +358,26 @@ pub fn save_window_state(
         _ => None,
     };
 
-    // Suppress unused variable warning when workaround is enabled
-    let _ = window_entity;
-
     let width = window.resolution.physical_width();
     let height = window.resolution.physical_height();
     let mode: SavedWindowMode = (&window.effective_mode(&monitors)).into();
-    let monitor_info = window.monitor(&monitors);
-    let monitor_index = monitor_info.index;
-    let monitor_scale = monitor_info.scale;
+
+    // Get monitor info. See module docs for Wayland monitor detection details.
+    let (monitor_index, monitor_scale) = if is_wayland() {
+        // Wayland: read existing component (managed by update_wayland_monitor)
+        existing_monitor.map_or_else(
+            || {
+                let p = monitors.primary();
+                (p.index, p.scale)
+            },
+            |m| (m.index, m.scale),
+        )
+    } else {
+        // Non-Wayland: detect via position and update component
+        let info = window.monitor(&monitors);
+        commands.entity(window_entity).insert(CurrentMonitor(*info));
+        (info.index, info.scale)
+    };
 
     // Log monitor transitions with detailed info
     let monitor_changed = cached.monitor_index != Some(monitor_index);
@@ -467,12 +515,56 @@ enum RestoreStatus {
     Waiting,
 }
 
-/// Check if running on Wayland (matches winit's detection approach).
-fn is_wayland() -> bool {
+/// Run condition: returns true if running on Wayland.
+pub fn is_wayland() -> bool {
     cfg!(target_os = "linux")
         && std::env::var("WAYLAND_DISPLAY")
             .map(|v| !v.is_empty())
             .unwrap_or(false)
+}
+
+/// Polls winit's `current_monitor()` on Wayland to update `CurrentMonitor`.
+/// Only runs on Wayland; only updates when window has focus.
+/// See module docs for Wayland monitor detection details.
+#[cfg(target_os = "linux")]
+pub fn update_wayland_monitor(
+    mut commands: Commands,
+    window: Single<(Entity, &Window), With<PrimaryWindow>>,
+    monitors: Res<Monitors>,
+    mut cached_index: Local<Option<usize>>,
+    _non_send: NonSendMarker,
+) {
+    let (window_entity, window) = *window;
+
+    // Only trust current_monitor() when window has focus - winit returns
+    // the focused monitor, not the window's monitor, when unfocused
+    if !window.focused {
+        return;
+    }
+
+    let detected_index: Option<usize> = WINIT_WINDOWS.with(|ww| {
+        let ww = ww.borrow();
+        ww.get_window(window_entity).and_then(|winit_window| {
+            winit_window.current_monitor().and_then(|current_monitor| {
+                let pos = current_monitor.position();
+                monitors.at(pos.x, pos.y).map(|mon| mon.index)
+            })
+        })
+    });
+
+    // Only update if monitor changed
+    if *cached_index != detected_index {
+        if let Some(idx) = detected_index
+            && let Some(info) = monitors.by_index(idx)
+        {
+            debug!(
+                "[update_wayland_monitor] Monitor changed: {:?} -> {}",
+                *cached_index, idx
+            );
+            commands.entity(window_entity).insert(CurrentMonitor(*info));
+        }
+        *cached_index = detected_index;
+    }
 }
 
 /// Apply fullscreen mode, handling Wayland limitations.

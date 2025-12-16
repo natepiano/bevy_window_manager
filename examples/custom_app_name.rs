@@ -16,6 +16,7 @@
 use bevy::prelude::*;
 use bevy::window::Monitor;
 use bevy::window::PrimaryWindow;
+use bevy_window_manager::CurrentMonitor;
 use bevy_window_manager::Monitors;
 use bevy_window_manager::WindowExt;
 use bevy_window_manager::WindowManagerPlugin;
@@ -58,12 +59,12 @@ fn setup(mut commands: Commands) {
 }
 
 fn update_info_text(
-    window: Single<&Window, With<PrimaryWindow>>,
+    window_query: Single<(&Window, &CurrentMonitor), With<PrimaryWindow>>,
     monitors: Res<Monitors>,
     bevy_monitors: Query<&Monitor>,
     mut text: Single<&mut Text, With<InfoText>>,
 ) {
-    let monitor = window.monitor(&monitors);
+    let (window, monitor) = *window_query;
     let effective_mode = window.effective_mode(&monitors);
 
     // Find refresh rate from Bevy's Monitor by matching position

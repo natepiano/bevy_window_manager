@@ -1,0 +1,84 @@
+{
+  "platform": "linux",
+  "launch_monitor": 1,
+  "example_ron_path": "~/.config/restore_window/windows.ron",
+  "test_ron_dir": ".claude/config/ron/linux_1",
+
+  "tests": [
+    {
+      "id": "wayland_size_restore",
+      "name": "Wayland: Size Restore (Monitor 1)",
+      "description": "Size persistence on Monitor 1 (position not available on Wayland)",
+      "automation": "full",
+      "backend": "wayland",
+      "ron_file": "size_restore.ron",
+      "mutation": {
+        "target_monitor": 1,
+        "size": [1000, 700]
+      },
+      "validate": ["size", "mode", "monitor_index"]
+    },
+    {
+      "id": "wayland_cross_monitor_high_to_low",
+      "name": "Wayland: Cross-Monitor High→Low DPI",
+      "description": "Window saved on Monitor 0 (scale 1) restores correctly when launched from Monitor 1 (scale 2)",
+      "automation": "full",
+      "backend": "wayland",
+      "requires": {"min_monitors": 2, "different_scales": true},
+      "ron_file": "cross_monitor_high_to_low.ron",
+      "validate": ["size", "monitor_index", "mode"]
+    },
+    {
+      "id": "wayland_fullscreen_borderless",
+      "name": "Wayland: Fullscreen Borderless (Monitor 1)",
+      "description": "Borderless fullscreen restore on Monitor 1",
+      "automation": "full",
+      "backend": "wayland",
+      "ron_file": "fullscreen_borderless.ron",
+      "validate": ["mode", "monitor_index"]
+    },
+    {
+      "id": "wayland_exclusive_fallback",
+      "name": "Wayland: Exclusive→Borderless Fallback (Monitor 1)",
+      "description": "Verifies exclusive fullscreen gracefully falls back to borderless on Wayland with warning",
+      "automation": "full",
+      "backend": "wayland",
+      "ron_file": "fullscreen_exclusive.ron",
+      "expected_log_warning": "Exclusive fullscreen is not supported on Wayland, restoring as BorderlessFullscreen",
+      "validate": ["mode", "monitor_index"],
+      "expected_mode": "BorderlessFullscreen"
+    },
+    {
+      "id": "x11_position_size_restore",
+      "name": "X11: Position and Size Restore (Monitor 1)",
+      "description": "Basic position/size persistence on Monitor 1",
+      "automation": "full",
+      "backend": "x11",
+      "ron_file": "position_size_restore.ron",
+      "mutation": {
+        "target_monitor": 1,
+        "position_offset": [200, 200],
+        "size": [1000, 700]
+      },
+      "validate": ["position", "size", "mode", "monitor_index"]
+    },
+    {
+      "id": "x11_fullscreen_borderless",
+      "name": "X11: Fullscreen Borderless (Monitor 1)",
+      "description": "Borderless fullscreen restore on Monitor 1",
+      "automation": "full",
+      "backend": "x11",
+      "ron_file": "fullscreen_borderless.ron",
+      "validate": ["mode", "monitor_index"]
+    },
+    {
+      "id": "x11_fullscreen_exclusive",
+      "name": "X11: Fullscreen Exclusive (Monitor 1)",
+      "description": "Exclusive fullscreen restore on Monitor 1",
+      "automation": "full",
+      "backend": "x11",
+      "ron_file": "fullscreen_exclusive.ron",
+      "validate": ["mode", "monitor_index"]
+    }
+  ]
+}

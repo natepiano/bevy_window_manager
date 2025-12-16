@@ -27,6 +27,7 @@ use bevy::window::WindowMode;
 use bevy::window::WindowPosition;
 use bevy::winit::WINIT_WINDOWS;
 use bevy_brp_extras::BrpExtrasPlugin;
+use bevy_window_manager::CurrentMonitor;
 use bevy_window_manager::Monitors;
 use bevy_window_manager::WindowExt;
 use bevy_window_manager::WindowManagerPlugin;
@@ -87,16 +88,53 @@ fn setup(mut commands: Commands) {
 
 fn update_display(
     mut main_text: Single<&mut Text, With<MainDisplay>>,
-    window: Single<&Window, With<PrimaryWindow>>,
+    window_query: Single<(&Window, &CurrentMonitor), With<PrimaryWindow>>,
     monitors_res: Res<Monitors>,
     bevy_monitors: Query<(Entity, &Monitor)>,
     mut selected: ResMut<SelectedVideoModes>,
 ) {
-    let monitor = window.monitor(&monitors_res);
+    let (window, monitor) = *window_query;
     let effective_mode = window.effective_mode(&monitors_res);
 
-    // Get video modes and refresh rate for current monitor by matching position
-    let (video_modes, refresh_rate): (Vec<&VideoMode>, Option<u32>) = bevy_monitors
+    let (video_modes, refresh_rate) = get_video_modes_for_monitor(&bevy_monitors, monitor);
+    let refresh_display = format_refresh_rate(window, refresh_rate);
+    let active_mode_idx = find_active_video_mode_index(window, &video_modes);
+
+    sync_selected_to_active(window, monitor, active_mode_idx, &mut selected);
+
+    let selected_idx = selected.get(monitor.index);
+    let video_modes_display =
+        build_video_modes_display(&video_modes, selected_idx, active_mode_idx);
+
+    let row1 = format_monitor_row(monitor, &refresh_display);
+    let (row2, row3) = format_position_rows(window, monitor);
+
+    main_text.0 = format!(
+        "{row1}\n\
+         {row2}\n\
+         {row3}\n\
+         \n\
+         Mode:           {:?} (set value only, not dynamically updated)\n\
+         Effective Mode: {:?}\n\
+         \n\
+         Video Modes (Up/Down to select):\n\
+         {video_modes_display}\n\
+         \n\
+         Controls:\n\
+         [1] Exclusive Fullscreen (selected mode)\n\
+         [2] Borderless Fullscreen\n\
+         [W/Esc] Windowed\n\
+         [Q] Quit",
+        window.mode, effective_mode,
+    );
+}
+
+/// Get video modes and refresh rate for the monitor matching the given position.
+fn get_video_modes_for_monitor<'a>(
+    bevy_monitors: &'a Query<(Entity, &Monitor)>,
+    monitor: &CurrentMonitor,
+) -> (Vec<&'a VideoMode>, Option<u32>) {
+    bevy_monitors
         .iter()
         .find(|(_, m)| m.physical_position == monitor.position)
         .map(|(_, m)| {
@@ -105,19 +143,23 @@ fn update_display(
                 m.refresh_rate_millihertz.map(|r| r / 1000),
             )
         })
-        .unwrap_or_default();
+        .unwrap_or_default()
+}
 
-    // Show active refresh rate - from video mode if in exclusive fullscreen, otherwise from monitor
+/// Format refresh rate - use video mode rate in exclusive fullscreen, otherwise monitor rate.
+fn format_refresh_rate(window: &Window, monitor_refresh: Option<u32>) -> String {
     let active_refresh = match &window.mode {
         WindowMode::Fullscreen(_, VideoModeSelection::Specific(mode)) => {
             Some(mode.refresh_rate_millihertz / 1000)
         },
-        _ => refresh_rate,
+        _ => monitor_refresh,
     };
-    let refresh_display = active_refresh.map_or_else(|| "N/A".into(), |hz| format!("{hz}Hz"));
+    active_refresh.map_or_else(|| "N/A".into(), |hz| format!("{hz}Hz"))
+}
 
-    // Find the active video mode index if in exclusive fullscreen
-    let active_mode_idx = match &window.mode {
+/// Find the index of the currently active video mode if in exclusive fullscreen.
+fn find_active_video_mode_index(window: &Window, video_modes: &[&VideoMode]) -> Option<usize> {
+    match &window.mode {
         WindowMode::Fullscreen(_, VideoModeSelection::Specific(active)) => {
             video_modes.iter().position(|m| {
                 m.physical_size == active.physical_size
@@ -125,39 +167,65 @@ fn update_display(
             })
         },
         _ => None,
-    };
+    }
+}
 
-    // Sync selected index to active video mode only when mode changes (including startup)
+/// Sync selected video mode index to active mode when mode changes.
+fn sync_selected_to_active(
+    window: &Window,
+    monitor: &CurrentMonitor,
+    active_mode_idx: Option<usize>,
+    selected: &mut SelectedVideoModes,
+) {
     if let WindowMode::Fullscreen(_, VideoModeSelection::Specific(active)) = &window.mode {
         let current_mode = (active.physical_size, active.refresh_rate_millihertz);
-        if selected.last_sync != Some(current_mode) {
-            // Only mark as synced if we actually found the active mode
-            if let Some(active_idx) = active_mode_idx {
-                selected.set(monitor.index, active_idx);
-                selected.last_sync = Some(current_mode);
-            }
+        if selected.last_sync != Some(current_mode)
+            && let Some(active_idx) = active_mode_idx
+        {
+            selected.set(monitor.index, active_idx);
+            selected.last_sync = Some(current_mode);
         }
     } else {
         selected.last_sync = None;
     }
+}
 
-    // Build video modes display (show 5 modes, centered appropriately)
-    let selected_idx = selected.get(monitor.index);
-    let video_modes_display =
-        build_video_modes_display(&video_modes, selected_idx, active_mode_idx);
+/// Get platform suffix for Linux (Wayland or X11).
+fn platform_suffix() -> &'static str {
+    #[cfg(target_os = "linux")]
+    {
+        if std::env::var("WAYLAND_DISPLAY")
+            .map(|v| !v.is_empty())
+            .unwrap_or(false)
+        {
+            " (Wayland)"
+        } else {
+            " (X11)"
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        ""
+    }
+}
 
-    // Row 1: Monitor info all on one line
+/// Format the first row with monitor info.
+fn format_monitor_row(monitor: &CurrentMonitor, refresh_display: &str) -> String {
     let primary_marker = if monitor.index == 0 {
         " Primary Monitor -"
     } else {
         " -"
     };
-    let row1 = format!(
-        "Monitor: {}{primary_marker} Scale: {} - Refresh Rate: {refresh_display}",
-        monitor.index, monitor.scale,
-    );
+    format!(
+        "Monitor: {}{primary_marker} Scale: {} - Refresh Rate: {refresh_display}{}",
+        monitor.index,
+        monitor.scale,
+        platform_suffix()
+    )
+}
 
-    // Format aligned position strings based on window position variant
+/// Format rows 2 and 3 with monitor and window position/size.
+fn format_position_rows(window: &Window, monitor: &CurrentMonitor) -> (String, String) {
     let (monitor_pos, window_pos) = match window.position {
         WindowPosition::At(pos) => format_aligned_pair(
             (monitor.position.x, monitor.position.y),
@@ -183,43 +251,20 @@ fn update_display(
         Delimiter::None,
     );
 
-    // Row 2: Monitor position and size
     let row2 = format!("Monitor Position: {monitor_pos} - Size: {monitor_size}");
-
-    // Row 3: Window position and size (aligned with row 2)
     let row3 = format!("Window  Position: {window_pos} - Size: {window_size}");
-
-    // Update main display
-    main_text.0 = format!(
-        "{row1}\n\
-         {row2}\n\
-         {row3}\n\
-         \n\
-         Mode:           {:?} (set value only, not dynamically updated)\n\
-         Effective Mode: {:?}\n\
-         \n\
-         Video Modes (Up/Down to select):\n\
-         {video_modes_display}\n\
-         \n\
-         Controls:\n\
-         [1] Exclusive Fullscreen (selected mode)\n\
-         [2] Borderless Fullscreen\n\
-         [W/Esc] Windowed\n\
-         [Q] Quit",
-        window.mode, effective_mode,
-    );
+    (row2, row3)
 }
 
 // --- Input Handling ---
 
 fn handle_input(
     keys: Res<ButtonInput<KeyCode>>,
-    mut window: Single<&mut Window, With<PrimaryWindow>>,
+    mut window_query: Single<(&mut Window, &CurrentMonitor), With<PrimaryWindow>>,
     bevy_monitors: Query<(Entity, &Monitor)>,
-    monitors_res: Res<Monitors>,
     mut selected: ResMut<SelectedVideoModes>,
 ) {
-    let monitor = window.monitor(&monitors_res);
+    let (window, monitor) = &mut *window_query;
 
     // Get video modes for current monitor by matching position
     let video_modes: Vec<VideoMode> = bevy_monitors
@@ -457,9 +502,9 @@ fn debug_window_changed(
     }
 
     // Update cache
-    cached.position = Some(w.position.clone());
+    cached.position = Some(w.position);
     cached.width = w.physical_width();
     cached.height = w.physical_height();
-    cached.mode = Some(w.mode.clone());
+    cached.mode = Some(w.mode);
     cached.focused = w.focused;
 }

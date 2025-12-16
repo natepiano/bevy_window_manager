@@ -39,6 +39,16 @@
       "expected_mode": "BorderlessFullscreen"
     },
     {
+      "id": "wayland_cross_monitor_low_to_high",
+      "name": "Wayland: Cross-Monitor Low→High DPI",
+      "description": "Window saved on Monitor 1 (scale 2) restores correctly when launched from Monitor 0 (scale 1)",
+      "automation": "full",
+      "backend": "wayland",
+      "requires": {"min_monitors": 2, "different_scales": true},
+      "ron_file": "cross_monitor_low_to_high.ron",
+      "validate": ["size", "monitor_index", "mode"]
+    },
+    {
       "id": "x11_position_size_restore",
       "name": "X11: Position and Size Restore",
       "description": "Basic position/size persistence on X11",
@@ -103,6 +113,74 @@
       ],
       "success_criteria_without": "Bug confirmed: Position not saved after keyboard snap",
       "success_criteria_with": "Fix confirmed: Position saved and restored after keyboard snap"
+    },
+    {
+      "id": "x11_monitor_boundary",
+      "name": "X11: Monitor Boundary Detection",
+      "description": "Verifies correct monitor is detected when window is positioned at the boundary between monitors",
+      "automation": "human_assisted",
+      "backend": "x11",
+      "ron_file": "monitor_boundary_detection.ron",
+      "instructions": [
+        "## Monitor Boundary Detection Test (X11)",
+        "",
+        "This test verifies that the correct monitor is detected when positioning",
+        "a window right at the boundary between two monitors.",
+        "",
+        "### PHASE 1: Position at Boundary",
+        "1. Drag the window so it straddles the boundary between Monitor 0 and Monitor 1",
+        "2. Position it so ~60% is on Monitor 1, ~40% on Monitor 0",
+        "3. **VERIFY**: The UI should show 'Monitor: 1' (center-based detection)",
+        "4. Tell Claude when positioned",
+        "",
+        "### PHASE 2: Save and Verify",
+        "5. Claude will close the app and copy the saved state",
+        "6. Claude will relaunch and verify the monitor_index in saved state",
+        "",
+        "### PHASE 3: Restore Verification",
+        "7. Claude will restore from the saved state",
+        "8. **VERIFY**: Window should restore to the same visual position",
+        "9. **VERIFY**: UI should still show 'Monitor: 1'"
+      ],
+      "validate": ["monitor_index", "position"],
+      "success_criteria": "Monitor 1 detected when window center is on Monitor 1, even at boundary"
+    },
+    {
+      "id": "wayland_monitor_boundary",
+      "name": "Wayland: Monitor Boundary Detection",
+      "description": "Verifies correct monitor is detected on Wayland using winit current_monitor() when window is at monitor boundary",
+      "automation": "human_assisted",
+      "backend": "wayland",
+      "ron_file": "monitor_boundary_detection.ron",
+      "instructions": [
+        "## Monitor Boundary Detection Test (Wayland)",
+        "",
+        "This test verifies that the CurrentMonitor component correctly tracks",
+        "the monitor on Wayland where position-based detection doesn't work.",
+        "",
+        "### PHASE 1: Position at Boundary",
+        "1. Drag the window so it straddles the boundary between Monitor 0 and Monitor 1",
+        "2. Keep dragging slowly across the boundary",
+        "3. **OBSERVE**: The UI should update to show 'Monitor: 1' when window is fully on Monitor 1",
+        "4. Note: On Wayland, monitor only updates when window is FULLY on the new monitor",
+        "5. Tell Claude when positioned fully on Monitor 1",
+        "",
+        "### PHASE 2: Save and Verify",
+        "6. Claude will close the app and check the saved state",
+        "7. **VERIFY**: saved monitor_index should be 1",
+        "",
+        "### PHASE 3: Restore Verification",
+        "8. Claude will relaunch the app",
+        "9. **VERIFY**: UI should show 'Monitor: 1' after restore",
+        "10. Note: Position won't restore on Wayland (expected), but monitor should be correct"
+      ],
+      "validate": ["monitor_index"],
+      "wayland_notes": [
+        "On Wayland, position is always (0,0) - this is expected",
+        "Monitor detection uses winit's current_monitor() which updates when window is fully on new monitor",
+        "The key validation is that monitor_index is saved and restored correctly"
+      ],
+      "success_criteria": "Monitor 1 detected and saved correctly when window is fully on Monitor 1"
     }
   ]
 }

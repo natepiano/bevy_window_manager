@@ -1,0 +1,1 @@
+- When creating/updating integration tests, make sure the human_only tests are grouped together and go last.

@@ -3,92 +3,42 @@ name = "bevy_window_manager"
 version = "0.17.2"
 edition = "2024"
 description = "Bevy plugin for window state management, multi-monitor support, and position restoration"
-license = "MIT OR Apache-2.0"
 repository = "https://github.com/natepiano/bevy_window_manager"
-keywords = ["bevy", "window", "monitor", "multi-monitor", "gamedev"]
+license = "MIT OR Apache-2.0"
+keywords = ["bevy", "gamedev", "monitor", "multi-monitor", "window"]
 categories = ["game-development", "gui"]
 
-[lints.clippy]
-expect_used = "deny"
-panic = "deny"
-unwrap_used = "deny"
+[lib]
+name = "bevy_window_manager"
+path = "src/lib.rs"
 
-# Enable lint groups as errors (with lower priority so allows can override)
-all = { level = "deny", priority = -1 }
-cargo = { level = "deny", priority = -1 }
-nursery = { level = "deny", priority = -1 }
-pedantic = { level = "deny", priority = -1 }
+[dependencies]
+bevy = "0.17.3"
+dirs = "6.0"
+ron = "0.12"
+serde = { version = "1.0", features = ["derive"] }
 
-# Allow specific lints that conflict with Bevy patterns
-multiple_crate_versions = "allow"
-needless_pass_by_value = "allow"
+[dev-dependencies]
+bevy_brp_extras = "0.17.2"
 
-# Screen dimensions are always within safe ranges for these casts
-cast_possible_wrap = "allow"
-cast_possible_truncation = "allow"
-cast_sign_loss = "allow"
+[target.'cfg(windows)'.dependencies]
+raw-window-handle = "0.6"
+windows = { version = "0.62.2", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+] }
 
 [features]
 default = [
-  "workaround-winit-4341",
-  "workaround-winit-3124",
-  "workaround-winit-4443",
   "workaround-bevy-22060",
-  "workaround-macos-scale-compensation",
   "workaround-macos-drag-back-reset",
+  "workaround-macos-scale-compensation",
+  "workaround-winit-3124",
+  "workaround-winit-4341",
+  "workaround-winit-4443",
 ]
-
-# Windows DPI drag bounce workaround - remove when winit includes PR #4341
-# Issue: https://github.com/rust-windowing/winit/issues/4041
-# Fix: https://github.com/rust-windowing/winit/pull/4341
-#
-# Test without workaround: cargo run --example restore_window --no-default-features
-# Test with workaround:    cargo run --example restore_window
-workaround-winit-4341 = []
-
-# macOS scale factor compensation workaround
-# Issue: https://github.com/rust-windowing/winit/issues/4440
-#
-# `set_outer_position` and `request_inner_size` use the current monitor's scale
-# factor for coordinate conversion instead of the target monitor's. When restoring
-# a window to a different-scale monitor, coordinates are converted incorrectly.
-#
-# This workaround compensates position/size based on scale factor ratios and
-# uses a two-phase approach for high→low DPI transitions.
-#
-# Test without workaround: cargo run --example restore_window --no-default-features --features workaround-winit-4341
-# Test with workaround:    cargo run --example restore_window
-workaround-macos-scale-compensation = []
-
-# Windows DX12/DXGI exclusive fullscreen crash workaround
-# Issue: https://github.com/rust-windowing/winit/issues/3124
-#
-# DXGI flip model surfaces (used by DX12) don't support exclusive fullscreen at
-# startup. We defer fullscreen until after surface creation.
-#
-# Winit closed this as "not planned" because the swapchain is created by wgpu, not
-# winit. There's no Bevy issue for this yet - Bevy is the right place to fix it
-# since it orchestrates both window creation (winit) and surface creation (wgpu).
-#
-# Test without workaround: cargo run --example restore_window --no-default-features --features workaround-winit-4341,workaround-macos-scale-compensation
-# Test with workaround:    cargo run --example restore_window
-workaround-winit-3124 = []
-
-# Linux X11 keyboard snap position workaround
-# Issue: https://github.com/rust-windowing/winit/issues/4443
-# Related: https://github.com/bevyengine/bevy/issues/17576
-#
-# On X11, when the window manager moves+resizes a window via keyboard shortcuts
-# (KDE: Meta+Arrow snap/tile), winit emits `SurfaceResized` but not `Moved`, even
-# though the window position changed. Bevy's cached `window.position` doesn't update.
-#
-# This workaround queries winit's `outer_position()` directly when saving state
-# instead of trusting bevy's cached position.
-#
-# Test without workaround: WAYLAND_DISPLAY= cargo run --example restore_window --no-default-features --features workaround-winit-4341
-# Test with workaround:    WAYLAND_DISPLAY= cargo run --example restore_window
-workaround-winit-4443 = []
-
 # macOS TLS panic on quit from exclusive fullscreen workaround
 # Issue: https://github.com/bevyengine/bevy/issues/22060
 # Fix: https://github.com/bevyengine/bevy/pull/22060
@@ -100,7 +50,6 @@ workaround-winit-4443 = []
 #
 # Remove when using Bevy 0.18+, which includes the fix.
 workaround-bevy-22060 = []
-
 # macOS W4 drag-back size reset workaround
 # Issue: https://github.com/rust-windowing/winit/issues/4441
 #
@@ -116,31 +65,70 @@ workaround-bevy-22060 = []
 #
 # Requires: workaround-macos-scale-compensation (the two-phase restore creates the W4 scenario)
 workaround-macos-drag-back-reset = ["workaround-macos-scale-compensation"]
+# macOS scale factor compensation workaround
+# Issue: https://github.com/rust-windowing/winit/issues/4440
+#
+# `set_outer_position` and `request_inner_size` use the current monitor's scale
+# factor for coordinate conversion instead of the target monitor's. When restoring
+# a window to a different-scale monitor, coordinates are converted incorrectly.
+#
+# This workaround compensates position/size based on scale factor ratios and
+# uses a two-phase approach for high→low DPI transitions.
+#
+# Test without workaround: cargo run --example restore_window --no-default-features --features workaround-winit-4341
+# Test with workaround:    cargo run --example restore_window
+workaround-macos-scale-compensation = []
+# Windows DX12/DXGI exclusive fullscreen crash workaround
+# Issue: https://github.com/rust-windowing/winit/issues/3124
+#
+# DXGI flip model surfaces (used by DX12) don't support exclusive fullscreen at
+# startup. We defer fullscreen until after surface creation.
+#
+# Winit closed this as "not planned" because the swapchain is created by wgpu, not
+# winit. There's no Bevy issue for this yet - Bevy is the right place to fix it
+# since it orchestrates both window creation (winit) and surface creation (wgpu).
+#
+# Test without workaround: cargo run --example restore_window --no-default-features --features workaround-winit-4341,workaround-macos-scale-compensation
+# Test with workaround:    cargo run --example restore_window
+workaround-winit-3124 = []
+# Windows DPI drag bounce workaround - remove when winit includes PR #4341
+# Issue: https://github.com/rust-windowing/winit/issues/4041
+# Fix: https://github.com/rust-windowing/winit/pull/4341
+#
+# Test without workaround: cargo run --example restore_window --no-default-features
+# Test with workaround:    cargo run --example restore_window
+workaround-winit-4341 = []
+# Linux X11 keyboard snap position workaround
+# Issue: https://github.com/rust-windowing/winit/issues/4443
+# Related: https://github.com/bevyengine/bevy/issues/17576
+#
+# On X11, when the window manager moves+resizes a window via keyboard shortcuts
+# (KDE: Meta+Arrow snap/tile), winit emits `SurfaceResized` but not `Moved`, even
+# though the window position changed. Bevy's cached `window.position` doesn't update.
+#
+# This workaround queries winit's `outer_position()` directly when saving state
+# instead of trusting bevy's cached position.
+#
+# Test without workaround: WAYLAND_DISPLAY= cargo run --example restore_window --no-default-features --features workaround-winit-4341
+# Test with workaround:    WAYLAND_DISPLAY= cargo run --example restore_window
+workaround-winit-4443 = []
 
-[lib]
-name = "bevy_window_manager"
-path = "src/lib.rs"
-
-[dependencies]
-# bevy = { path = "../bevy" }
-bevy = "0.17.3"
-dirs = "6.0"
-ron = "0.12"
-serde = { version = "1.0", features = ["derive"] }
-
-[target.'cfg(windows)'.dependencies]
-raw-window-handle = "0.6"
-# curent version of windows is 0.62.2 - test it out there
-windows = { version = "0.62.2", features = [
-  "Win32_Foundation",
-  "Win32_UI_WindowsAndMessaging",
-  "Win32_UI_Shell",
-  "Win32_Graphics_Gdi",
-] }
-
-
-[dev-dependencies]
-bevy_brp_extras = "0.17.2"
+[lints.clippy]
+# Enable lint groups as errors (with lower priority so allows can override)
+all = { level = "deny", priority = -1 }
+cargo = { level = "deny", priority = -1 }
+cast_possible_truncation = "allow"
+# Screen dimensions are always within safe ranges for these casts
+cast_possible_wrap = "allow"
+cast_sign_loss = "allow"
+expect_used = "deny"
+# Allow specific lints that conflict with Bevy patterns
+multiple_crate_versions = "allow"
+needless_pass_by_value = "allow"
+nursery = { level = "deny", priority = -1 }
+panic = "deny"
+pedantic = { level = "deny", priority = -1 }
+unwrap_used = "deny"
 
 [profile.dev.package."*"]
 opt-level = 3

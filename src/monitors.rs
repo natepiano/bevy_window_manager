@@ -17,7 +17,7 @@ impl Plugin for MonitorPlugin {
 }
 
 /// Information about a single monitor.
-#[derive(Clone, Debug, Reflect)]
+#[derive(Clone, Copy, Debug, Reflect)]
 pub struct MonitorInfo {
     /// Index in the sorted monitor list.
     pub index:    usize,
@@ -36,6 +36,24 @@ pub struct MonitorInfo {
 #[reflect(Resource)]
 pub struct Monitors {
     list: Vec<MonitorInfo>,
+}
+
+/// Component storing the current monitor for a window.
+///
+/// Query this alongside your window to get monitor information:
+/// ```ignore
+/// fn my_system(q: Query<(&Window, &CurrentMonitor), With<PrimaryWindow>>) {
+///     let (window, monitor) = q.single();
+///     println!("Window on monitor {} at scale {}", monitor.index, monitor.scale);
+/// }
+/// ```
+#[derive(Component, Clone, Copy, Debug, Reflect)]
+pub struct CurrentMonitor(pub MonitorInfo);
+
+impl std::ops::Deref for CurrentMonitor {
+    type Target = MonitorInfo;
+
+    fn deref(&self) -> &Self::Target { &self.0 }
 }
 
 impl Monitors {
