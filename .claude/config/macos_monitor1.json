@@ -1,0 +1,46 @@
+{
+  "platform": "macos",
+  "launch_monitor": 1,
+  "example_ron_path": "~/Library/Application Support/restore_window/windows.ron",
+  "test_ron_dir": ".claude/config/ron/macos_1",
+
+  "tests": [
+    {
+      "id": "same_monitor_restore",
+      "name": "Restore: Same Monitor",
+      "description": "Basic position/size persistence on launch monitor",
+      "automation": "full",
+
+      "ron_file": "same_monitor_restore.ron",
+
+      "mutation": {
+        "target_monitor": "launch",
+        "position_offset": [300, 200],
+        "size": [1100, 600]
+      },
+
+      "validate": ["position", "size", "monitor_index", "mode"]
+    },
+
+    {
+      "id": "cross_monitor_low_to_high",
+      "name": "Cross-Monitor Low→High DPI (W1)",
+      "description": "Window on high-DPI monitor restores correctly when launched from low-DPI monitor",
+      "automation": "full",
+      "requires": {"min_monitors": 2, "different_scales": true},
+      "workaround_keys": ["W1"],
+
+      "workaround_validation": {
+        "feature_flag": "workaround-macos-scale-compensation",
+        "build_without": "--no-default-features --features workaround-winit-4341,workaround-bevy-22060",
+        "build_with": "",
+        "without_behavior": "Window restores to wrong position/size on Monitor 0 due to scale factor mismatch",
+        "with_behavior": "Window restores to correct position/size on Monitor 0"
+      },
+
+      "ron_file": "cross_monitor_low_to_high.ron",
+
+      "validate": ["position", "size", "monitor_index", "mode"]
+    }
+  ]
+}

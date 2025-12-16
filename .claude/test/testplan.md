@@ -21,16 +21,24 @@ Tests are keyed to these tracked issues:
 - Launch Monitor 0 (primary): Higher scale (e.g., 2.0 / 200%)
 - Launch Monitor 1 (external): Lower scale (e.g., 1.0 / 100% on Mac, 1.75 / 175% on Windows)
 
-**Commands:**
+**State File Locations:**
+
+| Platform | Path |
+|----------|------|
+| macOS | `~/Library/Application Support/restore_window/windows.ron` |
+| Windows | `%APPDATA%\restore_window\windows.ron` |
+| Linux | `~/.local/share/restore_window/windows.ron` |
+
+**Commands to Reset State:**
 
 macOS:
 ```bash
-rm ~/Library/Application\ Support/restore_window/window_state.json
+rm ~/Library/Application\ Support/restore_window/windows.ron
 ```
 
 Windows (PowerShell):
 ```powershell
-del $env:APPDATA\restore_window\window_state.json
+del $env:APPDATA\restore_window\windows.ron
 ```
 
 ---
@@ -43,48 +51,48 @@ del $env:APPDATA\restore_window\window_state.json
 
 #### Restore: Same Monitor
 *Test: Basic position/size persistence*
-- [x] Move app window on Launch Monitor 0, resize, close
-- [x] Relaunch → app window restores to same position/size
+- [ ] Move app window on Launch Monitor 0, resize, close
+- [ ] Relaunch → app window restores to same position/size
 
 #### Cross-Monitor High→Low DPI (W1)
 *Test: HigherToLower two-phase strategy*
-- [x] Launch from Monitor 0, move app window to Monitor 1, resize, close
-- [x] Relaunch from Launch Monitor 0 → app window moves to Monitor 1 with correct size
-- [x] Validate at various dock positions (left, right, maximized)
+- [ ] Launch from Monitor 0, move app window to Monitor 1, resize, close
+- [ ] Relaunch from Launch Monitor 0 → app window moves to Monitor 1 with correct size
+- [ ] Validate at various dock positions (left, right, maximized)
 
 #### DPI Drag Size Stability (W4)
 *Test: AppKit per-scale size tracking with workaround*
-- [x] Launch from Monitor 0 (high scale), restore to Monitor 1 (low scale)
-- [x] Drag app window back to Monitor 0 → size should scale correctly (2x), not reset to default
-- [x] Drag app window back to Monitor 1 → size should scale correctly (0.5x)
-- [x] Manual resize on Monitor 1, then drag back to Monitor 0 → user's size preserved
+- [ ] Launch from Monitor 0 (high scale), restore to Monitor 1 (low scale)
+- [ ] Drag app window back to Monitor 0 → size should scale correctly (2x), not reset to default
+- [ ] Drag app window back to Monitor 1 → size should scale correctly (0.5x)
+- [ ] Manual resize on Monitor 1, then drag back to Monitor 0 → user's size preserved
 
 #### Fullscreen: Borderless Green Button
 *Test: macOS green button borderless restoration*
-- [x] Press green button for borderless on Monitor 0, close (command-Q)
-- [x] Relaunch → restores to borderless on Monitor 0
+- [ ] Press green button for borderless on Monitor 0, close (command-Q)
+- [ ] Relaunch → restores to borderless on Monitor 0
 
 #### Fullscreen: Programmatic Borderless
-- [x] Move app window to Monitor 0, Press 2 for borderless, close
-- [x] Relaunch → restores correctly as borderless on Monitor 0
+- [ ] Move app window to Monitor 0, Press 2 for borderless, close
+- [ ] Relaunch → restores correctly as borderless on Monitor 0
 
 #### Fullscreen Exclusive (B1)
 *Test: TLS panic on quit*
-- [x] Move app window to Monitor 0, Press 1 for exclusive, select video mode, close (command-Q)
-- [x] Relaunch → restores to exclusive fullscreen on Monitor 0
-- [x] Verify no panic on quit
+- [ ] Move app window to Monitor 0, Press 1 for exclusive, select video mode, close (command-Q)
+- [ ] Relaunch → restores to exclusive fullscreen on Monitor 0
+- [ ] Verify no panic on quit
 
 ### Launch Monitor 1 Tests (Low Scale - External)
 
 #### Restore: Same Monitor
-- [x] Move app window on Launch Monitor 1, resize, close
-- [x] Relaunch → app window restores to same position/size
+- [ ] Move app window on Launch Monitor 1, resize, close
+- [ ] Relaunch → app window restores to same position/size
 
 #### Cross-Monitor Low→High DPI (W1)
 *Test: LowerToHigher strategy*
-- [x] Launch from Monitor 1, move app window to Monitor 0, resize, close
-- [x] Relaunch from Launch Monitor 1 → app window launches on Monitor 0 with correct size and position
-- [x] Validate at various dock positions (left, right, maximized)
+- [ ] Launch from Monitor 1, move app window to Monitor 0, resize, close
+- [ ] Relaunch from Launch Monitor 1 → app window launches on Monitor 0 with correct size and position
+- [ ] Validate at various dock positions (left, right, maximized)
 
 ---
 
@@ -95,56 +103,56 @@ del $env:APPDATA\restore_window\window_state.json
 ### Launch Monitor 0 Tests (High Scale - Primary)
 
 #### Restore: Same Monitor
-- [x] Move app window on Launch Monitor 0, resize, close
-- [x] Relaunch → app window restores to same position/size
+- [ ] Move app window on Launch Monitor 0, resize, close
+- [ ] Relaunch → app window restores to same position/size
 
 #### Cross-Monitor High→Low DPI
 *Test: CompensateSizeOnly strategy*
-- [x] Launch from Monitor 0, move app window to Monitor 1, resize, close
-- [x] Relaunch from Launch Monitor 0 → app window moves to Monitor 1 with correct size
+- [ ] Launch from Monitor 0, move app window to Monitor 1, resize, close
+- [ ] Relaunch from Launch Monitor 0 → app window moves to Monitor 1 with correct size
 
 #### Restore Maximized Window
-- [x] Maximize app window on Launch Monitor 0, close
-- [x] Relaunch → restores maximized on Monitor 0
+- [ ] Maximize app window on Launch Monitor 0, close
+- [ ] Relaunch → restores maximized on Monitor 0
 
 #### DPI Drag (W2)
 *Test: Bounce/resize bug*
-- [x] Drag app window slowly from Monitor 0 to Monitor 1
-- [x] App window moves smoothly, no bouncing back, resizes correctly
+- [ ] Drag app window slowly from Monitor 0 to Monitor 1
+- [ ] App window moves smoothly, no bouncing back, resizes correctly
 
 #### Fullscreen: Borderless
-- [x] Press 2 for borderless on Monitor 0, close
-- [x] Relaunch → restores to borderless on Monitor 0
+- [ ] Press 2 for borderless on Monitor 0, close
+- [ ] Relaunch → restores to borderless on Monitor 0
 
 #### Fullscreen Exclusive (W3)
 *Test: DX12/DXGI surface creation crash*
-- [x] Press 1 for exclusive on Monitor 0, select video mode, close
-- [x] Relaunch → restores to exclusive fullscreen (brief windowed flash is expected)
+- [ ] Press 1 for exclusive on Monitor 0, select video mode, close
+- [ ] Relaunch → restores to exclusive fullscreen (brief windowed flash is expected)
 
 ### Launch Monitor 1 Tests (Low Scale - External)
 
 #### Restore: Same Monitor
-- [x] Move app window on Launch Monitor 1, resize, close
-- [x] Relaunch → app window restores to same position/size
+- [ ] Move app window on Launch Monitor 1, resize, close
+- [ ] Relaunch → app window restores to same position/size
 
 #### Cross-Monitor Low→High DPI
 *Test: CompensateSizeOnly strategy*
-- [x] Launch from Monitor 1, move app window to Monitor 0, resize, close
-- [x] Relaunch from Launch Monitor 1 → app window moves to Monitor 0 with correct size
+- [ ] Launch from Monitor 1, move app window to Monitor 0, resize, close
+- [ ] Relaunch from Launch Monitor 1 → app window moves to Monitor 0 with correct size
 
 #### DPI Drag (W2)
 *Test: Bounce/resize bug*
-- [x] Drag app window slowly from Monitor 1 to Monitor 0
-- [x] App window moves smoothly, no bouncing back, resizes correctly
+- [ ] Drag app window slowly from Monitor 1 to Monitor 0
+- [ ] App window moves smoothly, no bouncing back, resizes correctly
 
 #### Fullscreen: Borderless
-- [x] Press 2 for borderless on Monitor 1, close
-- [x] Relaunch → restores to borderless on Monitor 1
+- [ ] Press 2 for borderless on Monitor 1, close
+- [ ] Relaunch → restores to borderless on Monitor 1
 
 #### Fullscreen Exclusive (W3)
 *Test: DX12/DXGI surface creation crash*
-- [x] Press 1 for exclusive on Monitor 1, select video mode, close
-- [x] Relaunch → restores to exclusive fullscreen (brief windowed flash is expected)
+- [ ] Press 1 for exclusive on Monitor 1, select video mode, close
+- [ ] Relaunch → restores to exclusive fullscreen (brief windowed flash is expected)
 
 ---
 
@@ -154,7 +162,7 @@ del $env:APPDATA\restore_window\window_state.json
 
 **Setup:**
 ```bash
-rm ~/.local/share/restore_window/window_state.json
+rm ~/.local/share/restore_window/windows.ron
 # Ensure Wayland is running (default on modern KDE/GNOME)
 ```
 
@@ -183,7 +191,7 @@ rm ~/.local/share/restore_window/window_state.json
 
 **Setup:**
 ```bash
-rm ~/.local/share/restore_window/window_state.json
+rm ~/.local/share/restore_window/windows.ron
 # Force X11 session:
 WAYLAND_DISPLAY= cargo run --example restore_window
 ```

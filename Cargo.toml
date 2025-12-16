@@ -139,5 +139,8 @@ windows = { version = "0.62.2", features = [
 ] }
 
 
+[dev-dependencies]
+bevy_brp_extras = "0.17.2"
+
 [profile.dev.package."*"]
 opt-level = 3

@@ -1,0 +1,14 @@
+(
+    position: Some((0, 0)),
+    width: 1920,
+    height: 1200,
+    monitor_index: 0,
+    mode: Fullscreen(
+        video_mode: Some((
+            physical_size: (1920, 1200),
+            bit_depth: 32,
+            refresh_rate_millihertz: 60000,
+        )),
+    ),
+    app_name: "restore_window",
+)

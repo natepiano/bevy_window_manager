@@ -17,7 +17,7 @@ impl Plugin for MonitorPlugin {
 }
 
 /// Information about a single monitor.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Reflect)]
 pub struct MonitorInfo {
     /// Index in the sorted monitor list.
     pub index:    usize,
@@ -32,7 +32,8 @@ pub struct MonitorInfo {
 /// Sorted monitor list, updated when monitors change.
 ///
 /// Monitors are sorted with primary (at 0,0) first, then by position.
-#[derive(Resource)]
+#[derive(Resource, Reflect)]
+#[reflect(Resource)]
 pub struct Monitors {
     list: Vec<MonitorInfo>,
 }

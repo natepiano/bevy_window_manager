@@ -24,6 +24,7 @@ use bevy::window::VideoMode;
 use bevy::window::VideoModeSelection;
 use bevy::window::WindowMode;
 use bevy::window::WindowPosition;
+use bevy_brp_extras::BrpExtrasPlugin;
 use bevy_window_manager::Monitors;
 use bevy_window_manager::WindowExt;
 use bevy_window_manager::WindowManagerPlugin;
@@ -38,6 +39,7 @@ fn main() {
             ..default()
         }))
         .add_plugins(WindowManagerPlugin)
+        .add_plugins(BrpExtrasPlugin::default())
         .init_resource::<SelectedVideoModes>()
         .add_systems(Startup, setup)
         .add_systems(Update, (update_display, handle_input))

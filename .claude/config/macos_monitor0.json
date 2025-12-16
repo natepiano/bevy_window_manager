@@ -1,0 +1,137 @@
+{
+  "platform": "macos",
+  "launch_monitor": 0,
+  "example_ron_path": "~/Library/Application Support/restore_window/windows.ron",
+  "test_ron_dir": ".claude/config/ron/macos_0",
+
+  "tests": [
+    {
+      "id": "same_monitor_restore",
+      "name": "Restore: Same Monitor",
+      "description": "Basic position/size persistence on launch monitor",
+      "automation": "full",
+
+      "ron_file": "same_monitor_restore.ron",
+
+      "mutation": {
+        "target_monitor": "launch",
+        "position_offset": [400, 300],
+        "size": [1000, 700]
+      },
+
+      "validate": ["position", "size", "monitor_index", "mode"]
+    },
+
+    {
+      "id": "cross_monitor_high_to_low",
+      "name": "Cross-Monitor High→Low DPI (W1)",
+      "description": "Window on low-DPI monitor restores correctly when launched from high-DPI monitor",
+      "automation": "full",
+      "requires": {"min_monitors": 2, "different_scales": true},
+      "workaround_keys": ["W1"],
+
+      "workaround_validation": {
+        "feature_flag": "workaround-macos-scale-compensation",
+        "build_without": "--no-default-features --features workaround-winit-4341,workaround-bevy-22060",
+        "build_with": "",
+        "without_behavior": "Window restores to wrong position/size on Monitor 1 due to scale factor mismatch",
+        "with_behavior": "Window restores to correct position/size on Monitor 1"
+      },
+
+      "ron_file": "cross_monitor_high_to_low.ron",
+
+      "validate": ["position", "size", "monitor_index", "mode"]
+    },
+
+    {
+      "id": "fullscreen_borderless_programmatic",
+      "name": "Fullscreen: Programmatic Borderless",
+      "description": "Borderless fullscreen restore - starts in borderless mode via RON",
+      "automation": "full",
+
+      "ron_file": "fullscreen_borderless_programmatic.ron",
+
+      "validate": ["monitor_index", "mode"]
+    },
+
+    {
+      "id": "fullscreen_exclusive",
+      "name": "Fullscreen: Exclusive (B1)",
+      "description": "Exclusive fullscreen with TLS panic workaround - tests that app quits cleanly from exclusive fullscreen",
+      "automation": "full",
+      "workaround_keys": ["B1"],
+
+      "workaround_validation": {
+        "feature_flag": "workaround-bevy-22060",
+        "build_without": "--no-default-features --features workaround-winit-4341,workaround-macos-scale-compensation,workaround-macos-drag-back-reset",
+        "build_with": "",
+        "without_behavior": "App panics on quit (exit code 134) with TLS error",
+        "with_behavior": "App quits cleanly (exit code 0)"
+      },
+
+      "ron_file": "fullscreen_exclusive.ron",
+
+      "quit_method": "osascript_cmd_q",
+      "validate": ["exit_code"]
+    },
+
+    {
+      "id": "dpi_drag_size_stability",
+      "name": "DPI Drag Size Stability (W4)",
+      "description": "Tests AppKit per-scale size tracking bug - window size should not reset when dragging between monitors",
+      "automation": "human_only",
+      "requires": {"min_monitors": 2, "different_scales": true},
+      "workaround_keys": ["W4"],
+
+      "workaround_validation": {
+        "feature_flag": "workaround-macos-drag-back-reset",
+        "build_without": "--no-default-features --features workaround-winit-4341,workaround-bevy-22060,workaround-macos-scale-compensation",
+        "build_with": "",
+        "without_behavior": "Window size shrinks incorrectly when dragged from Monitor 1 back to Monitor 0",
+        "with_behavior": "Window size is preserved when dragged back (brief visual flash is expected)"
+      },
+
+      "ron_file": "dpi_drag_size_stability.ron",
+
+      "instructions_without_workaround": [
+        "## PHASE 1: Testing WITHOUT workaround (expect bug)",
+        "1. App built WITHOUT workaround-macos-drag-back-reset",
+        "2. Window restores on Monitor 1 with size ~900x500",
+        "3. Drag the window to Monitor 0 (high DPI)",
+        "4. **EXPECTED BUG**: Window size shrinks incorrectly",
+        "5. Close the app (Cmd+Q)"
+      ],
+
+      "instructions_with_workaround": [
+        "## PHASE 2: Testing WITH workaround (expect fix)",
+        "1. App rebuilt WITH workaround-macos-drag-back-reset",
+        "2. Window restores on Monitor 1 with size ~900x500",
+        "3. Drag the window to Monitor 0 (high DPI)",
+        "4. **EXPECTED**: Window size is preserved (brief flash is OK)",
+        "5. Close the app (Cmd+Q)"
+      ],
+
+      "success_criteria_without": "Bug confirmed: Window size shrinks incorrectly when dragged to Monitor 0",
+      "success_criteria_with": "Fix confirmed: Window size remains ~900x500 (visually consistent) after drag"
+    },
+
+    {
+      "id": "fullscreen_borderless_green_button",
+      "name": "Fullscreen: Borderless Green Button",
+      "description": "Tests macOS native fullscreen via green button",
+      "automation": "human_only",
+
+      "ron_file": "fullscreen_borderless_green_button.ron",
+
+      "instructions": [
+        "1. App launches in windowed mode on Monitor 0",
+        "2. Click the green maximize button (top-left of window)",
+        "3. Window should animate into macOS native fullscreen",
+        "4. Close the app (Cmd+Q) while in fullscreen",
+        "5. Relaunch the app",
+        "6. Verify: Window should restore to fullscreen state"
+      ],
+      "success_criteria": "Fullscreen state entered via green button persists after restart"
+    }
+  ]
+}

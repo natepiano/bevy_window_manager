@@ -1,0 +1,8 @@
+(
+    position: Some((0, 0)),
+    width: 3456,
+    height: 2234,
+    monitor_index: 0,
+    mode: BorderlessFullscreen,
+    app_name: "restore_window",
+)
