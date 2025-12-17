@@ -2,14 +2,19 @@
 
 Run automated integration tests for bevy_window_manager using BRP.
 
-**Usage**: `/test <platform> <monitor>`
+**Usage**: `/test <platform> [monitor]`
 
 **Examples**:
 - `/test macos 0` - Run macOS tests on monitor 0
 - `/test windows 1` - Run Windows tests on monitor 1
-- `/test linux 0` - Run Linux tests (Wayland + X11) on monitor 0
+- `/test linux` - Run Linux tests on ALL monitors (auto-moves terminal)
 
 **Arguments**: $ARGUMENTS
+
+**Linux Requirements**:
+- Must run from XWayland Konsole (launched via `.claude/scripts/linux_test.sh`)
+- The script spawns Konsole in XWayland mode so xdotool can detect/move it
+- Tests run on all monitors automatically - no monitor argument needed
 
 <CriticalRules>
 **STOP AND CONSULT USER IF:**
@@ -24,10 +29,11 @@ Do NOT continue running more tests after a failure. Stop, explain what happened,
 
 <ExecutionSteps>
 1. <ParseArguments/>
-2. <LoadTestConfig/>
-3. <DiscoverMonitors/>
-4. <RunTests/>
-5. <FormatResults/>
+2. <LinuxEnvironmentCheck/>
+3. <LoadTestConfig/>
+4. <DiscoverMonitors/>
+5. <RunTests/>
+6. <FormatResults/>
 </ExecutionSteps>
 
 <ParseArguments>
@@ -35,15 +41,38 @@ Parse $ARGUMENTS → extract platform and monitor_index.
 
 Valid platforms: macos, windows, linux
 
-Store as ${PLATFORM} and ${MONITOR_INDEX}.
+- **macOS/Windows**: Require monitor_index argument
+- **Linux**: No monitor_index needed (runs all monitors automatically)
+
+Store as ${PLATFORM} and ${MONITOR_INDEX} (Linux: ${MONITOR_INDEX} = "all").
 </ParseArguments>
 
+<LinuxEnvironmentCheck>
+**Linux only**: Check if running from XWayland Konsole.
+
+1. Run `.claude/scripts/detect_konsole_monitor.sh`
+
+2. **If SUCCESS** (returns "0" or "1"):
+   - We're in XWayland Konsole → proceed to <LoadTestConfig/>
+
+3. **If FAILURE** ("No XWayland Konsole found"):
+   - Launch `.claude/scripts/linux_test.sh` (in background)
+   - Display message: "Launched XWayland Konsole. Run `/test linux` in the new terminal."
+   - STOP execution (do not continue to LoadTestConfig)
+</LinuxEnvironmentCheck>
+
 <LoadTestConfig>
+**macOS/Windows**:
 Load `.claude/config/${PLATFORM}_monitor${MONITOR_INDEX}.json`
+
+**Linux**:
+Load BOTH config files:
+- `.claude/config/linux_monitor0.json`
+- `.claude/config/linux_monitor1.json`
 
 Extract: platform, launch_monitor, example_ron_path, test_ron_dir, tests array.
 
-Open the RON file in Zed for inspection: `zed ${example_ron_path}`
+Open the RON file in Zed/editor for inspection: `zed ${example_ron_path}`
 </LoadTestConfig>
 
 <DiscoverMonitors>
@@ -66,18 +95,33 @@ Open the RON file in Zed for inspection: `zed ${example_ron_path}`
    - Store X11-specific video modes as `${MONITOR_X_X11_VIDEO_MODE_*}` variables
    - Shutdown the X11 app
 
-4. Detect terminal monitor:
+4. Detect and verify terminal monitor:
    - **macOS**: `osascript -e 'tell application "System Events" to get position of first window of process "Zed"'`
      - Find which monitor contains this position → ${DETECTED_MONITOR}
-   - **Linux**: Skip detection (single monitor 0 for now)
+   - **Linux**: Run `.claude/scripts/detect_konsole_monitor.sh`
+     - Outputs "0" or "1" for the monitor index
+     - If error: STOP with the error message (likely "Must run from XWayland Konsole")
 
 5. Shutdown with `mcp__brp__brp_shutdown`
 
-6. If ${DETECTED_MONITOR} != ${MONITOR_INDEX}: STOP with error
-   - **Linux**: Skip this check (no detection available)
+6. Verify terminal is on correct monitor:
+   - **macOS/Windows**: If ${DETECTED_MONITOR} != ${MONITOR_INDEX}: STOP with error
+   - **Linux**: No verification needed (we auto-move to each monitor)
 
 Compute: ${NUM_MONITORS}, ${DIFFERENT_SCALES}
 </DiscoverMonitors>
+
+<LinuxTerminalMove>
+**Linux only**: Move Konsole to target monitor before running that monitor's tests.
+
+Run: `.claude/scripts/move_konsole_to_monitor.sh <monitor_index>`
+
+The script:
+- Positions Konsole in upper-left of target monitor
+- Accounts for title bar so entire window is on target monitor
+- Sizes window to half width and most of monitor height
+- Verifies position with detect script after move
+</LinuxTerminalMove>
 
 <TemplateVariables>
 Monitor properties (X = monitor index):
@@ -101,13 +145,22 @@ Linux X11-specific video modes (differ from Wayland):
 </TemplateVariables>
 
 <RunTests>
+**macOS/Windows**: Run tests for single monitor config.
+
+**Linux**: Run tests for ALL monitors in sequence:
+1. Move Konsole to Monitor 0 using <LinuxTerminalMove/>
+2. Run all tests from `linux_monitor0.json`
+3. Move Konsole to Monitor 1 using <LinuxTerminalMove/>
+4. Run all tests from `linux_monitor1.json`
+
 For each test in order:
 
 1. **Check requirements** - skip if not met
 
 2. **Resolve target_monitor**:
-   - `"launch"` → monitor at ${MONITOR_INDEX}
-   - `"other"` → first monitor that isn't ${MONITOR_INDEX}
+   - `"launch"` → current monitor (the one Konsole is on)
+   - `"other"` → first monitor that isn't current
+   - Explicit number → that monitor index
 
 3. **Execute test** using <TestSequence/>
 

@@ -62,7 +62,7 @@ pub fn init_winit_info(
             let outer = winit_window.outer_size();
             let inner = winit_window.inner_size();
             let decoration = WindowDecoration {
-                width:  outer.width.saturating_sub(inner.width),
+                width: outer.width.saturating_sub(inner.width),
                 height: outer.height.saturating_sub(inner.height),
             };
 
@@ -71,6 +71,29 @@ pub fn init_winit_info(
                 .outer_position()
                 .map(|p| IVec2::new(p.x, p.y))
                 .unwrap_or(IVec2::ZERO);
+
+            debug!(
+                "[init_winit_info] outer_position={:?} is_wayland={} current_monitor={:?} primary_monitor={:?}",
+                pos,
+                is_wayland(),
+                winit_window.current_monitor(),
+                winit_window.primary_monitor()
+            );
+
+            // Log what current_monitor() returns for comparison
+            let current_monitor_index = winit_window.current_monitor().and_then(|cm| {
+                let cm_pos = cm.position();
+                let idx = monitors.at(cm_pos.x, cm_pos.y).map(|m| m.index);
+                debug!(
+                    "[init_winit_info] current_monitor() position=({}, {}) -> index={:?}",
+                    cm_pos.x, cm_pos.y, idx
+                );
+                idx
+            });
+            debug!(
+                "[init_winit_info] current_monitor_index={:?}",
+                current_monitor_index
+            );
 
             let starting_monitor = monitors.closest_to(pos.x, pos.y);
             let starting_monitor_index = starting_monitor.index;
@@ -106,6 +129,11 @@ pub fn load_target_position(
         debug!("[load_target_position] No saved bevy_window_manager state");
         return;
     };
+
+    debug!(
+        "[load_target_position] Loaded state: position={:?} size={}x{} monitor_index={} mode={:?}",
+        state.position, state.width, state.height, state.monitor_index, state.mode
+    );
 
     // Position may be None on Wayland where clients can't access window position.
     // We can still restore fullscreen mode, size, and monitor.
@@ -210,6 +238,7 @@ pub fn load_target_position(
         starting_scale,
         monitor_scale_strategy: strategy,
         mode: state.mode,
+        target_monitor_index: state.monitor_index,
         #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
         fullscreen_restore_state: FullscreenRestoreState::WaitingForSurface,
     });
@@ -254,9 +283,25 @@ pub fn move_to_target_monitor(
             "[move_to_target_monitor] No position available (Wayland), setting size only: {}x{}",
             target.width, target.height
         );
+        debug!(
+            "[move_to_target_monitor] BEFORE set_physical_resolution: physical={}x{} logical={}x{} scale={}",
+            window.resolution.physical_width(),
+            window.resolution.physical_height(),
+            window.resolution.width(),
+            window.resolution.height(),
+            window.resolution.scale_factor()
+        );
         window
             .resolution
             .set_physical_resolution(target.width, target.height);
+        debug!(
+            "[move_to_target_monitor] AFTER set_physical_resolution: physical={}x{} logical={}x{} scale={}",
+            window.resolution.physical_width(),
+            window.resolution.physical_height(),
+            window.resolution.width(),
+            window.resolution.height(),
+            window.resolution.scale_factor()
+        );
         return;
     };
 
@@ -367,7 +412,7 @@ pub fn save_window_state(
         // Wayland: read existing component (managed by update_wayland_monitor)
         existing_monitor.map_or_else(
             || {
-                let p = monitors.primary();
+                let p = monitors.first();
                 (p.index, p.scale)
             },
             |m| (m.index, m.scale),
@@ -449,7 +494,6 @@ pub fn restore_primary_window(
     mut scale_changed_messages: MessageReader<WindowScaleFactorChanged>,
     mut target: ResMut<TargetPosition>,
     mut primary_window: Single<&mut Window, With<PrimaryWindow>>,
-    monitors: Res<Monitors>,
 ) {
     let scale_changed = scale_changed_messages.read().last().is_some();
 
@@ -481,7 +525,7 @@ pub fn restore_primary_window(
     );
 
     if matches!(
-        try_apply_restore(&target, &monitors, &mut primary_window),
+        try_apply_restore(&target, &mut primary_window),
         RestoreStatus::Complete
     ) {
         // Insert W4 drag-back protection for HigherToLower restores
@@ -634,24 +678,10 @@ fn apply_window_geometry(
 }
 
 /// Try to apply a pending window restore.
-fn try_apply_restore(
-    target: &TargetPosition,
-    monitors: &Monitors,
-    primary_window: &mut Window,
-) -> RestoreStatus {
-    // Find target monitor - use position if available, otherwise use first monitor
-    let target_mon = target.position.map_or_else(
-        || {
-            monitors
-                .by_index(0)
-                .unwrap_or_else(|| monitors.closest_to(0, 0))
-        },
-        |pos| monitors.closest_to(pos.x, pos.y),
-    );
-
-    // Handle fullscreen modes - just set the mode and we're done
+fn try_apply_restore(target: &TargetPosition, primary_window: &mut Window) -> RestoreStatus {
+    // Handle fullscreen modes - use saved monitor index from TargetPosition
     if target.mode.is_fullscreen() {
-        apply_fullscreen_restore(target, primary_window, target_mon.index);
+        apply_fullscreen_restore(target, primary_window, target.target_monitor_index);
         return RestoreStatus::Complete;
     }
 
@@ -726,11 +756,19 @@ fn determine_scale_strategy(starting_scale: f64, target_scale: f64) -> MonitorSc
 
 /// Determine the monitor scale strategy based on platform and scale factors.
 /// macOS with workaround: compensate position and size based on scale relationship.
+/// Wayland: always use ApplyUnchanged (can't detect starting monitor, can't set position).
 #[cfg(all(
     not(target_os = "windows"),
     feature = "workaround-macos-scale-compensation"
 ))]
 fn determine_scale_strategy(starting_scale: f64, target_scale: f64) -> MonitorScaleStrategy {
+    // On Wayland, we can't reliably detect the starting monitor (outer_position returns 0,0
+    // and current_monitor/primary_monitor return None at init). Since we also can't set
+    // position on Wayland, skip scale compensation entirely.
+    if is_wayland() {
+        return MonitorScaleStrategy::ApplyUnchanged;
+    }
+
     if (starting_scale - target_scale).abs() < 0.01 {
         MonitorScaleStrategy::ApplyUnchanged
     } else if starting_scale < target_scale {

@@ -1,0 +1,10 @@
+(
+    // X11 cross-monitor: saved on Monitor 1 (HDMI, scale 1, pos 0,0), launched from Monitor 0 (eDP, scale 2)
+    // Tests position/size restoration when crossing from high DPI to low DPI
+    position: Some((200, 150)),
+    width: 1000,
+    height: 700,
+    monitor_index: 1,
+    mode: Windowed,
+    app_name: "restore_window",
+)

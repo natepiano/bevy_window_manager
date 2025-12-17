@@ -7,180 +7,96 @@
   "tests": [
     {
       "id": "wayland_size_restore",
-      "name": "Wayland: Size Restore",
-      "description": "Size persistence (position not available on Wayland)",
+      "description": "Size persistence on Monitor 0 (position not available on Wayland)",
       "automation": "full",
       "backend": "wayland",
       "ron_file": "size_restore.ron",
       "mutation": {
-        "target_monitor": "launch",
-        "size": [1000, 700]
+        "target_monitor": 0,
+        "size": [1200, 1000]
       },
-      "validate": ["size", "mode"]
+      "validate": ["size", "mode", "monitor_index"]
     },
     {
-      "id": "wayland_fullscreen_borderless",
-      "name": "Wayland: Fullscreen Borderless",
-      "description": "Borderless fullscreen restore on Wayland",
+      "id": "wayland_borderless_0_0",
+      "description": "Borderless fullscreen restore to Monitor 0 (same monitor)",
       "automation": "full",
       "backend": "wayland",
-      "ron_file": "fullscreen_borderless.ron",
-      "validate": ["mode"]
+      "ron_file": "fullscreen_borderless_to_mon0.ron",
+      "validate": ["mode", "monitor_index"]
     },
     {
-      "id": "wayland_exclusive_fallback",
-      "name": "Wayland: Exclusive→Borderless Fallback",
-      "description": "Verifies exclusive fullscreen gracefully falls back to borderless on Wayland with warning",
+      "id": "wayland_borderless_0_1",
+      "description": "Borderless fullscreen restore to Monitor 1 (cross monitor)",
       "automation": "full",
       "backend": "wayland",
-      "ron_file": "fullscreen_exclusive.ron",
+      "ron_file": "fullscreen_borderless_to_mon1.ron",
+      "validate": ["mode", "monitor_index"]
+    },
+    {
+      "id": "wayland_exclusive_fallback_0_0",
+      "description": "Exclusive fullscreen falls back to borderless on Wayland (same monitor)",
+      "note": "Cross-monitor variant not needed - borderless cross-monitor already tested, and exclusive->borderless fallback is the same code path regardless of monitor",
+      "automation": "full",
+      "backend": "wayland",
+      "ron_file": "fullscreen_exclusive_to_mon0.ron",
       "expected_log_warning": "Exclusive fullscreen is not supported on Wayland, restoring as BorderlessFullscreen",
-      "validate": ["mode"],
+      "validate": ["mode", "monitor_index"],
       "expected_mode": "BorderlessFullscreen"
     },
     {
-      "id": "wayland_cross_monitor_low_to_high",
-      "name": "Wayland: Cross-Monitor Low→High DPI",
-      "description": "Window saved on Monitor 1 (scale 2) restores correctly when launched from Monitor 0 (scale 1)",
-      "automation": "full",
-      "backend": "wayland",
-      "requires": {"min_monitors": 2, "different_scales": true},
-      "ron_file": "cross_monitor_low_to_high.ron",
-      "validate": ["size", "monitor_index", "mode"]
-    },
-    {
-      "id": "x11_position_size_restore",
-      "name": "X11: Position and Size Restore",
-      "description": "Basic position/size persistence on X11",
+      "id": "x11_pos_size_restore",
+      "description": "Basic position/size persistence on Monitor 0 (eDP)",
       "automation": "full",
       "backend": "x11",
       "ron_file": "position_size_restore.ron",
       "mutation": {
-        "target_monitor": "launch",
-        "position_offset": [200, 150],
-        "size": [1000, 700]
+        "target_monitor": 0,
+        "position_offset": [300, 250],
+        "size": [1200, 800]
       },
-      "validate": ["position", "size", "mode"]
+      "validate": ["position", "size", "mode", "monitor_index"]
     },
     {
-      "id": "x11_fullscreen_borderless",
-      "name": "X11: Fullscreen Borderless",
-      "description": "Borderless fullscreen restore on X11",
+      "id": "x11_cross_high_to_low",
+      "description": "Window saved on Monitor 1 (HDMI, scale 1) restores correctly when launched from Monitor 0 (eDP, scale 2)",
       "automation": "full",
       "backend": "x11",
-      "ron_file": "fullscreen_borderless.ron",
-      "validate": ["mode"]
+      "requires": {"min_monitors": 2, "different_scales": true},
+      "ron_file": "cross_monitor_high_to_low.ron",
+      "validate": ["position", "size", "monitor_index", "mode"]
     },
     {
-      "id": "x11_fullscreen_exclusive",
-      "name": "X11: Fullscreen Exclusive",
-      "description": "Exclusive fullscreen restore on X11",
+      "id": "x11_borderless_0_0",
+      "description": "Borderless fullscreen restore to Monitor 0 (same monitor)",
       "automation": "full",
       "backend": "x11",
-      "ron_file": "fullscreen_exclusive.ron",
-      "validate": ["mode"]
+      "ron_file": "fullscreen_borderless_to_mon0.ron",
+      "validate": ["mode", "monitor_index"]
     },
     {
-      "id": "x11_keyboard_snap",
-      "name": "X11: Keyboard Snap Position (W5)",
-      "description": "Position saved correctly after keyboard snap - tests workaround for winit #4443",
-      "automation": "human_only",
+      "id": "x11_borderless_0_1",
+      "description": "Borderless fullscreen restore to Monitor 1 (cross monitor)",
+      "automation": "full",
       "backend": "x11",
-      "workaround_keys": ["W5"],
-      "workaround_validation": {
-        "feature_flag": "workaround-winit-4443",
-        "build_without": "--no-default-features",
-        "build_with": "",
-        "without_behavior": "Position not saved after keyboard snap (Meta+Arrow)",
-        "with_behavior": "Position saved correctly after keyboard snap"
-      },
-      "ron_file": "keyboard_snap.ron",
-      "instructions_without_workaround": [
-        "## PHASE 1: Testing WITHOUT workaround (expect bug)",
-        "1. App built WITHOUT workaround-winit-4443",
-        "2. Use keyboard snap (Meta+Arrow) to tile the window",
-        "3. Close the app",
-        "4. Relaunch and check if position was restored",
-        "5. **EXPECTED BUG**: Position NOT restored (only size)"
-      ],
-      "instructions_with_workaround": [
-        "## PHASE 2: Testing WITH workaround (expect fix)",
-        "1. App rebuilt WITH workaround-winit-4443",
-        "2. Use keyboard snap (Meta+Arrow) to tile the window",
-        "3. Close the app",
-        "4. Relaunch and check if position was restored",
-        "5. **EXPECTED**: Position IS restored correctly"
-      ],
-      "success_criteria_without": "Bug confirmed: Position not saved after keyboard snap",
-      "success_criteria_with": "Fix confirmed: Position saved and restored after keyboard snap"
+      "ron_file": "fullscreen_borderless_to_mon1.ron",
+      "validate": ["mode", "monitor_index"]
     },
     {
-      "id": "x11_monitor_boundary",
-      "name": "X11: Monitor Boundary Detection",
-      "description": "Verifies correct monitor is detected when window is positioned at the boundary between monitors",
-      "automation": "human_assisted",
+      "id": "x11_exclusive_0_0",
+      "description": "Exclusive fullscreen restore to Monitor 0 (same monitor)",
+      "automation": "full",
       "backend": "x11",
-      "ron_file": "monitor_boundary_detection.ron",
-      "instructions": [
-        "## Monitor Boundary Detection Test (X11)",
-        "",
-        "This test verifies that the correct monitor is detected when positioning",
-        "a window right at the boundary between two monitors.",
-        "",
-        "### PHASE 1: Position at Boundary",
-        "1. Drag the window so it straddles the boundary between Monitor 0 and Monitor 1",
-        "2. Position it so ~60% is on Monitor 1, ~40% on Monitor 0",
-        "3. **VERIFY**: The UI should show 'Monitor: 1' (center-based detection)",
-        "4. Tell Claude when positioned",
-        "",
-        "### PHASE 2: Save and Verify",
-        "5. Claude will close the app and copy the saved state",
-        "6. Claude will relaunch and verify the monitor_index in saved state",
-        "",
-        "### PHASE 3: Restore Verification",
-        "7. Claude will restore from the saved state",
-        "8. **VERIFY**: Window should restore to the same visual position",
-        "9. **VERIFY**: UI should still show 'Monitor: 1'"
-      ],
-      "validate": ["monitor_index", "position"],
-      "success_criteria": "Monitor 1 detected when window center is on Monitor 1, even at boundary"
+      "ron_file": "fullscreen_exclusive_to_mon0.ron",
+      "validate": ["mode", "monitor_index"]
     },
     {
-      "id": "wayland_monitor_boundary",
-      "name": "Wayland: Monitor Boundary Detection",
-      "description": "Verifies correct monitor is detected on Wayland using winit current_monitor() when window is at monitor boundary",
-      "automation": "human_assisted",
-      "backend": "wayland",
-      "ron_file": "monitor_boundary_detection.ron",
-      "instructions": [
-        "## Monitor Boundary Detection Test (Wayland)",
-        "",
-        "This test verifies that the CurrentMonitor component correctly tracks",
-        "the monitor on Wayland where position-based detection doesn't work.",
-        "",
-        "### PHASE 1: Position at Boundary",
-        "1. Drag the window so it straddles the boundary between Monitor 0 and Monitor 1",
-        "2. Keep dragging slowly across the boundary",
-        "3. **OBSERVE**: The UI should update to show 'Monitor: 1' when window is fully on Monitor 1",
-        "4. Note: On Wayland, monitor only updates when window is FULLY on the new monitor",
-        "5. Tell Claude when positioned fully on Monitor 1",
-        "",
-        "### PHASE 2: Save and Verify",
-        "6. Claude will close the app and check the saved state",
-        "7. **VERIFY**: saved monitor_index should be 1",
-        "",
-        "### PHASE 3: Restore Verification",
-        "8. Claude will relaunch the app",
-        "9. **VERIFY**: UI should show 'Monitor: 1' after restore",
-        "10. Note: Position won't restore on Wayland (expected), but monitor should be correct"
-      ],
-      "validate": ["monitor_index"],
-      "wayland_notes": [
-        "On Wayland, position is always (0,0) - this is expected",
-        "Monitor detection uses winit's current_monitor() which updates when window is fully on new monitor",
-        "The key validation is that monitor_index is saved and restored correctly"
-      ],
-      "success_criteria": "Monitor 1 detected and saved correctly when window is fully on Monitor 1"
+      "id": "x11_exclusive_0_1",
+      "description": "Exclusive fullscreen restore to Monitor 1 (cross monitor)",
+      "automation": "full",
+      "backend": "x11",
+      "ron_file": "fullscreen_exclusive_to_mon1.ron",
+      "validate": ["mode", "monitor_index"]
     }
   ]
 }

@@ -1,9 +1,8 @@
 (
-    // Wayland: position not available, only size is tested
-    // Monitor 1 is at position (1512, 2880) with size 3456x2160
+    // Monitor 1 (HDMI) at (0, 0), scale 1
     position: None,
-    width: 1000,
-    height: 700,
+    width: 800,
+    height: 600,
     monitor_index: 1,
     mode: Windowed,
     app_name: "restore_window",

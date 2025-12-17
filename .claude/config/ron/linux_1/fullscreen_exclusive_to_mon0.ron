@@ -1,0 +1,15 @@
+(
+    // Fullscreen (exclusive) targeting Monitor 0 (eDP, scale 2)
+    position: Some((${MONITOR_0_X}, ${MONITOR_0_Y})),
+    width: ${MONITOR_0_VIDEO_MODE_WIDTH},
+    height: ${MONITOR_0_VIDEO_MODE_HEIGHT},
+    monitor_index: 0,
+    mode: Fullscreen(
+        video_mode: Some((
+            physical_size: (${MONITOR_0_VIDEO_MODE_WIDTH}, ${MONITOR_0_VIDEO_MODE_HEIGHT}),
+            bit_depth: ${MONITOR_0_VIDEO_MODE_DEPTH},
+            refresh_rate_millihertz: ${MONITOR_0_VIDEO_MODE_REFRESH},
+        )),
+    ),
+    app_name: "restore_window",
+)

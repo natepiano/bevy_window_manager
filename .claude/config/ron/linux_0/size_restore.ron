@@ -1,7 +1,9 @@
 (
+    // Wayland: position not available, only size is tested
+    // Monitor 0 (eDP) at (1512, 2880), scale 2
     position: None,
-    width: 800,
-    height: 600,
+    width: 1000,
+    height: 700,
     monitor_index: 0,
     mode: Windowed,
     app_name: "restore_window",

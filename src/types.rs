@@ -235,6 +235,10 @@ pub struct TargetPosition {
     pub monitor_scale_strategy:   MonitorScaleStrategy,
     /// Window mode to restore.
     pub mode:                     SavedWindowMode,
+    /// Target monitor index for fullscreen restore.
+    /// On non-Wayland platforms, this could be derived from position, but Wayland
+    /// doesn't provide window position, so we store it explicitly.
+    pub target_monitor_index:     usize,
     /// Fullscreen restore state (Windows only, DX12/DXGI workaround).
     #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
     pub fullscreen_restore_state: FullscreenRestoreState,

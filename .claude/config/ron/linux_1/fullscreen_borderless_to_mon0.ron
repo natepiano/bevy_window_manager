@@ -1,0 +1,9 @@
+(
+    // BorderlessFullscreen targeting Monitor 0 (eDP, scale 2)
+    position: Some((${MONITOR_0_X}, ${MONITOR_0_Y})),
+    width: ${MONITOR_0_WIDTH},
+    height: ${MONITOR_0_HEIGHT},
+    monitor_index: 0,
+    mode: BorderlessFullscreen,
+    app_name: "restore_window",
+)

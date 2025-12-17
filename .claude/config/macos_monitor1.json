@@ -7,7 +7,6 @@
   "tests": [
     {
       "id": "same_monitor_restore",
-      "name": "Restore: Same Monitor",
       "description": "Basic position/size persistence on launch monitor",
       "automation": "full",
 
@@ -23,8 +22,7 @@
     },
 
     {
-      "id": "cross_monitor_low_to_high",
-      "name": "Cross-Monitor Low→High DPI (W1)",
+      "id": "cross_low_to_high_W1",
       "description": "Window on high-DPI monitor restores correctly when launched from low-DPI monitor",
       "automation": "full",
       "requires": {"min_monitors": 2, "different_scales": true},

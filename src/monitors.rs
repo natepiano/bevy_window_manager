@@ -72,13 +72,13 @@ impl Monitors {
     #[must_use]
     pub fn by_index(&self, index: usize) -> Option<&MonitorInfo> { self.list.get(index) }
 
-    /// Get the primary monitor (index 0).
+    /// Get the first monitor (index 0). Used as fallback when no specific monitor is known.
     ///
     /// # Panics
     ///
     /// Panics if no monitors exist (should never happen on a real system).
     #[must_use]
-    pub fn primary(&self) -> &MonitorInfo { &self.list[0] }
+    pub fn first(&self) -> &MonitorInfo { &self.list[0] }
 
     /// Find the monitor at position, or the closest one if outside all bounds.
     ///
@@ -120,30 +120,18 @@ impl Monitors {
     }
 }
 
-/// Get sort key for monitor (primary at 0,0 first, then by position).
-const fn monitor_sort_key(position: IVec2) -> (bool, i32, i32) {
-    let is_primary = position.x == 0 && position.y == 0;
-    (!is_primary, position.x, position.y)
-}
-
-/// Build sorted monitor list from query.
+/// Build monitor list from query (preserves winit enumeration order).
 fn build_monitors(monitors: &Query<&Monitor>) -> Monitors {
-    let mut list: Vec<_> = monitors
+    let list: Vec<_> = monitors
         .iter()
-        .map(|mon| MonitorInfo {
-            index:    0, // Will be set after sorting
+        .enumerate()
+        .map(|(idx, mon)| MonitorInfo {
+            index:    idx,
             scale:    mon.scale_factor,
             position: mon.physical_position,
             size:     mon.physical_size(),
         })
         .collect();
-
-    list.sort_by_key(|mon| monitor_sort_key(mon.position));
-
-    // Update indices after sorting
-    for (idx, mon) in list.iter_mut().enumerate() {
-        mon.index = idx;
-    }
 
     Monitors { list }
 }

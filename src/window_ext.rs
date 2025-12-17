@@ -66,7 +66,7 @@ pub trait WindowExt {
 impl WindowExt for Window {
     fn monitor<'a>(&self, monitors: &'a Monitors) -> &'a MonitorInfo {
         let WindowPosition::At(pos) = self.position else {
-            return monitors.primary();
+            return monitors.first();
         };
         // Use window center for monitor detection because:
         // - It correctly handles windows spanning monitor boundaries
