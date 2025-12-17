@@ -11,6 +11,7 @@ Tests are keyed to these tracked issues:
 | W3 | [winit #3124](https://github.com/rust-windowing/winit/issues/3124) | Windows | `workaround-winit-3124` | Exclusive fullscreen crashes on startup with DX12 due to DXGI flip model limitations. We defer fullscreen until after surface creation via `FullscreenRestoreState`. There currently is not an open issue for this in bevy - once we validate our own fix we should open a bevy issue. |
 | W4 | [winit #4441](https://github.com/rust-windowing/winit/issues/4441) | macOS | `workaround-macos-drag-back-reset` | Window size resets to default when dragging between monitors with different scale factors after programmatic resize. AppKit tracks "intended size" per scale factor; programmatic `setContentSize` doesn't update this tracking, but manual resize does. |
 | W5 | [winit #4443](https://github.com/rust-windowing/winit/issues/4443) | Linux X11 | `workaround-winit-4443` | On X11, keyboard snap/tile (Meta+Arrow) emits `SurfaceResized` but not `Moved` even when position changed. We query `outer_position()` directly when saving state. Related: [bevy #17576](https://github.com/bevyengine/bevy/issues/17576). |
+| W6 | [winit #4445](https://github.com/rust-windowing/winit/issues/4445) | Linux X11 | `workaround-winit-4445` | On X11, `outer_position()` returns a value offset by the title bar height from what was set via `set_outer_position()`. Combined with W5, this causes position drift on each save/restore cycle. We compensate by querying `_NET_FRAME_EXTENTS`. |
 | B1 | [bevy PR #22060](https://github.com/bevyengine/bevy/pull/22060) | macOS | `workaround-bevy-22060` | TLS panic on quit from exclusive fullscreen. We exit fullscreen during `world.clear_all()` before TLS destruction. Remove when using Bevy 0.18+. |
 
 **Key prefixes:** W = winit issue, B = Bevy issue, M = macOS-specific (internal fix)
@@ -196,25 +197,25 @@ rm ~/.local/share/restore_window/windows.ron
 WAYLAND_DISPLAY= cargo run --example restore_window
 ```
 
-**Note:** On X11, keyboard snap/tile operations may not emit `Moved` events (W5). Our save code queries `outer_position()` directly to work around this.
+**Note:** On X11, keyboard snap/tile operations may not emit `Moved` events (W5). Additionally, `outer_position()` returns a value offset by the title bar height (W6). Our save code queries `outer_position()` directly and compensates using `_NET_FRAME_EXTENTS`.
 
 ### Single Monitor Tests
 
-#### Restore: Position and Size
-*Test: Basic position/size persistence*
+#### Restore: Position and Size (W6)
+*Test: Basic position/size persistence without Y drift*
 - [ ] Move app window, resize, close
-- [ ] Relaunch → app window restores to same position/size
+- [ ] Relaunch → app window restores to same position/size (no drift)
 
-#### Keyboard Snap Position (W5)
-*Test: Position saved correctly after keyboard snap*
+#### Keyboard Snap Position (W5, W6)
+*Test: Position saved correctly after keyboard snap without Y drift*
 - [ ] Use keyboard snap (KDE: Meta+Arrow) to tile window
 - [ ] Close app
-- [ ] Relaunch → app window restores to snapped position
+- [ ] Relaunch → app window restores to snapped position (no drift)
 
-#### Drag Position
-*Test: Position saved correctly after drag*
+#### Drag Position (W6)
+*Test: Position saved correctly after drag without Y drift*
 - [ ] Drag app window to new position, close
-- [ ] Relaunch → app window restores to dragged position
+- [ ] Relaunch → app window restores to dragged position (no drift)
 
 #### Fullscreen: Borderless
 - [ ] Press 2 for borderless, close

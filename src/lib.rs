@@ -54,6 +54,8 @@ mod types;
 mod window_ext;
 #[cfg(all(target_os = "windows", feature = "workaround-winit-4341"))]
 mod windows_dpi_fix;
+#[cfg(all(target_os = "linux", feature = "workaround-winit-4445"))]
+mod x11_frame_extents;
 
 use std::path::PathBuf;
 

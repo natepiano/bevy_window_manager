@@ -30,6 +30,10 @@ windows = { version = "0.62.2", features = [
   "Win32_UI_WindowsAndMessaging",
 ] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+raw-window-handle = "0.6"
+x11rb = { version = "0.13", default-features = false, features = ["dl-libxcb"] }
+
 [features]
 default = [
   "workaround-bevy-22060",
@@ -38,6 +42,7 @@ default = [
   "workaround-winit-3124",
   "workaround-winit-4341",
   "workaround-winit-4443",
+  "workaround-winit-4445",
 ]
 # macOS TLS panic on quit from exclusive fullscreen workaround
 # Issue: https://github.com/bevyengine/bevy/issues/22060
@@ -112,6 +117,21 @@ workaround-winit-4341 = []
 # Test without workaround: WAYLAND_DISPLAY= cargo run --example restore_window --no-default-features --features workaround-winit-4341
 # Test with workaround:    WAYLAND_DISPLAY= cargo run --example restore_window
 workaround-winit-4443 = []
+# Linux X11 outer_position frame extents workaround
+# Issue: https://github.com/rust-windowing/winit/issues/4445
+#
+# On X11, winit's `outer_position()` returns the client area position instead of
+# the frame position (including title bar). This is because winit's heuristic
+# incorrectly zeros out `_NET_FRAME_EXTENTS` when the window is detected as
+# "not nested" - even though `_NET_FRAME_EXTENTS` correctly reports the title bar.
+#
+# Combined with W5 (workaround-winit-4443), this causes position drift on each
+# save/restore cycle. This workaround queries `_NET_FRAME_EXTENTS` directly via
+# x11rb and subtracts the top extent from the saved position.
+#
+# Test without workaround: WAYLAND_DISPLAY= cargo run --example restore_window --no-default-features --features workaround-winit-4341,workaround-winit-4443
+# Test with workaround:    WAYLAND_DISPLAY= cargo run --example restore_window
+workaround-winit-4445 = []
 
 [lints.clippy]
 # Enable lint groups as errors (with lower priority so allows can override)

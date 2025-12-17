@@ -1,1 +1,3 @@
 - When creating/updating integration tests, make sure the human_only tests are grouped together and go last.
+- the latest bevy code can be found at ~/rust/bevy/
+- the latest winit code can be found at ~/rust/winit/

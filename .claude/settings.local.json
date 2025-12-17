@@ -83,7 +83,11 @@
       "mcp__brp__world_get_components",
       "Bash(WAYLAND_DISPLAY= wmctrl:*)",
       "Bash(/home/natemccoy/rust/bevy_window_manager/.claude/scripts/linux_test.sh:*)",
-      "Bash(busctl:*)"
+      "Bash(busctl:*)",
+      "Bash(pkill:*)",
+      "Bash(WAYLAND_DISPLAY= xwininfo:*)",
+      "Bash(git -C /home/natemccoy/rust/bevy_window_manager diff --cached)",
+      "Bash(git -C /home/natemccoy/rust/bevy_window_manager diff)"
     ],
     "deny": [],
     "ask": []

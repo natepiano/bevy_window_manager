@@ -49,19 +49,28 @@
       "description": "Basic position/size persistence on Monitor 1 (HDMI)",
       "automation": "full",
       "backend": "x11",
+      "workaround_keys": ["W5", "W6"],
       "ron_file": "position_size_restore.ron",
       "mutation": {
         "target_monitor": 1,
         "position_offset": [200, 150],
         "size": [1000, 700]
       },
-      "validate": ["position", "size", "mode", "monitor_index"]
+      "validate": ["position", "size", "mode", "monitor_index"],
+      "workaround_validation": {
+        "feature_flag": "workaround-winit-4445",
+        "build_without": "--no-default-features --features workaround-winit-4443",
+        "build_with": "",
+        "without_behavior": "Position drifts by title bar height (~28px at scale 1) on save/restore",
+        "with_behavior": "Position saved correctly with frame extent compensation"
+      }
     },
     {
       "id": "x11_cross_low_to_high",
       "description": "Window saved on Monitor 0 (eDP, scale 2) restores correctly when launched from Monitor 1 (HDMI, scale 1)",
       "automation": "full",
       "backend": "x11",
+      "workaround_keys": ["W5", "W6"],
       "requires": {"min_monitors": 2, "different_scales": true},
       "ron_file": "cross_monitor_low_to_high.ron",
       "validate": ["position", "size", "monitor_index", "mode"]

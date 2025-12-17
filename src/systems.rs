@@ -389,12 +389,23 @@ pub fn save_window_state(
     // When the workaround is disabled, we use bevy's cached position which may be
     // stale on X11 after keyboard snap operations. This allows testing whether winit
     // has fixed the bug.
+    // Workaround W5 (winit #4443): Query outer_position() directly because keyboard
+    // snap doesn't emit Moved events.
+    // Workaround W6 (winit #4445): Compensate for frame extents because outer_position()
+    // returns client area position instead of frame position.
     #[cfg(all(target_os = "linux", feature = "workaround-winit-4443"))]
     let pos = WINIT_WINDOWS.with(|ww| {
         let ww = ww.borrow();
-        ww.get_window(window_entity)
-            .and_then(|w| w.outer_position().ok())
-            .map(|p| IVec2::new(p.x, p.y))
+        let winit_win = ww.get_window(window_entity)?;
+
+        let outer_pos = winit_win.outer_position().ok()?;
+        let pos = IVec2::new(outer_pos.x, outer_pos.y);
+
+        // W6: Compensate for frame extents if enabled
+        #[cfg(all(target_os = "linux", feature = "workaround-winit-4445"))]
+        let pos = crate::x11_frame_extents::compensate_position(&**winit_win, pos);
+
+        Some(pos)
     });
 
     #[cfg(not(all(target_os = "linux", feature = "workaround-winit-4443")))]
@@ -756,7 +767,7 @@ fn determine_scale_strategy(starting_scale: f64, target_scale: f64) -> MonitorSc
 
 /// Determine the monitor scale strategy based on platform and scale factors.
 /// macOS with workaround: compensate position and size based on scale relationship.
-/// Wayland: always use ApplyUnchanged (can't detect starting monitor, can't set position).
+/// Wayland: always use `ApplyUnchanged` (can't detect starting monitor, can't set position).
 #[cfg(all(
     not(target_os = "windows"),
     feature = "workaround-macos-scale-compensation"
