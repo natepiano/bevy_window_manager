@@ -22,8 +22,6 @@
 //! We only trust `current_monitor()` when the window has focus because testing showed
 //! incorrect values when unfocused (possibly our own bug, possibly winit behavior).
 
-use std::ffi::OsStr;
-
 use bevy::ecs::system::NonSendMarker;
 use bevy::prelude::*;
 use bevy::window::MonitorSelection;
@@ -42,6 +40,7 @@ use crate::monitors::Monitors;
 #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
 use crate::types::FullscreenRestoreState;
 use crate::types::MonitorScaleStrategy;
+use crate::types::SCALE_FACTOR_EPSILON;
 use crate::types::SavedWindowMode;
 use crate::types::TargetPosition;
 use crate::types::WindowDecoration;
@@ -314,49 +313,65 @@ pub fn move_to_target_monitor(
         return;
     };
 
-    // For HigherToLower, compensate position because winit divides by launch scale
-    let move_pos = if matches!(
-        target.monitor_scale_strategy,
-        MonitorScaleStrategy::HigherToLower(_)
-    ) {
-        let ratio = target.starting_scale / target.target_scale;
-        let comp_x = (f64::from(pos.x) * ratio) as i32;
-        let comp_y = (f64::from(pos.y) * ratio) as i32;
-        debug!(
-            "[move_to_target_monitor] HigherToLower: compensating position {:?} -> ({}, {}) (ratio={})",
-            pos, comp_x, comp_y, ratio
-        );
-        IVec2::new(comp_x, comp_y)
-    } else {
-        pos
+    /// Visibility state for window during move operation.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum InitialVisibility {
+        /// Window remains visible during move.
+        Visible,
+        /// Window is hidden to avoid visual flash (HigherToLower two-phase restore).
+        Hidden,
+    }
+
+    /// Computed parameters for the initial window move to target monitor.
+    #[derive(Debug)]
+    struct MoveParams {
+        position:   IVec2,
+        width:      u32,
+        height:     u32,
+        visibility: InitialVisibility,
+    }
+
+    // Compute move parameters based on scale strategy
+    let params = match target.monitor_scale_strategy {
+        MonitorScaleStrategy::HigherToLower(_) => {
+            // Compensate position because winit divides by launch scale
+            let ratio = target.starting_scale / target.target_scale;
+            let comp_x = (f64::from(pos.x) * ratio) as i32;
+            let comp_y = (f64::from(pos.y) * ratio) as i32;
+            debug!(
+                "[move_to_target_monitor] HigherToLower: compensating position {:?} -> ({}, {}) (ratio={})",
+                pos, comp_x, comp_y, ratio
+            );
+            MoveParams {
+                position:   IVec2::new(comp_x, comp_y),
+                // Use actual target size to avoid macOS caching tiny size
+                width:      target.width,
+                height:     target.height,
+                // Hide to avoid visual flash during two-phase restore
+                visibility: InitialVisibility::Hidden,
+            }
+        },
+        _ => MoveParams {
+            position:   pos,
+            width:      1,
+            height:     1,
+            visibility: InitialVisibility::Visible,
+        },
     };
 
-    // For HigherToLower, set the actual target size instead of 1x1 to avoid
-    // macOS caching the tiny size and applying it later during monitor transitions.
-    let (width, height) = if matches!(
-        target.monitor_scale_strategy,
-        MonitorScaleStrategy::HigherToLower(_)
-    ) {
-        (target.width, target.height)
-    } else {
-        (1, 1)
-    };
-
-    // Hide window during HigherToLower two-phase restore to avoid visual flash
-    if matches!(
-        target.monitor_scale_strategy,
-        MonitorScaleStrategy::HigherToLower(_)
-    ) {
+    if params.visibility == InitialVisibility::Hidden {
         window.visible = false;
     }
 
     debug!(
         "[move_to_target_monitor] position={:?} size={}x{} visible={}",
-        move_pos, width, height, window.visible
+        params.position, params.width, params.height, window.visible
     );
 
-    window.position = WindowPosition::At(move_pos);
-    window.resolution.set_physical_resolution(width, height);
+    window.position = WindowPosition::At(params.position);
+    window
+        .resolution
+        .set_physical_resolution(params.width, params.height);
 }
 
 /// Cached window state for change detection comparison.
@@ -487,8 +502,7 @@ pub fn save_window_state(
 
     let app_name = std::env::current_exe()
         .ok()
-        .and_then(|p| p.file_stem().map(OsStr::to_owned))
-        .and_then(|s| s.to_str().map(|s| (*s).to_string()))
+        .and_then(|p| p.file_stem().and_then(|s| s.to_str()).map(String::from))
         .unwrap_or_default();
 
     let state = WindowState {
@@ -761,7 +775,7 @@ fn try_apply_restore(target: &TargetPosition, primary_window: &mut Window) -> Re
 /// Windows: compensate size only when scales differ.
 #[cfg(target_os = "windows")]
 fn determine_scale_strategy(starting_scale: f64, target_scale: f64) -> MonitorScaleStrategy {
-    if (starting_scale - target_scale).abs() < 0.01 {
+    if (starting_scale - target_scale).abs() < SCALE_FACTOR_EPSILON {
         MonitorScaleStrategy::ApplyUnchanged
     } else {
         MonitorScaleStrategy::CompensateSizeOnly
@@ -783,7 +797,7 @@ fn determine_scale_strategy(starting_scale: f64, target_scale: f64) -> MonitorSc
         return MonitorScaleStrategy::ApplyUnchanged;
     }
 
-    if (starting_scale - target_scale).abs() < 0.01 {
+    if (starting_scale - target_scale).abs() < SCALE_FACTOR_EPSILON {
         MonitorScaleStrategy::ApplyUnchanged
     } else if starting_scale < target_scale {
         // Low DPI -> high DPI

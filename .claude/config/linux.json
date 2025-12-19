@@ -1,16 +1,59 @@
 {
   "platform": "linux",
-  "launch_monitor": 1,
   "example_ron_path": "~/.config/restore_window/windows.ron",
-  "test_ron_dir": ".claude/config/ron/linux_1",
+  "test_ron_dir": ".claude/config/ron/linux",
 
   "tests": [
     {
-      "id": "wayland_size_restore",
+      "id": "wayland_size_restore_mon0",
+      "description": "Size persistence on Monitor 0 (position not available on Wayland)",
+      "automation": "full",
+      "backend": "wayland",
+      "launch_monitor": 0,
+      "ron_file": "size_restore_mon0.ron",
+      "mutation": {
+        "target_monitor": 0,
+        "size": [1200, 1000]
+      },
+      "validate": ["size", "mode", "monitor_index"]
+    },
+    {
+      "id": "wayland_borderless_0_0",
+      "description": "Borderless fullscreen restore to Monitor 0 (same monitor)",
+      "automation": "full",
+      "backend": "wayland",
+      "launch_monitor": 0,
+      "ron_file": "fullscreen_borderless_to_mon0.ron",
+      "validate": ["mode", "monitor_index"]
+    },
+    {
+      "id": "wayland_borderless_0_1",
+      "description": "Borderless fullscreen restore to Monitor 1 (cross monitor)",
+      "automation": "full",
+      "backend": "wayland",
+      "launch_monitor": 0,
+      "ron_file": "fullscreen_borderless_to_mon1.ron",
+      "validate": ["mode", "monitor_index"]
+    },
+    {
+      "id": "wayland_exclusive_fallback_0_0",
+      "description": "Exclusive fullscreen falls back to borderless on Wayland (same monitor)",
+      "note": "Cross-monitor variant not needed - borderless cross-monitor already tested, and exclusive->borderless fallback is the same code path regardless of monitor",
+      "automation": "full",
+      "backend": "wayland",
+      "launch_monitor": 0,
+      "ron_file": "fullscreen_exclusive_to_mon0.ron",
+      "expected_log_warning": "Exclusive fullscreen is not supported on Wayland, restoring as BorderlessFullscreen",
+      "validate": ["mode", "monitor_index"],
+      "expected_mode": "BorderlessFullscreen"
+    },
+    {
+      "id": "wayland_size_restore_mon1",
       "description": "Size persistence on Monitor 1 (position not available on Wayland)",
       "automation": "full",
       "backend": "wayland",
-      "ron_file": "size_restore.ron",
+      "launch_monitor": 1,
+      "ron_file": "size_restore_mon1.ron",
       "mutation": {
         "target_monitor": 1,
         "size": [1000, 700]
@@ -22,6 +65,7 @@
       "description": "Borderless fullscreen restore to Monitor 0 (cross monitor)",
       "automation": "full",
       "backend": "wayland",
+      "launch_monitor": 1,
       "ron_file": "fullscreen_borderless_to_mon0.ron",
       "validate": ["mode", "monitor_index"]
     },
@@ -30,6 +74,7 @@
       "description": "Borderless fullscreen restore to Monitor 1 (same monitor)",
       "automation": "full",
       "backend": "wayland",
+      "launch_monitor": 1,
       "ron_file": "fullscreen_borderless_to_mon1.ron",
       "validate": ["mode", "monitor_index"]
     },
@@ -39,18 +84,89 @@
       "note": "Cross-monitor variant not needed - borderless cross-monitor already tested, and exclusive->borderless fallback is the same code path regardless of monitor",
       "automation": "full",
       "backend": "wayland",
+      "launch_monitor": 1,
       "ron_file": "fullscreen_exclusive_to_mon1.ron",
       "expected_log_warning": "Exclusive fullscreen is not supported on Wayland, restoring as BorderlessFullscreen",
       "validate": ["mode", "monitor_index"],
       "expected_mode": "BorderlessFullscreen"
     },
     {
-      "id": "x11_pos_size_restore",
+      "id": "x11_pos_size_restore_mon0",
+      "description": "Basic position/size persistence on Monitor 0 (eDP)",
+      "automation": "full",
+      "backend": "x11",
+      "launch_monitor": 0,
+      "workaround_keys": ["W5", "W6"],
+      "ron_file": "position_size_restore_mon0.ron",
+      "mutation": {
+        "target_monitor": 0,
+        "position_offset": [300, 250],
+        "size": [1200, 800]
+      },
+      "validate": ["position", "size", "mode", "monitor_index"],
+      "workaround_validation": {
+        "feature_flag": "workaround-winit-4445",
+        "build_without": "--no-default-features --features workaround-winit-4443",
+        "build_with": "",
+        "without_behavior": "Position drifts by title bar height (~56px at scale 2) on save/restore",
+        "with_behavior": "Position saved correctly with frame extent compensation"
+      }
+    },
+    {
+      "id": "x11_cross_high_to_low",
+      "description": "Window saved on Monitor 1 (HDMI, scale 1) restores correctly when launched from Monitor 0 (eDP, scale 2)",
+      "automation": "full",
+      "backend": "x11",
+      "launch_monitor": 0,
+      "workaround_keys": ["W5", "W6"],
+      "requires": {"min_monitors": 2, "different_scales": true},
+      "ron_file": "cross_monitor_high_to_low.ron",
+      "validate": ["position", "size", "monitor_index", "mode"]
+    },
+    {
+      "id": "x11_borderless_0_0",
+      "description": "Borderless fullscreen restore to Monitor 0 (same monitor)",
+      "automation": "full",
+      "backend": "x11",
+      "launch_monitor": 0,
+      "ron_file": "fullscreen_borderless_to_mon0.ron",
+      "validate": ["mode", "monitor_index"]
+    },
+    {
+      "id": "x11_borderless_0_1",
+      "description": "Borderless fullscreen restore to Monitor 1 (cross monitor)",
+      "automation": "full",
+      "backend": "x11",
+      "launch_monitor": 0,
+      "ron_file": "fullscreen_borderless_to_mon1.ron",
+      "validate": ["mode", "monitor_index"]
+    },
+    {
+      "id": "x11_exclusive_0_0",
+      "description": "Exclusive fullscreen restore to Monitor 0 (same monitor)",
+      "automation": "full",
+      "backend": "x11",
+      "launch_monitor": 0,
+      "ron_file": "fullscreen_exclusive_to_mon0.ron",
+      "validate": ["mode", "monitor_index"]
+    },
+    {
+      "id": "x11_exclusive_0_1",
+      "description": "Exclusive fullscreen restore to Monitor 1 (cross monitor)",
+      "automation": "full",
+      "backend": "x11",
+      "launch_monitor": 0,
+      "ron_file": "fullscreen_exclusive_to_mon1.ron",
+      "validate": ["mode", "monitor_index"]
+    },
+    {
+      "id": "x11_pos_size_restore_mon1",
       "description": "Basic position/size persistence on Monitor 1 (HDMI)",
       "automation": "full",
       "backend": "x11",
+      "launch_monitor": 1,
       "workaround_keys": ["W5", "W6"],
-      "ron_file": "position_size_restore.ron",
+      "ron_file": "position_size_restore_mon1.ron",
       "mutation": {
         "target_monitor": 1,
         "position_offset": [200, 150],
@@ -70,6 +186,7 @@
       "description": "Window saved on Monitor 0 (eDP, scale 2) restores correctly when launched from Monitor 1 (HDMI, scale 1)",
       "automation": "full",
       "backend": "x11",
+      "launch_monitor": 1,
       "workaround_keys": ["W5", "W6"],
       "requires": {"min_monitors": 2, "different_scales": true},
       "ron_file": "cross_monitor_low_to_high.ron",
@@ -80,6 +197,7 @@
       "description": "Borderless fullscreen restore to Monitor 0 (cross monitor)",
       "automation": "full",
       "backend": "x11",
+      "launch_monitor": 1,
       "ron_file": "fullscreen_borderless_to_mon0.ron",
       "validate": ["mode", "monitor_index"]
     },
@@ -88,6 +206,7 @@
       "description": "Borderless fullscreen restore to Monitor 1 (same monitor)",
       "automation": "full",
       "backend": "x11",
+      "launch_monitor": 1,
       "ron_file": "fullscreen_borderless_to_mon1.ron",
       "validate": ["mode", "monitor_index"]
     },
@@ -96,6 +215,7 @@
       "description": "Exclusive fullscreen restore to Monitor 0 (cross monitor)",
       "automation": "full",
       "backend": "x11",
+      "launch_monitor": 1,
       "ron_file": "fullscreen_exclusive_to_mon0.ron",
       "validate": ["mode", "monitor_index"]
     },
@@ -104,6 +224,7 @@
       "description": "Exclusive fullscreen restore to Monitor 1 (same monitor)",
       "automation": "full",
       "backend": "x11",
+      "launch_monitor": 1,
       "ron_file": "fullscreen_exclusive_to_mon1.ron",
       "validate": ["mode", "monitor_index"]
     },
@@ -112,6 +233,7 @@
       "description": "Position saved correctly after keyboard snap - tests workaround for winit #4443",
       "automation": "human_only",
       "backend": "x11",
+      "launch_monitor": 1,
       "workaround_keys": ["W5"],
       "workaround_validation": {
         "feature_flag": "workaround-winit-4443",
@@ -145,6 +267,7 @@
       "description": "Verifies correct monitor is detected when window is positioned at the boundary between monitors",
       "automation": "human_assisted",
       "backend": "x11",
+      "launch_monitor": 1,
       "ron_file": "monitor_boundary_detection.ron",
       "instructions": [
         "## Monitor Boundary Detection Test (X11)",
@@ -175,6 +298,7 @@
       "description": "Verifies correct monitor is detected on Wayland using winit current_monitor() when window is at monitor boundary",
       "automation": "human_assisted",
       "backend": "wayland",
+      "launch_monitor": 1,
       "ron_file": "monitor_boundary_detection.ron",
       "instructions": [
         "## Monitor Boundary Detection Test (Wayland)",

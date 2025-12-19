@@ -12,6 +12,8 @@ use bevy::window::PrimaryWindow;
 use bevy::window::WindowResized;
 use bevy::window::WindowScaleFactorChanged;
 
+use crate::types::SCALE_FACTOR_EPSILON;
+
 /// State of the W4 drag-back correction process.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CorrectionState {
@@ -82,7 +84,7 @@ fn detect_user_resize(
     let current_scale = f64::from(window.resolution.scale_factor());
 
     // Only consider it a user resize if we're still on the restored monitor
-    if (current_scale - protection.restored_scale).abs() > 0.01 {
+    if (current_scale - protection.restored_scale).abs() > SCALE_FACTOR_EPSILON {
         return;
     }
 
@@ -126,7 +128,7 @@ fn handle_drag_back_scale_change(
     let new_scale = scale_event.scale_factor;
 
     // Check if we're transitioning to the launch monitor
-    if (new_scale - protection.launch_scale).abs() > 0.01 {
+    if (new_scale - protection.launch_scale).abs() > SCALE_FACTOR_EPSILON {
         debug!(
             "[W4 fix] Scale changed to {} (not launch_scale {}), ignoring",
             new_scale, protection.launch_scale

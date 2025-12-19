@@ -38,9 +38,19 @@ pub fn load_state(path: &Path) -> Option<WindowState> {
 /// Save the window state to the given path.
 pub fn save_state(path: &Path, state: &WindowState) {
     if let Some(parent) = path.parent() {
-        let _ = fs::create_dir_all(parent);
+        if let Err(e) = fs::create_dir_all(parent) {
+            warn!("[save_state] Failed to create directory {parent:?}: {e}");
+            return;
+        }
     }
-    if let Ok(contents) = ron::ser::to_string_pretty(state, ron::ser::PrettyConfig::default()) {
-        let _ = fs::write(path, contents);
+    match ron::ser::to_string_pretty(state, ron::ser::PrettyConfig::default()) {
+        Ok(contents) => {
+            if let Err(e) = fs::write(path, &contents) {
+                warn!("[save_state] Failed to write state file {path:?}: {e}");
+            }
+        },
+        Err(e) => {
+            warn!("[save_state] Failed to serialize state: {e}");
+        },
     }
 }

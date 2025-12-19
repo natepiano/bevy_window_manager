@@ -9,6 +9,7 @@
       "id": "same_monitor_restore",
       "description": "Basic position/size persistence on launch monitor",
       "automation": "full",
+      "launch_monitor": 0,
 
       "ron_file": "same_monitor_restore.ron",
 
@@ -25,6 +26,7 @@
       "id": "cross_high_to_low_W1",
       "description": "Window on low-DPI monitor restores correctly when launched from high-DPI monitor",
       "automation": "full",
+      "launch_monitor": 0,
       "requires": {"min_monitors": 2, "different_scales": true},
       "workaround_keys": ["W1"],
 
@@ -45,6 +47,7 @@
       "id": "borderless_programmatic",
       "description": "Borderless fullscreen restore - starts in borderless mode via RON",
       "automation": "full",
+      "launch_monitor": 0,
 
       "ron_file": "fullscreen_borderless_programmatic.ron",
 
@@ -55,6 +58,7 @@
       "id": "exclusive_quit_B1",
       "description": "Exclusive fullscreen with TLS panic workaround - tests that app quits cleanly from exclusive fullscreen",
       "automation": "full",
+      "launch_monitor": 0,
       "workaround_keys": ["B1"],
 
       "workaround_validation": {
@@ -75,6 +79,7 @@
       "id": "dpi_drag_stability_W4",
       "description": "Tests AppKit per-scale size tracking bug - window size should not reset when dragging between monitors",
       "automation": "human_only",
+      "launch_monitor": 0,
       "requires": {"min_monitors": 2, "different_scales": true},
       "workaround_keys": ["W4"],
 
@@ -114,6 +119,7 @@
       "id": "borderless_green_button",
       "description": "Tests macOS native fullscreen via green button",
       "automation": "human_only",
+      "launch_monitor": 0,
 
       "ron_file": "fullscreen_borderless_green_button.ron",
 

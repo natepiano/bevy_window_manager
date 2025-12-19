@@ -9,6 +9,7 @@
       "id": "same_monitor_restore",
       "description": "Basic position/size persistence on launch monitor",
       "automation": "full",
+      "launch_monitor": 1,
 
       "ron_file": "same_monitor_restore.ron",
 
@@ -25,6 +26,7 @@
       "id": "cross_low_to_high_W1",
       "description": "Window on high-DPI monitor restores correctly when launched from low-DPI monitor",
       "automation": "full",
+      "launch_monitor": 1,
       "requires": {"min_monitors": 2, "different_scales": true},
       "workaround_keys": ["W1"],
 

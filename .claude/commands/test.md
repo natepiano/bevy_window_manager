@@ -66,11 +66,11 @@ Store as ${PLATFORM} and ${MONITOR_INDEX} (Linux: ${MONITOR_INDEX} = "all").
 Load `.claude/config/${PLATFORM}_monitor${MONITOR_INDEX}.json`
 
 **Linux**:
-Load BOTH config files:
-- `.claude/config/linux_monitor0.json`
-- `.claude/config/linux_monitor1.json`
+Load single unified config: `.claude/config/linux.json`
+- Tests are ordered by backend (Wayland first, then X11) and by launch_monitor within each backend
+- Each test has a `launch_monitor` field specifying which monitor the terminal must be on
 
-Extract: platform, launch_monitor, example_ron_path, test_ron_dir, tests array.
+Extract: platform, example_ron_path, test_ron_dir, tests array.
 
 Open the RON file in Zed/editor for inspection: `zed ${example_ron_path}`
 </LoadTestConfig>
@@ -88,11 +88,12 @@ Open the RON file in Zed/editor for inspection: `zed ${example_ron_path}`
    - Randomly select one video mode per monitor
    - Store all discovered values as <TemplateVariables/>
 
-   **Linux X11 video modes**: Video modes differ between Wayland and X11/XWayland.
+   **Linux X11 values**: Monitor scales and video modes differ between Wayland and X11/XWayland.
    - Shutdown the Wayland app
    - Relaunch with `WAYLAND_DISPLAY= cargo run --example restore_window` (background)
-   - Wait for BRP ready, then query Monitor component again
-   - Store X11-specific video modes as `${MONITOR_X_X11_VIDEO_MODE_*}` variables
+   - Wait for BRP ready, then:
+     - Query Monitors resource again → store as `${MONITOR_X_X11_SCALE}` variables
+     - Query Monitor component again → store X11-specific video modes as `${MONITOR_X_X11_VIDEO_MODE_*}` variables
    - Shutdown the X11 app
 
 4. Detect and verify terminal monitor:
@@ -137,7 +138,8 @@ Video mode properties (randomly selected per monitor):
 - `${MONITOR_X_VIDEO_MODE_DEPTH}` → Video mode bit depth
 - `${MONITOR_X_VIDEO_MODE_REFRESH}` → Video mode refresh rate (millihertz)
 
-Linux X11-specific video modes (differ from Wayland):
+Linux X11-specific values (differ from Wayland):
+- `${MONITOR_X_X11_SCALE}` → X11 scale factor (may differ from Wayland)
 - `${MONITOR_X_X11_VIDEO_MODE_WIDTH}` → X11 video mode width
 - `${MONITOR_X_X11_VIDEO_MODE_HEIGHT}` → X11 video mode height
 - `${MONITOR_X_X11_VIDEO_MODE_DEPTH}` → X11 video mode bit depth
@@ -147,11 +149,24 @@ Linux X11-specific video modes (differ from Wayland):
 <RunTests>
 **macOS/Windows**: Run tests for single monitor config.
 
-**Linux**: Run tests for ALL monitors in sequence:
+**Linux**: Run tests grouped by backend, with terminal moves only when monitor changes:
+
+**Phase 1: Wayland Tests**
 1. Move Konsole to Monitor 0 using <LinuxTerminalMove/>
-2. Run all tests from `linux_monitor0.json`
+2. Run all Wayland tests with `launch_monitor: 0` (tests 1-4)
 3. Move Konsole to Monitor 1 using <LinuxTerminalMove/>
-4. Run all tests from `linux_monitor1.json`
+4. Run all Wayland tests with `launch_monitor: 1` (tests 5-8)
+
+**Phase 2: X11 Tests**
+5. Move Konsole to Monitor 0 using <LinuxTerminalMove/>
+6. Run all X11 tests with `launch_monitor: 0` (tests 9-14)
+7. Move Konsole to Monitor 1 using <LinuxTerminalMove/>
+8. Run all X11 tests with `launch_monitor: 1` (tests 15-20)
+
+**Phase 3: Human-Assisted Tests**
+9. Run human-assisted tests (tests 21-23) - these run last
+
+**Total terminal moves: 4** (tests are ordered by launch_monitor within each backend phase)
 
 For each test in order:
 
@@ -166,7 +181,7 @@ For each test in order:
 
 4. **Record result**
 
-Human tests (`automation: "human_only"`) run last, one at a time with user prompts.
+Human tests (`automation: "human_only"` or `"human_assisted"`) run last, one at a time with user prompts.
 </RunTests>
 
 <TestSequence>
@@ -249,6 +264,7 @@ Check fields in `validate` array:
   - **Note**: On Wayland (`backend: "wayland"`), position is always `Automatic` - skip position validation
 - `"size"`: window.resolution.physical_width/height match expected
 - `"monitor_index"`: scale_factor matches target monitor's scale
+  - **Linux X11**: Use `${MONITOR_X_X11_SCALE}` instead of `${MONITOR_X_SCALE}`
 - `"mode"`: window.mode matches expected
   - **If test has `expected_mode`**: verify window.mode matches `expected_mode` instead of RON file
     (used when actual mode differs from requested, e.g., exclusive→borderless fallback)

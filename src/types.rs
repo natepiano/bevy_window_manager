@@ -10,6 +10,12 @@ use bevy::window::WindowMode;
 use serde::Deserialize;
 use serde::Serialize;
 
+/// Threshold for considering two scale factors equal.
+///
+/// Accounts for floating-point imprecision when comparing scale factors.
+/// A difference less than this epsilon is considered negligible.
+pub const SCALE_FACTOR_EPSILON: f64 = 0.01;
+
 /// Saved video mode for exclusive fullscreen.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SavedVideoMode {

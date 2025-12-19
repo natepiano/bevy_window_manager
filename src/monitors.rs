@@ -78,13 +78,29 @@ impl Monitors {
     ///
     /// Panics if no monitors exist (should never happen on a real system).
     #[must_use]
-    pub fn first(&self) -> &MonitorInfo { &self.list[0] }
+    #[expect(
+        clippy::expect_used,
+        reason = "fail fast - no monitors means unrecoverable state"
+    )]
+    pub fn first(&self) -> &MonitorInfo {
+        self.list
+            .first()
+            .expect("Monitors::first() requires at least one monitor")
+    }
 
     /// Find the monitor at position, or the closest one if outside all bounds.
     ///
     /// Unlike [`at`](Self::at), this always returns a monitor by finding
     /// the closest monitor when position is outside all bounds.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no monitors exist (should never happen on a real system).
     #[must_use]
+    #[expect(
+        clippy::expect_used,
+        reason = "fail fast - no monitors means unrecoverable state"
+    )]
     pub fn closest_to(&self, x: i32, y: i32) -> &MonitorInfo {
         // Try exact match first
         if let Some(monitor) = self.at(x, y) {
@@ -116,7 +132,7 @@ impl Monitors {
 
                 dx * dx + dy * dy
             })
-            .unwrap_or(&self.list[0])
+            .expect("Monitors::closest_to() requires at least one monitor")
     }
 }
 
