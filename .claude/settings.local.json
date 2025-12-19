@@ -87,7 +87,10 @@
       "Bash(pkill:*)",
       "Bash(WAYLAND_DISPLAY= xwininfo:*)",
       "Bash(git -C /home/natemccoy/rust/bevy_window_manager diff --cached)",
-      "Bash(git -C /home/natemccoy/rust/bevy_window_manager diff)"
+      "Bash(git -C /home/natemccoy/rust/bevy_window_manager diff)",
+      "Bash(kscreen-doctor:*)",
+      "Bash(WAYLAND_DISPLAY= xdpyinfo:*)",
+      "Bash(systemctl status:*)"
     ],
     "deny": [],
     "ask": []

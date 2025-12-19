@@ -69,6 +69,7 @@ pub use monitors::Monitors;
 use monitors::init_monitors;
 use types::RestoreWindowConfig;
 use types::TargetPosition;
+use types::X11FrameCompensated;
 pub use window_ext::WindowExt;
 
 /// The main plugin. See module docs for usage.
@@ -146,11 +147,27 @@ fn build_plugin(app: &mut App, path: PathBuf) {
             )
                 .chain()
                 .after(init_monitors),
-        )
-        .add_systems(
-            Update,
-            systems::restore_primary_window.run_if(resource_exists::<TargetPosition>),
         );
+
+    // X11 frame extent compensation (Linux + W6 + X11 only)
+    // Runs until token exists, then restore_primary_window takes over
+    #[cfg(all(target_os = "linux", feature = "workaround-winit-4445"))]
+    app.add_systems(
+        Update,
+        x11_frame_extents::compensate_target_position
+            .run_if(resource_exists::<TargetPosition>)
+            .run_if(not(resource_exists::<X11FrameCompensated>))
+            .run_if(not(systems::is_wayland)),
+    );
+
+    // Restore primary window - always gated by token
+    // Token is inserted immediately in load_target_position when compensation isn't needed
+    app.add_systems(
+        Update,
+        systems::restore_primary_window
+            .run_if(resource_exists::<TargetPosition>)
+            .run_if(resource_exists::<X11FrameCompensated>),
+    );
 
     // Linux: includes Wayland monitor detection with ordering constraint
     #[cfg(target_os = "linux")]

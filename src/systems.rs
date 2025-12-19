@@ -47,6 +47,7 @@ use crate::types::TargetPosition;
 use crate::types::WindowDecoration;
 use crate::types::WindowRestoreState;
 use crate::types::WinitInfo;
+use crate::types::X11FrameCompensated;
 use crate::window_ext::WindowExt;
 
 /// Populate `WinitInfo` resource from winit (decoration and starting monitor).
@@ -62,7 +63,7 @@ pub fn init_winit_info(
             let outer = winit_window.outer_size();
             let inner = winit_window.inner_size();
             let decoration = WindowDecoration {
-                width: outer.width.saturating_sub(inner.width),
+                width:  outer.width.saturating_sub(inner.width),
                 height: outer.height.saturating_sub(inner.height),
             };
 
@@ -73,11 +74,9 @@ pub fn init_winit_info(
                 .unwrap_or(IVec2::ZERO);
 
             debug!(
-                "[init_winit_info] outer_position={:?} is_wayland={} current_monitor={:?} primary_monitor={:?}",
+                "[init_winit_info] outer_position={:?} is_wayland={}",
                 pos,
-                is_wayland(),
-                winit_window.current_monitor(),
-                winit_window.primary_monitor()
+                is_wayland()
             );
 
             // Log what current_monitor() returns for comparison
@@ -242,6 +241,16 @@ pub fn load_target_position(
         #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
         fullscreen_restore_state: FullscreenRestoreState::WaitingForSurface,
     });
+
+    // Insert X11FrameCompensated token for platforms that don't need compensation.
+    // On Linux + W6 + X11, the compensation system inserts this token after adjusting position.
+    #[cfg(not(all(target_os = "linux", feature = "workaround-winit-4445")))]
+    commands.insert_resource(X11FrameCompensated);
+
+    #[cfg(all(target_os = "linux", feature = "workaround-winit-4445"))]
+    if is_wayland() {
+        commands.insert_resource(X11FrameCompensated);
+    }
 }
 
 /// Move window to target monitor at 1x1 size (`PreStartup`).
@@ -391,21 +400,15 @@ pub fn save_window_state(
     // has fixed the bug.
     // Workaround W5 (winit #4443): Query outer_position() directly because keyboard
     // snap doesn't emit Moved events.
-    // Workaround W6 (winit #4445): Compensate for frame extents because outer_position()
-    // returns client area position instead of frame position.
+    // Note: W6 compensation moved to restore-side (load_target_position) so that
+    // saved position matches Window.position for user clarity.
     #[cfg(all(target_os = "linux", feature = "workaround-winit-4443"))]
     let pos = WINIT_WINDOWS.with(|ww| {
         let ww = ww.borrow();
         let winit_win = ww.get_window(window_entity)?;
 
         let outer_pos = winit_win.outer_position().ok()?;
-        let pos = IVec2::new(outer_pos.x, outer_pos.y);
-
-        // W6: Compensate for frame extents if enabled
-        #[cfg(all(target_os = "linux", feature = "workaround-winit-4445"))]
-        let pos = crate::x11_frame_extents::compensate_position(&**winit_win, pos);
-
-        Some(pos)
+        Some(IVec2::new(outer_pos.x, outer_pos.y))
     });
 
     #[cfg(not(all(target_os = "linux", feature = "workaround-winit-4443")))]

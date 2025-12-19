@@ -107,6 +107,16 @@ impl WinitInfo {
     }
 }
 
+/// Token indicating X11 frame extent compensation is complete (W6 workaround).
+///
+/// This resource gates `restore_primary_window` - the restore system cannot run
+/// until this token exists. On Linux X11 with W6 workaround enabled, this ensures
+/// frame extents are queried and position is compensated before restore proceeds.
+/// On other platforms/configurations, the token is inserted immediately during
+/// `load_target_position` since no compensation is needed.
+#[derive(Resource)]
+pub struct X11FrameCompensated;
+
 /// State for `MonitorScaleStrategy::HigherToLower` (high→low DPI restore).
 ///
 /// When restoring from a high-DPI to low-DPI monitor, we must set position BEFORE size

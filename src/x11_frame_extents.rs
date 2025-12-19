@@ -1,63 +1,52 @@
 //! Query X11 `_NET_FRAME_EXTENTS` to work around winit #4445.
 //!
 //! On X11, winit's `outer_position()` returns the client area position instead of
-//! the frame position. This is because winit's heuristic incorrectly zeros out
-//! `_NET_FRAME_EXTENTS` when the window is detected as "not nested".
+//! the frame position. This causes window position to drift by the title bar height
+//! on each save/restore cycle.
 //!
-//! This module queries `_NET_FRAME_EXTENTS` directly via x11rb so we can
-//! compensate for the title bar height when saving window positions.
+//! This module queries `_NET_FRAME_EXTENTS` directly via x11rb and compensates
+//! the saved position before restoring.
 //!
 //! See: <https://github.com/rust-windowing/winit/issues/4445>
 
+use bevy::ecs::system::NonSendMarker;
 use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
+use bevy::winit::WINIT_WINDOWS;
 use raw_window_handle::HasWindowHandle;
 use raw_window_handle::RawWindowHandle;
 use x11rb::protocol::xproto::AtomEnum;
 use x11rb::protocol::xproto::ConnectionExt;
 use x11rb::xcb_ffi::XCBConnection;
 
-/// Frame extents (left, right, top, bottom) from `_NET_FRAME_EXTENTS`.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct FrameExtents {
-    pub left:   u32,
-    pub right:  u32,
-    pub top:    u32,
-    pub bottom: u32,
-}
+use crate::types::TargetPosition;
+use crate::types::X11FrameCompensated;
 
 /// Query `_NET_FRAME_EXTENTS` for an X11 window ID.
 ///
-/// Returns `None` if the connection fails or the property is not set.
-fn query_frame_extents(window_id: u32) -> Option<FrameExtents> {
-    // Connect to the X server
+/// Returns the top extent (title bar height), or `None` if not yet available.
+/// Does not block - returns immediately if the WM hasn't set the property yet.
+fn query_frame_top(window_id: u32) -> Option<i32> {
     let (conn, _screen_num) = XCBConnection::connect(None).ok()?;
 
-    // Get the _NET_FRAME_EXTENTS atom
     let atom_cookie = conn.intern_atom(false, b"_NET_FRAME_EXTENTS").ok()?;
     let atom = atom_cookie.reply().ok()?.atom;
 
-    // Query the property
     let property_cookie = conn
         .get_property(false, window_id, atom, AtomEnum::CARDINAL, 0, 4)
         .ok()?;
     let property = property_cookie.reply().ok()?;
 
-    // Parse the 4 u32 values: left, right, top, bottom
     let values: Vec<u32> = property.value32()?.collect();
     if values.len() >= 4 {
-        Some(FrameExtents {
-            left:   values[0],
-            right:  values[1],
-            top:    values[2],
-            bottom: values[3],
-        })
+        Some(values[2] as i32) // top extent
     } else {
         None
     }
 }
 
-/// Get the X11 window ID from a window that implements `HasWindowHandle`.
-pub fn get_x11_window_id<W: HasWindowHandle>(window: &W) -> Option<u32> {
+/// Get the X11 window ID from a window handle.
+fn get_x11_window_id<W: HasWindowHandle>(window: &W) -> Option<u32> {
     let handle = window.window_handle().ok()?;
     match handle.as_raw() {
         RawWindowHandle::Xlib(h) => Some(h.window as u32),
@@ -66,33 +55,45 @@ pub fn get_x11_window_id<W: HasWindowHandle>(window: &W) -> Option<u32> {
     }
 }
 
-/// Get frame extents for a window that implements `HasWindowHandle`.
-pub fn get_frame_extents<W: HasWindowHandle>(window: &W) -> Option<FrameExtents> {
-    let window_id = get_x11_window_id(window)?;
-    query_frame_extents(window_id)
-}
-
-/// Compensate a position by subtracting frame extents.
+/// System to compensate `TargetPosition` for X11 frame extents (W6 workaround).
 ///
-/// When workaround-winit-4445 is enabled, this subtracts the frame extents
-/// from the position returned by `outer_position()` to get the true frame position.
-pub fn compensate_position<W: HasWindowHandle>(window: &W, pos: IVec2) -> IVec2 {
-    get_frame_extents(window).map_or_else(
-        || {
-            debug!("[x11_frame_extents] Could not get frame extents, using raw position");
-            pos
-        },
-        |extents| {
-            debug!(
-                "[x11_frame_extents] _NET_FRAME_EXTENTS: left={} right={} top={} bottom={}",
-                extents.left, extents.right, extents.top, extents.bottom
-            );
-            let compensated = IVec2::new(pos.x - extents.left as i32, pos.y - extents.top as i32);
-            debug!(
-                "[x11_frame_extents] Compensated position: {:?} -> {:?}",
-                pos, compensated
-            );
-            compensated
-        },
-    )
+/// The saved position is the client area position (due to winit bug #4445),
+/// but `set_outer_position` expects the frame position. We subtract the title
+/// bar height to get the correct frame position.
+///
+/// Inserts `X11FrameCompensated` token when successful, which gates
+/// `restore_primary_window`. If frame extents aren't available yet,
+/// returns silently and retries next frame.
+pub fn compensate_target_position(
+    mut commands: Commands,
+    window_entity: Single<Entity, With<PrimaryWindow>>,
+    mut target: ResMut<TargetPosition>,
+    _non_send: NonSendMarker,
+) {
+    let Some(pos) = target.position else {
+        // No position to compensate (Wayland) - mark as done
+        commands.insert_resource(X11FrameCompensated);
+        return;
+    };
+
+    let frame_top = WINIT_WINDOWS.with(|ww| {
+        let ww = ww.borrow();
+        ww.get_window(*window_entity).and_then(|winit_window| {
+            let window_id = get_x11_window_id(&**winit_window)?;
+            query_frame_top(window_id)
+        })
+    });
+
+    let Some(frame_top) = frame_top else {
+        // WM hasn't set frame extents yet - try again next frame
+        return;
+    };
+
+    let compensated = IVec2::new(pos.x, pos.y - frame_top);
+    info!(
+        "[W6] Compensating position: {:?} -> {:?} (frame_top={})",
+        pos, compensated, frame_top
+    );
+    target.position = Some(compensated);
+    commands.insert_resource(X11FrameCompensated);
 }
