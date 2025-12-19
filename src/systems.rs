@@ -180,17 +180,14 @@ pub fn load_target_position(
     // Position may be None on Wayland where clients can't access window position.
     //
     // On macOS, we clamp to monitor bounds because macOS may resize/reposition windows
-    // that extend beyond the screen.
+    // that extend beyond the screen. macOS does not allow windows to span monitors.
     //
-    // On Windows, users can legitimately position windows partially off-screen,
-    // and the invisible border offset means saved positions may be slightly outside
-    // monitor bounds. We skip clamping to preserve the exact saved position.
+    // On Windows and Linux X11, windows can legitimately span multiple monitors,
+    // so we preserve the exact saved position without clamping.
     let position = saved_pos.map(|(saved_x, saved_y)| {
-        if cfg!(target_os = "windows") {
-            // Windows: use saved position directly, no clamping
-            IVec2::new(saved_x, saved_y)
-        } else {
-            // macOS/Linux: clamp to monitor bounds (using outer dimensions for accurate bounds)
+        if cfg!(target_os = "macos") {
+            // macOS: clamp to monitor bounds (using outer dimensions for accurate bounds).
+            // macOS may resize/reposition windows that extend beyond the screen.
             let mon_right = target_info.position.x + target_info.size.x as i32;
             let mon_bottom = target_info.position.y + target_info.size.y as i32;
 
@@ -214,6 +211,14 @@ pub fn load_target_position(
             }
 
             IVec2::new(x, y)
+        } else {
+            // Windows/Linux: use saved position directly, no clamping.
+            // Windows users can legitimately position windows partially off-screen,
+            // and the invisible border offset means saved positions may be slightly
+            // outside monitor bounds.
+            // On Linux X11, windows can span multiple monitors.
+            // On Linux Wayland, position is None anyway so this code path isn't reached.
+            IVec2::new(saved_x, saved_y)
         }
     });
 
