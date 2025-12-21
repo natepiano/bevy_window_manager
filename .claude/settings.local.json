@@ -98,7 +98,8 @@
       "Bash(BRP_EXTRAS_PORT=15703 cargo run:*)",
       "Bash(git -C /Users/natemccoy/rust/bevy_window_manager status)",
       "Bash(git -C /Users/natemccoy/rust/bevy_window_manager diff --stat)",
-      "Bash(git -C /Users/natemccoy/rust/bevy_window_manager diff)"
+      "Bash(git -C /Users/natemccoy/rust/bevy_window_manager diff)",
+      "Bash(git -C /Users/natemccoy/rust/bevy_window_manager add:*)"
     ],
     "deny": [],
     "ask": []

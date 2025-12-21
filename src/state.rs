@@ -37,11 +37,11 @@ pub fn load_state(path: &Path) -> Option<WindowState> {
 
 /// Save the window state to the given path.
 pub fn save_state(path: &Path, state: &WindowState) {
-    if let Some(parent) = path.parent() {
-        if let Err(e) = fs::create_dir_all(parent) {
-            warn!("[save_state] Failed to create directory {parent:?}: {e}");
-            return;
-        }
+    if let Some(parent) = path.parent()
+        && let Err(e) = fs::create_dir_all(parent)
+    {
+        warn!("[save_state] Failed to create directory {parent:?}: {e}");
+        return;
     }
     match ron::ser::to_string_pretty(state, ron::ser::PrettyConfig::default()) {
         Ok(contents) => {

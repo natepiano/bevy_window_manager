@@ -191,6 +191,9 @@ fn sync_selected_to_active(
 }
 
 /// Get platform suffix for Linux (Wayland or X11).
+///
+/// Not const on Linux due to `std::env::var` check; clippy false positive on other platforms.
+#[cfg_attr(not(target_os = "linux"), allow(clippy::missing_const_for_fn))]
 fn platform_suffix() -> &'static str {
     #[cfg(target_os = "linux")]
     {

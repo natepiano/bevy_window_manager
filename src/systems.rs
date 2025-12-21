@@ -272,6 +272,24 @@ pub fn move_to_target_monitor(
     mut window: Single<&mut Window, With<PrimaryWindow>>,
     target: Res<TargetPosition>,
 ) {
+    /// Visibility state for window during move operation.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum InitialVisibility {
+        /// Window remains visible during move.
+        Visible,
+        /// Window is hidden to avoid visual flash (`HigherToLower` two-phase restore).
+        Hidden,
+    }
+
+    /// Computed parameters for the initial window move to target monitor.
+    #[derive(Debug)]
+    struct MoveParams {
+        position:   IVec2,
+        width:      u32,
+        height:     u32,
+        visibility: InitialVisibility,
+    }
+
     // For fullscreen modes, just move to target monitor position (no 1x1 size)
     // The fullscreen mode will be applied later in try_apply_restore
     if target.mode.is_fullscreen() {
@@ -317,24 +335,6 @@ pub fn move_to_target_monitor(
         );
         return;
     };
-
-    /// Visibility state for window during move operation.
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    enum InitialVisibility {
-        /// Window remains visible during move.
-        Visible,
-        /// Window is hidden to avoid visual flash (HigherToLower two-phase restore).
-        Hidden,
-    }
-
-    /// Computed parameters for the initial window move to target monitor.
-    #[derive(Debug)]
-    struct MoveParams {
-        position:   IVec2,
-        width:      u32,
-        height:     u32,
-        visibility: InitialVisibility,
-    }
 
     // Compute move parameters based on scale strategy
     let params = match target.monitor_scale_strategy {
