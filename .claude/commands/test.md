@@ -200,53 +200,52 @@ Linux X11-specific values (differ from Wayland):
 </TemplateVariables>
 
 <RunTests>
-**Windows**: Run tests grouped by launch_monitor, with Zed moves only when monitor changes:
+**Windows**: Run tests in JSON order. Automated tests are grouped by launch_monitor, human tests are at the end.
 
-**Phase 1: Monitor 0 Tests**
+**Phase 1: Automated Tests**
 1. Move Zed to Monitor 0 using <WindowsZedMove/>
-2. Run all tests with `launch_monitor: 0` (tests 1-4)
-
-**Phase 2: Monitor 1 Tests**
+2. Run all automated tests with `launch_monitor: 0`
 3. Move Zed to Monitor 1 using <WindowsZedMove/>
-4. Run all tests with `launch_monitor: 1` (tests 5-8)
+4. Run all automated tests with `launch_monitor: 1`
 
-**Phase 3: Human-Assisted Tests**
-5. Run human-assisted tests (test 9 - W2 drag) - these run last
+**Phase 2: Human-Assisted Tests**
+5. For each human test: move Zed to the test's `launch_monitor`, then run the test
 
-**Total Zed moves: 2** (tests are ordered by launch_monitor)
+**IMPORTANT**: Human tests appear at the END of the JSON array. Run them in order, moving Zed to each test's `launch_monitor` before running.
 
 ---
 
-**macOS**: Run tests grouped by launch_monitor, with Zed moves only when monitor changes:
+**macOS**: Run tests in JSON order. Automated tests are grouped by launch_monitor, human tests are at the end.
 
-**Phase 1: Monitor 0 Tests**
+**Phase 1: Automated Tests**
 1. Move Zed to Monitor 0 using <MacOSZedMove/>
-2. Run all tests with `launch_monitor: 0` (tests 1-6)
-
-**Phase 2: Monitor 1 Tests**
+2. Run all automated tests with `launch_monitor: 0`
 3. Move Zed to Monitor 1 using <MacOSZedMove/>
-4. Run all tests with `launch_monitor: 1` (tests 7-8)
+4. Run all automated tests with `launch_monitor: 1`
 
-**Total Zed moves: 2** (tests are ordered by launch_monitor)
+**Phase 2: Human-Assisted Tests**
+5. For each human test: move Zed to the test's `launch_monitor`, then run the test
 
-**Linux**: Run tests grouped by backend, with terminal moves only when monitor changes:
+**IMPORTANT**: Human tests appear at the END of the JSON array. Run them in order, moving Zed to each test's `launch_monitor` before running.
 
-**Phase 1: Wayland Tests**
+**Linux**: Run tests in JSON order. Automated tests are grouped by backend then launch_monitor, human tests are at the end.
+
+**Phase 1: Wayland Automated Tests**
 1. Move Konsole to Monitor 0 using <LinuxTerminalMove/>
-2. Run all Wayland tests with `launch_monitor: 0` (tests 1-4)
+2. Run all Wayland automated tests with `launch_monitor: 0`
 3. Move Konsole to Monitor 1 using <LinuxTerminalMove/>
-4. Run all Wayland tests with `launch_monitor: 1` (tests 5-8)
+4. Run all Wayland automated tests with `launch_monitor: 1`
 
-**Phase 2: X11 Tests**
+**Phase 2: X11 Automated Tests**
 5. Move Konsole to Monitor 0 using <LinuxTerminalMove/>
-6. Run all X11 tests with `launch_monitor: 0` (tests 9-14)
+6. Run all X11 automated tests with `launch_monitor: 0`
 7. Move Konsole to Monitor 1 using <LinuxTerminalMove/>
-8. Run all X11 tests with `launch_monitor: 1` (tests 15-20)
+8. Run all X11 automated tests with `launch_monitor: 1`
 
 **Phase 3: Human-Assisted Tests**
-9. Run human-assisted tests (tests 21-23) - these run last
+9. For each human test: move Konsole to the test's `launch_monitor`, then run the test
 
-**Total terminal moves: 4** (tests are ordered by launch_monitor within each backend phase)
+**IMPORTANT**: Human tests appear at the END of the JSON array. Run them in order, moving Konsole to each test's `launch_monitor` before running.
 
 For each test in order:
 
@@ -260,8 +259,6 @@ For each test in order:
 3. **Execute test** using <TestSequence/>
 
 4. **Record result**
-
-Human tests (`automation: "human_only"` or `"human_assisted"`) run last, one at a time with user prompts.
 </RunTests>
 
 <TestSequence>
@@ -476,10 +473,10 @@ Validation approach for X11 position workaround tests:
 - FAIL: Workaround did not fix the bug
 
 <HumanTestFlow>
-1. **Move editor to launch_monitor**: Use platform-appropriate move command:
-   - macOS: <MacOSZedMove/>
-   - Windows: <WindowsZedMove/>
-   - Linux: <LinuxTerminalMove/>
+1. **CRITICAL - Move editor to test's launch_monitor FIRST**: Read the test's `launch_monitor` field and move the editor there:
+   - macOS: `.claude/scripts/macos_move_zed_to_monitor.sh <launch_monitor>`
+   - Windows: `powershell -File .claude/scripts/windows_move_zed_to_monitor.ps1 <launch_monitor>`
+   - Linux: `.claude/scripts/linux_move_konsole_to_monitor.sh <launch_monitor>`
 2. Write RON from `${test_ron_dir}/${test.ron_file}` to `${example_ron_path}`
 3. **If has `workaround_validation`**: run Phase 1 first (build_without flags), then Phase 2 (default features)
 4. Launch app using Bash with `run_in_background: true`

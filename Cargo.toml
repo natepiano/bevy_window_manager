@@ -58,17 +58,18 @@ default = [
 #
 # Requires: workaround-winit-4440 (the two-phase restore creates the W4 scenario)
 workaround-winit-4441 = ["workaround-winit-4440"]
-# macOS scale factor compensation workaround
+# Scale factor compensation workaround (Windows, macOS, Linux X11)
 # Issue: https://github.com/rust-windowing/winit/issues/4440
 #
 # `set_outer_position` and `request_inner_size` use the current monitor's scale
 # factor for coordinate conversion instead of the target monitor's. When restoring
 # a window to a different-scale monitor, coordinates are converted incorrectly.
 #
-# This workaround compensates position/size based on scale factor ratios and
-# uses a two-phase approach for high→low DPI transitions.
+# - Windows: compensates size only (position works correctly)
+# - macOS/Linux X11: compensates both position and size
+# - Linux Wayland: no compensation (can't detect starting monitor or set position)
 #
-# Test without workaround: cargo run --example restore_window --no-default-features --features workaround-winit-4341
+# Test without workaround: cargo run --example restore_window --no-default-features
 # Test with workaround:    cargo run --example restore_window
 workaround-winit-4440 = []
 # Windows DX12/DXGI exclusive fullscreen crash workaround
@@ -81,7 +82,7 @@ workaround-winit-4440 = []
 # winit. There's no Bevy issue for this yet - Bevy is the right place to fix it
 # since it orchestrates both window creation (winit) and surface creation (wgpu).
 #
-# Test without workaround: cargo run --example restore_window --no-default-features --features workaround-winit-4341,workaround-winit-4440
+# Test without workaround: cargo run --example restore_window --no-default-features
 # Test with workaround:    cargo run --example restore_window
 workaround-winit-3124 = []
 # Windows DPI drag bounce workaround - remove when winit includes PR #4341
@@ -102,8 +103,10 @@ workaround-winit-4341 = []
 # This workaround queries winit's `outer_position()` directly when saving state
 # instead of trusting bevy's cached position.
 #
-# Test without workaround: WAYLAND_DISPLAY= cargo run --example restore_window --no-default-features --features workaround-winit-4341
-# Test with workaround:    WAYLAND_DISPLAY= cargo run --example restore_window
+# Test without workaround (4440 provides foundational scale compensation):
+#   WAYLAND_DISPLAY= cargo run --example restore_window --no-default-features --features workaround-winit-4440
+# Test with workaround:
+#   WAYLAND_DISPLAY= cargo run --example restore_window
 workaround-winit-4443 = []
 # Linux X11 outer_position frame extents workaround
 # Issue: https://github.com/rust-windowing/winit/issues/4445
@@ -117,8 +120,10 @@ workaround-winit-4443 = []
 # save/restore cycle. This workaround queries `_NET_FRAME_EXTENTS` directly via
 # x11rb and subtracts the top extent from the saved position.
 #
-# Test without workaround: WAYLAND_DISPLAY= cargo run --example restore_window --no-default-features --features workaround-winit-4341,workaround-winit-4443
-# Test with workaround:    WAYLAND_DISPLAY= cargo run --example restore_window
+# Test without workaround (4440 provides scale compensation, 4443 provides position caching):
+#   WAYLAND_DISPLAY= cargo run --example restore_window --no-default-features --features workaround-winit-4440,workaround-winit-4443
+# Test with workaround:
+#   WAYLAND_DISPLAY= cargo run --example restore_window
 workaround-winit-4445 = []
 
 [lints.clippy]

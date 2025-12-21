@@ -157,63 +157,55 @@ pub enum FullscreenRestoreState {
 
 /// Restore strategy based on scale factor relationship between launch and target monitors.
 ///
+/// # The Problem
+///
+/// Winit's `request_inner_size` and `set_outer_position` use the current window's scale factor
+/// when interpreting coordinates, rather than the target monitor's scale factor. This causes
+/// incorrect sizing/positioning when restoring windows across monitors with different DPIs.
+///
+/// See: <https://github.com/rust-windowing/winit/issues/4440>
+///
 /// # Platform Differences
-///
-/// Window coordinate handling differs significantly between platforms due to how winit
-/// interacts with each OS's DPI system:
-///
-/// ## macOS
-///
-/// Winit's coordinate handling on macOS is fundamentally broken for multi-monitor setups
-/// with different scale factors. Desktop/window coordinates are internally closer to
-/// logical positions, but winit converts them using the *current* monitor's scale factor,
-/// incorrectly assuming all monitors have the same scale.
-///
-/// This means:
-/// - When setting position/size, values are divided by the launch monitor's scale
-/// - We must compensate when scales differ between launch and target monitors
-/// - The `LowerToHigher` and `HigherToLower` strategies exist to work around this
-///
-/// See: <https://github.com/rust-windowing/winit/issues/2645>
 ///
 /// ## Windows
 ///
-/// Windows handles DPI correctly at the OS level. Winit uses physical coordinates
-/// directly without applying incorrect scale factor conversions. No compensation
-/// is needed when moving windows between monitors with different scales.
+/// - **Position**: Winit uses physical coordinates directly - no compensation needed
+/// - **Size**: Winit applies scale conversion using current monitor's scale - needs compensation
+/// - Strategy: `CompensateSizeOnly` when scales differ
 ///
-/// On Windows, we always use `ApplyUnchanged` regardless of scale factor differences.
+/// Note: Windows has a separate issue where `GetWindowRect` includes an invisible
+/// resize border (~7-11 pixels). See: <https://github.com/rust-windowing/winit/issues/4107>
 ///
-/// Note: Windows does have a separate issue where `GetWindowRect` includes an invisible
-/// resize border (~7-11 pixels), causing reported positions to be slightly negative
-/// when windows are snapped to screen edges. This is tracked in:
-/// <https://github.com/rust-windowing/winit/issues/4107>
+/// ## macOS / Linux X11
+///
+/// - **Position**: Winit converts using current monitor's scale - needs compensation
+/// - **Size**: Winit converts using current monitor's scale - needs compensation
+/// - Strategy: `LowerToHigher` or `HigherToLower` depending on scale relationship
+///
+/// ## Linux Wayland
+///
+/// Cannot detect starting monitor or set position, so no compensation is applied.
 ///
 /// # Variants
 ///
-/// - **`ApplyUnchanged`**: Apply position and size directly without compensation. Used on macOS
-///   when scales match.
+/// - **`ApplyUnchanged`**: Apply position and size directly without compensation.
 ///
-/// - **`CompensateSizeOnly`**: Windows only. Apply position directly, but compensate size by
-///   multiplying by `starting_scale / target_scale`. This is needed because Bevy's
-///   `set_physical_resolution` still applies scale conversion based on the current monitor, even
-///   though Windows handles position coordinates correctly.
+/// - **`CompensateSizeOnly`**: Windows only. Apply position directly, compensate size by
+///   multiplying by `starting_scale / target_scale`.
 ///
-/// - **`LowerToHigher`**: macOS only. Low→High DPI (1x→2x, ratio < 1). Multiply both position and
-///   size by ratio before applying so that after winit divides by launch scale, we get the correct
-///   result.
+/// - **`LowerToHigher`**: macOS/Linux X11. Low→High DPI (1x→2x, ratio < 1). Multiply both position
+///   and size by ratio.
 ///
-/// - **`HigherToLower`**: macOS only. High→Low DPI (2x→1x, ratio > 1). Cannot use simple
-///   compensation because the compensated size would exceed monitor bounds and get clamped by
-///   macOS. Instead uses a two-phase approach via `WindowRestoreState`:
-///   1. Move a 1x1 window to the final position (compensated) to trigger scale change
-///   2. After scale changes, apply size without compensation (position already correct)
+/// - **`HigherToLower`**: macOS/Linux X11. High→Low DPI (2x→1x, ratio > 1). Uses two-phase approach
+///   via `WindowRestoreState` to avoid size clamping:
+///   1. Move a 1x1 window to final position (compensated) to trigger scale change
+///   2. After scale changes, apply size without compensation
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MonitorScaleStrategy {
     /// Same scale - apply position and size directly.
     ApplyUnchanged,
     /// Windows only: apply position directly, compensate size only.
-    #[cfg(target_os = "windows")]
+    #[cfg(all(target_os = "windows", feature = "workaround-winit-4440"))]
     CompensateSizeOnly,
     /// Low→High DPI (1x→2x) - apply with compensation (ratio < 1). macOS only.
     #[cfg(all(not(target_os = "windows"), feature = "workaround-winit-4440"))]
@@ -267,7 +259,7 @@ impl TargetPosition {
     pub const fn size(&self) -> UVec2 { UVec2::new(self.width, self.height) }
 
     /// Scale ratio between starting and target monitors.
-    #[cfg(any(target_os = "windows", feature = "workaround-winit-4440"))]
+    #[cfg(feature = "workaround-winit-4440")]
     #[must_use]
     pub fn ratio(&self) -> f64 { self.starting_scale / self.target_scale }
 
@@ -290,7 +282,7 @@ impl TargetPosition {
     /// Size compensated for scale factor differences.
     ///
     /// Multiplies size by the ratio to account for winit dividing by launch scale.
-    #[cfg(any(target_os = "windows", feature = "workaround-winit-4440"))]
+    #[cfg(feature = "workaround-winit-4440")]
     #[must_use]
     pub fn compensated_size(&self) -> UVec2 {
         let ratio = self.ratio();

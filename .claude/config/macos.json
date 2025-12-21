@@ -31,7 +31,7 @@
 
       "workaround_validation": {
         "feature_flag": "workaround-winit-4440",
-        "build_without": "--no-default-features --features workaround-winit-4341",
+        "build_without": "--no-default-features",
         "build_with": "",
         "without_behavior": "Window restores to wrong position/size on Monitor 1 due to scale factor mismatch",
         "with_behavior": "Window restores to correct position/size on Monitor 1"
@@ -67,36 +67,6 @@
     },
 
     {
-      "id": "dpi_drag_stability_W4",
-      "description": "Tests AppKit per-scale size tracking bug - window size should not reset when dragging between monitors",
-      "automation": "human_assisted",
-      "launch_monitor": 0,
-      "requires": {"min_monitors": 2, "different_scales": true},
-      "workaround_keys": ["W4"],
-
-      "workaround_validation": {
-        "feature_flag": "workaround-winit-4441",
-        "build_without": "--no-default-features --features workaround-winit-4341,workaround-winit-4440",
-        "build_with": "",
-        "without_behavior": "Window size shrinks incorrectly when dragged from Monitor 1 back to Monitor 0",
-        "with_behavior": "Window size is preserved when dragged back (brief visual flash is expected)"
-      },
-
-      "ron_file": "dpi_drag_size_stability.ron",
-
-      "instructions": [
-        "Window should appear on Monitor 1 (low-DPI)",
-        "Drag the window back to Monitor 0 (high-DPI)",
-        "Observe the window size after dragging"
-      ],
-
-      "success_criteria": {
-        "without_workaround": "Window size shrinks (appears smaller than before)",
-        "with_workaround": "Window size is preserved (same logical size, brief flash is OK)"
-      }
-    },
-
-    {
       "id": "same_monitor_restore_mon1",
       "description": "Basic position/size persistence on Monitor 1",
       "automation": "full",
@@ -123,7 +93,7 @@
 
       "workaround_validation": {
         "feature_flag": "workaround-winit-4440",
-        "build_without": "--no-default-features --features workaround-winit-4341",
+        "build_without": "--no-default-features",
         "build_with": "",
         "without_behavior": "Window restores to wrong position/size on Monitor 0 due to scale factor mismatch",
         "with_behavior": "Window restores to correct position/size on Monitor 0"
@@ -132,6 +102,36 @@
       "ron_file": "cross_monitor_low_to_high.ron",
 
       "validate": ["position", "size", "monitor_index", "mode"]
+    },
+
+    {
+      "id": "dpi_drag_stability_W4",
+      "description": "Tests AppKit per-scale size tracking bug - window size should not reset when dragging between monitors",
+      "automation": "human_assisted",
+      "launch_monitor": 0,
+      "requires": {"min_monitors": 2, "different_scales": true},
+      "workaround_keys": ["W4"],
+
+      "workaround_validation": {
+        "feature_flag": "workaround-winit-4441",
+        "build_without": "--no-default-features --features workaround-winit-4440",
+        "build_with": "",
+        "without_behavior": "Window size shrinks incorrectly when dragged from Monitor 1 back to Monitor 0",
+        "with_behavior": "Window size is preserved when dragged back (brief visual flash is expected)"
+      },
+
+      "ron_file": "dpi_drag_size_stability.ron",
+
+      "instructions": [
+        "Window should appear on Monitor 1 (low-DPI)",
+        "Drag the window back to Monitor 0 (high-DPI)",
+        "Observe the window size after dragging"
+      ],
+
+      "success_criteria": {
+        "without_workaround": "Window size shrinks (appears smaller than before)",
+        "with_workaround": "Window size is preserved (same logical size, brief flash is OK)"
+      }
     }
   ]
 }

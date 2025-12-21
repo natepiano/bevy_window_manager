@@ -733,7 +733,7 @@ fn try_apply_restore(target: &TargetPosition, primary_window: &mut Window) -> Re
                 None,
             );
         },
-        #[cfg(target_os = "windows")]
+        #[cfg(all(target_os = "windows", feature = "workaround-winit-4440"))]
         MonitorScaleStrategy::CompensateSizeOnly => {
             apply_window_geometry(
                 primary_window,
@@ -775,13 +775,20 @@ fn try_apply_restore(target: &TargetPosition, primary_window: &mut Window) -> Re
 
 /// Determine the monitor scale strategy based on platform and scale factors.
 /// Windows: compensate size only when scales differ.
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", feature = "workaround-winit-4440"))]
 fn determine_scale_strategy(starting_scale: f64, target_scale: f64) -> MonitorScaleStrategy {
     if (starting_scale - target_scale).abs() < SCALE_FACTOR_EPSILON {
         MonitorScaleStrategy::ApplyUnchanged
     } else {
         MonitorScaleStrategy::CompensateSizeOnly
     }
+}
+
+/// Determine the monitor scale strategy based on platform and scale factors.
+/// Windows without workaround: always use `ApplyUnchanged`.
+#[cfg(all(target_os = "windows", not(feature = "workaround-winit-4440")))]
+fn determine_scale_strategy(_starting_scale: f64, _target_scale: f64) -> MonitorScaleStrategy {
+    MonitorScaleStrategy::ApplyUnchanged
 }
 
 /// Determine the monitor scale strategy based on platform and scale factors.

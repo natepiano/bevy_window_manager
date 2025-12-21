@@ -22,11 +22,20 @@
     },
 
     {
-      "id": "cross_high_to_low",
+      "id": "cross_high_to_low_W1",
       "description": "Window on low-DPI monitor restores correctly when launched from high-DPI monitor",
       "automation": "full",
       "launch_monitor": 0,
       "requires": {"min_monitors": 2, "different_scales": true},
+      "workaround_keys": ["W1"],
+
+      "workaround_validation": {
+        "feature_flag": "workaround-winit-4440",
+        "build_without": "--no-default-features",
+        "build_with": "",
+        "without_behavior": "Window restores to wrong size on Monitor 1 due to scale factor mismatch",
+        "with_behavior": "Window restores to correct size on Monitor 1"
+      },
 
       "ron_file": "cross_monitor_high_to_low.ron",
 
@@ -53,7 +62,7 @@
 
       "workaround_validation": {
         "feature_flag": "workaround-winit-3124",
-        "build_without": "--no-default-features --features workaround-winit-4341",
+        "build_without": "--no-default-features --features workaround-winit-4341,workaround-winit-4440",
         "build_with": "",
         "without_behavior": "App crashes on startup (DXGI flip model issue with exclusive fullscreen)",
         "with_behavior": "App starts correctly with brief windowed flash before entering fullscreen"
@@ -82,11 +91,20 @@
     },
 
     {
-      "id": "cross_low_to_high",
+      "id": "cross_low_to_high_W1",
       "description": "Window on high-DPI monitor restores correctly when launched from low-DPI monitor",
       "automation": "full",
       "launch_monitor": 1,
       "requires": {"min_monitors": 2, "different_scales": true},
+      "workaround_keys": ["W1"],
+
+      "workaround_validation": {
+        "feature_flag": "workaround-winit-4440",
+        "build_without": "--no-default-features",
+        "build_with": "",
+        "without_behavior": "Window restores to wrong size on Monitor 0 due to scale factor mismatch",
+        "with_behavior": "Window restores to correct size on Monitor 0"
+      },
 
       "ron_file": "cross_monitor_low_to_high.ron",
 
@@ -113,7 +131,7 @@
 
       "workaround_validation": {
         "feature_flag": "workaround-winit-3124",
-        "build_without": "--no-default-features --features workaround-winit-4341",
+        "build_without": "--no-default-features --features workaround-winit-4341,workaround-winit-4440",
         "build_with": "",
         "without_behavior": "App crashes on startup (DXGI flip model issue with exclusive fullscreen)",
         "with_behavior": "App starts correctly with brief windowed flash before entering fullscreen"
@@ -134,7 +152,7 @@
 
       "workaround_validation": {
         "feature_flag": "workaround-winit-4341",
-        "build_without": "--no-default-features --features workaround-winit-3124",
+        "build_without": "--no-default-features --features workaround-winit-3124,workaround-winit-4440",
         "build_with": "",
         "without_behavior": "Window bounces or resizes incorrectly when dragged between monitors",
         "with_behavior": "Window moves smoothly and resizes correctly when dragged between monitors"
