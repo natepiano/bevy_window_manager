@@ -514,7 +514,7 @@ fn debug_window_changed(
     cached.focused = w.focused;
 }
 
-/// Debug system that logs when WindowScaleFactorChanged messages are received.
+/// Debug system that logs when `WindowScaleFactorChanged` messages are received.
 fn debug_scale_factor_changed(mut messages: MessageReader<WindowScaleFactorChanged>) {
     for msg in messages.read() {
         info!(

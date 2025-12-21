@@ -104,7 +104,10 @@
       "Bash(git -C /Users/natemccoy/rust/bevy_window_manager log -1 --stat)",
       "Bash(git -C /Users/natemccoy/rust/bevy_window_manager log -1 --format=\"%H %s\")",
       "Bash(git -C /Users/natemccoy/rust/bevy_window_manager log --oneline -5)",
-      "mcp__brp__brp_extras_screenshot"
+      "mcp__brp__brp_extras_screenshot",
+      "Bash(/Users/natemccoy/rust/bevy_window_manager/.claude/scripts/macos_detect_zed_monitor.sh:*)",
+      "Bash(/Users/natemccoy/rust/bevy_window_manager/.claude/scripts/macos_move_zed_to_monitor.sh 1)",
+      "Bash(/Users/natemccoy/rust/bevy_window_manager/.claude/scripts/macos_move_zed_to_monitor.sh 0)"
     ],
     "deny": [],
     "ask": []

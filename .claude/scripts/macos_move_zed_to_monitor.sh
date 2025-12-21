@@ -1,6 +1,6 @@
 #!/bin/bash
 # Moves Zed window to a target monitor (macOS)
-# Usage: move_zed_to_monitor.sh <monitor_index>
+# Usage: macos_move_zed_to_monitor.sh <monitor_index>
 #
 # Finds the Zed window titled "bevy_window_manager" (handles multiple Zed windows)
 # Positions it in the left half of the target monitor
@@ -92,7 +92,7 @@ echo "Moved Zed to monitor $TARGET_INDEX at ($TARGET_X, $TARGET_Y) size ${TARGET
 # Verify the move worked
 sleep 0.2
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DETECTED=$("$SCRIPT_DIR/detect_zed_monitor.sh")
+DETECTED=$("$SCRIPT_DIR/macos_detect_zed_monitor.sh")
 
 if [ "$DETECTED" != "$TARGET_INDEX" ]; then
     echo "WARNING: Zed detected on monitor $DETECTED, expected $TARGET_INDEX" >&2

@@ -109,7 +109,7 @@ Extract: platform, example_ron_path, test_ron_dir, tests array.
    - Shutdown the X11 app
 
 4. Detect editor/terminal monitor:
-   - **macOS**: Run `.claude/scripts/detect_zed_monitor.sh`
+   - **macOS**: Run `.claude/scripts/macos_detect_zed_monitor.sh`
      - Outputs "0" or "1" for the monitor index
    - **Windows**: Run `powershell -File .claude/scripts/windows_detect_zed_monitor.ps1`
      - Outputs "0" or "1" for the monitor index
@@ -128,7 +128,7 @@ Compute: ${NUM_MONITORS}, ${DIFFERENT_SCALES}
 <MacOSZedMove>
 **macOS only**: Move Zed to target monitor before running that monitor's tests.
 
-Run: `.claude/scripts/move_zed_to_monitor.sh <monitor_index>`
+Run: `.claude/scripts/macos_move_zed_to_monitor.sh <monitor_index>`
 
 The script:
 - Positions Zed in left half of target monitor

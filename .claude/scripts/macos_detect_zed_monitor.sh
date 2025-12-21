@@ -1,6 +1,6 @@
 #!/bin/bash
 # Detects which monitor the Zed window is on (macOS)
-# Usage: detect_zed_monitor.sh
+# Usage: macos_detect_zed_monitor.sh
 # Outputs: "0" or "1" for the monitor index, or exits with error
 #
 # Finds the Zed window titled "bevy_window_manager" (handles multiple Zed windows)
