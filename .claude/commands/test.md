@@ -351,9 +351,12 @@ Query Window: `mcp__brp__world_query`
 Fields to check:
 - `"position"`: `window.position` matches `{"At": [POS_X, POS_Y]}`
   - **Note**: On Wayland (`backend: "wayland"`), position is always `Automatic` - skip position validation
+  - **Note**: On X11 (`backend: "x11"`), Window.position reflects the client area position (below title bar),
+    not the frame position, due to winit bug #4445. After a mutation, Window.position will immediately show
+    the client area position (mutation value + frame_top). The RON saves this client area position.
 - `"size"`: `window.resolution.physical_width` and `window.resolution.physical_height` match expected
 - `"mode"`: `window.mode` matches expected
-  - **If test has `expected_mode`**: verify `window.mode` matches `expected_mode` instead of RON file
+  - **If test has `expected_mode``: verify `window.mode` matches `expected_mode` instead of RON file
     (used when actual mode differs from requested, e.g., exclusive→borderless fallback)
 
 ### For `"monitor_index"` validation:
@@ -421,11 +424,24 @@ Shutdown after validation.
 
 The test runs TWICE - once without workaround, once with.
 
+**X11 Position Workaround Tests (workaround-winit-4445)**:
+
+For X11 position tests, the workaround ensures position STABILITY across save/restore cycles.
+Due to winit bug #4445, `outer_position()` returns client area position, not frame position.
+Without the workaround, position drifts by frame_top (title bar height) on each restore.
+
+Validation approach for X11 position workaround tests:
+1. After mutation, record Window.position (this is the client area position)
+2. Shutdown (position saves to RON as client area position)
+3. Relaunch and query Window.position again
+4. **Phase 1 (without workaround)**: Window.position will DRIFT from saved position (FAIL = bug confirmed ✓)
+5. **Phase 2 (with workaround)**: Window.position will MATCH saved position (PASS = workaround works ✓)
+
 **Phase 1: WITHOUT workaround**
 - Feature flags: `workaround_validation.build_without`
 - Run Steps 2-7 (skip 8-9 for exit_code tests)
 - Expected: Test should FAIL (bug manifests)
-  - For window validation: values don't match expected
+  - For X11 position validation: Window.position after restore drifts from saved RON position
   - For exit_code validation: exit code != 0 (panic)
 - If PASS: WARNING "Bug not reproduced"
 - If FAIL: "Bug confirmed ✓"
@@ -434,7 +450,7 @@ The test runs TWICE - once without workaround, once with.
 - Feature flags: (none - use default features)
 - Run Steps 2-7 (skip 8-9 for exit_code tests)
 - Expected: Test should PASS (workaround fixes bug)
-  - For window validation: values match expected
+  - For X11 position validation: Window.position after restore matches saved RON position (stable)
   - For exit_code validation: exit code == 0 (clean exit)
 - If PASS: "Workaround verified ✓"
 - If FAIL: FAIL "Workaround did not fix bug"
