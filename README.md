@@ -13,7 +13,7 @@ Originally created as a mechanism to restore a window to its last known position
 
 `bevy_window_manager` plugin works around these issues by using winit directly to capture actual window positions and compensate for scale factor conversions. See the documentation in [`src/lib.rs`](src/lib.rs) for technical details.
 
-Windows has similar scale factor issues, plus additional quirks like invisible window borders that prevent precise placement. As of 0.17.1, this plugin includes workarounds for Windows multi-monitor setups with monitors at different scale factors (see [Platform Support](#platform-support) for testing notes).
+Windows has similar scale factor issues, plus additional quirks like invisible window borders that prevent precise placement. Linux X11 has its own quirks with window manager keyboard shortcuts not firing position events. As of 0.17.2, this plugin supports macOS, Windows, and Linux (X11 and Wayland) with workarounds for platform-specific issues (see [Platform Support](#platform-support) for details).
 
 Future directions include comprehensive multi-monitor lifecycle support.
 
@@ -80,14 +80,14 @@ Requires `use bevy_window_manager::WindowExt`:
 |----------|--------|-------|
 | macOS    | ✅ Tested | Native hardware with multiple monitors at different scales |
 | Windows  | ✅ Tested | VMware VM with multi-monitor, different scale factors |
-| Linux X11 | 🚧 In Progress | Single monitor tested; multi-monitor/scaling untested |
-| Linux Wayland | 🚧 In Progress | Size + fullscreen only (Wayland cannot query/set position) |
+| Linux X11 | ✅ Tested | Position and size restoration with keyboard snap workaround |
+| Linux Wayland | ✅ Tested | Size + fullscreen only (Wayland cannot query/set position) |
 
-This plugin was originally created to handle a MacBook Pro with external monitors at different scale factors, which caused window position/size corruption. Windows multi-monitor setups with monitors at different scale factors are now supported as of 0.17.1 (see [CHANGELOG](CHANGELOG.md)).
+This plugin was originally created to handle a MacBook Pro with external monitors at different scale factors, which caused window position/size corruption. Windows support was added in 0.17.1, and Linux support (X11 and Wayland) was added in 0.17.2 (see [CHANGELOG](CHANGELOG.md)).
 
 **Note on Windows testing**: Windows support has been tested in a VMware virtual machine with multiple monitors at different scale factors. Native Windows installations may behave differently - if you encounter issues, please open an issue with details about your monitor configuration.
 
-**Note on Linux support**: Linux support has begun with single-monitor testing on KDE Plasma (Asahi Linux). Multi-monitor setups with different scale factors are not yet tested. Wayland has an inherent limitation: clients cannot query or set window position, so only size and fullscreen state can be restored. If you encounter issues, please open an issue with details about your distribution, desktop environment, and monitor configuration.
+**Note on Linux support**: Linux support has been tested on KDE Plasma (Asahi Linux on Fedora). X11 includes a workaround for keyboard snap shortcuts (Meta+Arrow) that don't fire position events ([winit #4443](https://github.com/rust-windowing/winit/issues/4443)). Wayland has an inherent limitation: clients cannot query or set window position, so only size and fullscreen state can be restored. If you encounter issues, please open an issue with details about your distribution, desktop environment, and monitor configuration.
 
 ## Feature Flags (Platform Workarounds)
 
