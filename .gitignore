@@ -1,3 +1,4 @@
 /target
 Cargo.lock
 nul
+.claude/settings.local.json
