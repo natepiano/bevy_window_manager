@@ -1,0 +1,16 @@
+(
+    // Exclusive fullscreen targeting Monitor 0
+    // Tests W3 workaround (DX12/DXGI crash on startup)
+    position: Some((0, 0)),
+    width: ${MONITOR_0_VIDEO_MODE_WIDTH},
+    height: ${MONITOR_0_VIDEO_MODE_HEIGHT},
+    monitor_index: 0,
+    mode: Fullscreen(
+        video_mode: Some((
+            physical_size: (${MONITOR_0_VIDEO_MODE_WIDTH}, ${MONITOR_0_VIDEO_MODE_HEIGHT}),
+            bit_depth: ${MONITOR_0_VIDEO_MODE_DEPTH},
+            refresh_rate_millihertz: ${MONITOR_0_VIDEO_MODE_REFRESH},
+        )),
+    ),
+    app_name: "restore_window",
+)

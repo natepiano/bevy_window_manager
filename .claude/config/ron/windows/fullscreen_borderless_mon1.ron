@@ -1,0 +1,9 @@
+(
+    // BorderlessFullscreen targeting Monitor 1
+    position: Some((${MONITOR_1_POS_X}, ${MONITOR_1_POS_Y})),
+    width: ${MONITOR_1_WIDTH},
+    height: ${MONITOR_1_HEIGHT},
+    monitor_index: 1,
+    mode: BorderlessFullscreen,
+    app_name: "restore_window",
+)

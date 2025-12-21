@@ -1,0 +1,8 @@
+(
+    position: Some((${MONITOR_1_POS_X}, ${MONITOR_1_POS_Y})),
+    width: 1400,
+    height: 1000,
+    monitor_index: 1,
+    mode: Windowed,
+    app_name: "restore_window",
+)

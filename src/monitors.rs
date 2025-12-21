@@ -48,6 +48,7 @@ pub struct Monitors {
 /// }
 /// ```
 #[derive(Component, Clone, Copy, Debug, Reflect)]
+#[reflect(Component)]
 pub struct CurrentMonitor(pub MonitorInfo);
 
 impl std::ops::Deref for CurrentMonitor {

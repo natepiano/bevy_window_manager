@@ -1,0 +1,11 @@
+(
+    // DPI drag stability test (W2 workaround)
+    // Window starts on Monitor 1 (low-DPI), user drags to Monitor 0 (high-DPI)
+    // Tests that window moves smoothly without bouncing or incorrect resize
+    position: Some((${MONITOR_1_POS_X}, ${MONITOR_1_POS_Y})),
+    width: 1200,
+    height: 800,
+    monitor_index: 1,
+    mode: Windowed,
+    app_name: "restore_window",
+)

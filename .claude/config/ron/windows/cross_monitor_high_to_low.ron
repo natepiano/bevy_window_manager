@@ -1,0 +1,10 @@
+(
+    // Saved on Monitor 1 (low-DPI), launched from Monitor 0 (high-DPI)
+    // Tests CompensateSizeOnly strategy
+    position: Some((${MONITOR_1_POS_X}, ${MONITOR_1_POS_Y})),
+    width: 1200,
+    height: 900,
+    monitor_index: 1,
+    mode: Windowed,
+    app_name: "restore_window",
+)

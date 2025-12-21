@@ -25,6 +25,7 @@ use bevy::window::VideoMode;
 use bevy::window::VideoModeSelection;
 use bevy::window::WindowMode;
 use bevy::window::WindowPosition;
+use bevy::window::WindowScaleFactorChanged;
 use bevy::winit::WINIT_WINDOWS;
 use bevy_brp_extras::BrpExtrasPlugin;
 use bevy_window_manager::CurrentMonitor;
@@ -52,6 +53,7 @@ fn main() {
                 handle_input,
                 debug_winit_monitor,
                 debug_window_changed,
+                debug_scale_factor_changed,
             ),
         )
         .run();
@@ -510,4 +512,14 @@ fn debug_window_changed(
     cached.height = w.physical_height();
     cached.mode = Some(w.mode);
     cached.focused = w.focused;
+}
+
+/// Debug system that logs when WindowScaleFactorChanged messages are received.
+fn debug_scale_factor_changed(mut messages: MessageReader<WindowScaleFactorChanged>) {
+    for msg in messages.read() {
+        info!(
+            "[debug_scale_factor_changed] WindowScaleFactorChanged received: scale_factor={}",
+            msg.scale_factor
+        );
+    }
 }

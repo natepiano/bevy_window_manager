@@ -7,7 +7,7 @@ Run automated integration tests for bevy_window_manager using BRP.
 **Examples**:
 - `/test macos` - Run macOS tests on ALL monitors (auto-moves Zed)
 - `/test linux` - Run Linux tests on ALL monitors (auto-moves terminal)
-- `/test windows 1` - Run Windows tests on monitor 1
+- `/test windows` - Run Windows tests on ALL monitors (auto-moves Zed)
 
 **Arguments**: $ARGUMENTS
 
@@ -15,6 +15,11 @@ Run automated integration tests for bevy_window_manager using BRP.
 - Tests run on all monitors automatically - no monitor argument needed
 - Zed window is auto-moved between monitors using AppleScript
 - Scripts query NSScreen directly for monitor geometry (no temp file dependency)
+
+**Windows Requirements**:
+- Tests run on all monitors automatically - no monitor argument needed
+- Zed window is auto-moved between monitors using PowerShell Win32 APIs
+- Scripts use EnumDisplayMonitors and SetWindowPos for monitor/window manipulation
 
 **Linux Requirements**:
 - Must run from XWayland Konsole (launched via `.claude/scripts/linux_test.sh`)
@@ -42,14 +47,11 @@ Do NOT continue running more tests after a failure. Stop, explain what happened,
 </ExecutionSteps>
 
 <ParseArguments>
-Parse $ARGUMENTS → extract platform and monitor_index.
+Parse $ARGUMENTS → extract platform.
 
 Valid platforms: macos, windows, linux
 
-- **macOS/Linux**: No monitor_index needed (runs all monitors automatically)
-- **Windows**: Requires monitor_index argument
-
-Store as ${PLATFORM} and ${MONITOR_INDEX} (macOS/Linux: ${MONITOR_INDEX} = "all").
+Store as ${PLATFORM}. ${MONITOR_INDEX} = "all" for all platforms.
 </ParseArguments>
 
 <LinuxEnvironmentCheck>
@@ -68,7 +70,9 @@ Store as ${PLATFORM} and ${MONITOR_INDEX} (macOS/Linux: ${MONITOR_INDEX} = "all"
 
 <LoadTestConfig>
 **Windows**:
-Load `.claude/config/${PLATFORM}_monitor${MONITOR_INDEX}.json`
+Load single unified config: `.claude/config/windows.json`
+- Tests are ordered by launch_monitor (Monitor 0 first, then Monitor 1, then human tests)
+- Each test has a `launch_monitor` field specifying which monitor Zed must be on
 
 **macOS**:
 Load single unified config: `.claude/config/macos.json`
@@ -81,8 +85,6 @@ Load single unified config: `.claude/config/linux.json`
 - Each test has a `launch_monitor` field specifying which monitor the terminal must be on
 
 Extract: platform, example_ron_path, test_ron_dir, tests array.
-
-Open the RON file in Zed/editor for inspection: `zed ${example_ron_path}`
 </LoadTestConfig>
 
 <DiscoverMonitors>
@@ -109,15 +111,16 @@ Open the RON file in Zed/editor for inspection: `zed ${example_ron_path}`
 4. Detect editor/terminal monitor:
    - **macOS**: Run `.claude/scripts/detect_zed_monitor.sh`
      - Outputs "0" or "1" for the monitor index
+   - **Windows**: Run `powershell -File .claude/scripts/windows_detect_zed_monitor.ps1`
+     - Outputs "0" or "1" for the monitor index
+     - Uses Win32 APIs (EnumDisplayMonitors, GetWindowRect) for detection
    - **Linux**: Run `.claude/scripts/detect_konsole_monitor.sh`
      - Outputs "0" or "1" for the monitor index
      - If error: STOP with the error message (likely "Must run from XWayland Konsole")
-   - **Windows**: `powershell` to get terminal window position and compare to monitors
 
 5. Shutdown with `mcp__brp__brp_shutdown`
 
-6. No verification needed for macOS/Linux (we auto-move to each monitor).
-   - **Windows**: If ${DETECTED_MONITOR} != ${MONITOR_INDEX}: STOP with error
+6. No verification needed for any platform (we auto-move to each monitor).
 
 Compute: ${NUM_MONITORS}, ${DIFFERENT_SCALES}
 </DiscoverMonitors>
@@ -146,6 +149,19 @@ The script:
 - Verifies position with detect script after move
 </LinuxTerminalMove>
 
+<WindowsZedMove>
+**Windows only**: Move Zed to target monitor before running that monitor's tests.
+
+Run: `powershell -File .claude/scripts/windows_move_zed_to_monitor.ps1 <monitor_index>`
+
+The script:
+- Uses Win32 APIs (EnumDisplayMonitors, SetWindowPos) for monitor/window manipulation
+- Positions Zed in left half of target monitor
+- Accounts for taskbar via work area calculation
+- Sizes window to half width and most of monitor height
+- Verifies position with detect script after move
+</WindowsZedMove>
+
 <TemplateVariables>
 Monitor properties (X = monitor index):
 - `${MONITOR_X_POS_X}` → Monitor X position X coordinate
@@ -169,7 +185,22 @@ Linux X11-specific values (differ from Wayland):
 </TemplateVariables>
 
 <RunTests>
-**Windows**: Run tests for single monitor config.
+**Windows**: Run tests grouped by launch_monitor, with Zed moves only when monitor changes:
+
+**Phase 1: Monitor 0 Tests**
+1. Move Zed to Monitor 0 using <WindowsZedMove/>
+2. Run all tests with `launch_monitor: 0` (tests 1-4)
+
+**Phase 2: Monitor 1 Tests**
+3. Move Zed to Monitor 1 using <WindowsZedMove/>
+4. Run all tests with `launch_monitor: 1` (tests 5-8)
+
+**Phase 3: Human-Assisted Tests**
+5. Run human-assisted tests (test 9 - W2 drag) - these run last
+
+**Total Zed moves: 2** (tests are ordered by launch_monitor)
+
+---
 
 **macOS**: Run tests grouped by launch_monitor, with Zed moves only when monitor changes:
 
@@ -308,19 +339,35 @@ For `backend: "wayland"`:
   - Other non-zero = FAIL with details
 
 **Otherwise** (normal window validation):
+
+Run exactly these queries based on `validate` array contents:
+
+### For `"position"` and/or `"size"` and/or `"mode"` validation:
+
 Query Window: `mcp__brp__world_query`
 - data: `{"components": ["bevy_window::window::Window"]}`
 - filter: `{"with": ["bevy_window::window::PrimaryWindow"]}`
 
-Check fields in `validate` array:
-- `"position"`: window.position matches {"At": [POS_X, POS_Y]}
+Fields to check:
+- `"position"`: `window.position` matches `{"At": [POS_X, POS_Y]}`
   - **Note**: On Wayland (`backend: "wayland"`), position is always `Automatic` - skip position validation
-- `"size"`: window.resolution.physical_width/height match expected
-- `"monitor_index"`: scale_factor matches target monitor's scale
-  - **Linux X11**: Use `${MONITOR_X_X11_SCALE}` instead of `${MONITOR_X_SCALE}`
-- `"mode"`: window.mode matches expected
-  - **If test has `expected_mode`**: verify window.mode matches `expected_mode` instead of RON file
+- `"size"`: `window.resolution.physical_width` and `window.resolution.physical_height` match expected
+- `"mode"`: `window.mode` matches expected
+  - **If test has `expected_mode`**: verify `window.mode` matches `expected_mode` instead of RON file
     (used when actual mode differs from requested, e.g., exclusive→borderless fallback)
+
+### For `"monitor_index"` validation:
+
+Query CurrentMonitor: `mcp__brp__world_query`
+- data: `{"components": ["bevy_window_manager::monitors::CurrentMonitor"]}`
+- filter: `{"with": ["bevy_window::window::PrimaryWindow"]}`
+
+Fields to check:
+- `current_monitor.monitor_index` matches expected target monitor index
+
+**IMPORTANT**: Do NOT use `Window.resolution.scale_factor` for monitor validation.
+On Windows, `scale_factor` does not update when windows are programmatically moved between monitors.
+Always use `CurrentMonitor.monitor_index` as the source of truth.
 
 **If test has `expected_log_warning`**:
 - Check captured log output contains the expected warning string
@@ -398,7 +445,10 @@ The test runs TWICE - once without workaround, once with.
 - FAIL: Workaround did not fix the bug
 
 <HumanTestFlow>
-1. **Move editor to launch_monitor**: Use <MacOSZedMove/> or <LinuxTerminalMove/> to move to `test.launch_monitor`
+1. **Move editor to launch_monitor**: Use platform-appropriate move command:
+   - macOS: <MacOSZedMove/>
+   - Windows: <WindowsZedMove/>
+   - Linux: <LinuxTerminalMove/>
 2. Write RON from `${test_ron_dir}/${test.ron_file}` to `${example_ron_path}`
 3. **If has `workaround_validation`**: run Phase 1 first (build_without flags), then Phase 2 (default features)
 4. Launch app using Bash with `run_in_background: true`
@@ -413,11 +463,11 @@ The test runs TWICE - once without workaround, once with.
 
 <FormatResults>
 ```
-## Test Results: ${PLATFORM} monitor ${MONITOR_INDEX}
+## Test Results: ${PLATFORM}
 
-| Test | Status | Details |
-|------|--------|---------|
-| ${test.id} | ${STATUS} | ${DETAILS} |
+| Test | Monitor | Status | Details |
+|------|---------|--------|---------|
+| ${test.id} | ${test.launch_monitor} | ${STATUS} | ${DETAILS} |
 
 **Summary**: ${PASSED} passed, ${FAILED} failed, ${SKIPPED} skipped
 ```

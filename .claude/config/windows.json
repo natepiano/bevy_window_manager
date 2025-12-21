@@ -1,0 +1,164 @@
+{
+  "platform": "windows",
+  "example_ron_path": "%APPDATA%\\restore_window\\windows.ron",
+  "test_ron_dir": ".claude/config/ron/windows",
+
+  "tests": [
+    {
+      "id": "same_monitor_restore_mon0",
+      "description": "Basic position/size persistence on Monitor 0",
+      "automation": "full",
+      "launch_monitor": 0,
+
+      "ron_file": "same_monitor_restore_mon0.ron",
+
+      "mutation": {
+        "target_monitor": "launch",
+        "position_offset": [400, 300],
+        "size": [1000, 700]
+      },
+
+      "validate": ["position", "size", "monitor_index", "mode"]
+    },
+
+    {
+      "id": "cross_high_to_low",
+      "description": "Window on low-DPI monitor restores correctly when launched from high-DPI monitor",
+      "automation": "full",
+      "launch_monitor": 0,
+      "requires": {"min_monitors": 2, "different_scales": true},
+
+      "ron_file": "cross_monitor_high_to_low.ron",
+
+      "validate": ["position", "size", "monitor_index", "mode"]
+    },
+
+    {
+      "id": "borderless_mon0",
+      "description": "Borderless fullscreen restore on Monitor 0",
+      "automation": "full",
+      "launch_monitor": 0,
+
+      "ron_file": "fullscreen_borderless_mon0.ron",
+
+      "validate": ["monitor_index", "mode"]
+    },
+
+    {
+      "id": "exclusive_mon0_W3",
+      "description": "Exclusive fullscreen with DX12 crash workaround on Monitor 0",
+      "automation": "full",
+      "launch_monitor": 0,
+      "workaround_keys": ["W3"],
+
+      "workaround_validation": {
+        "feature_flag": "workaround-winit-3124",
+        "build_without": "--no-default-features --features workaround-winit-4341",
+        "build_with": "",
+        "without_behavior": "App crashes on startup (DXGI flip model issue with exclusive fullscreen)",
+        "with_behavior": "App starts correctly with brief windowed flash before entering fullscreen"
+      },
+
+      "ron_file": "fullscreen_exclusive_mon0.ron",
+
+      "validate": ["exit_code"]
+    },
+
+    {
+      "id": "same_monitor_restore_mon1",
+      "description": "Basic position/size persistence on Monitor 1",
+      "automation": "full",
+      "launch_monitor": 1,
+
+      "ron_file": "same_monitor_restore_mon1.ron",
+
+      "mutation": {
+        "target_monitor": "launch",
+        "position_offset": [300, 200],
+        "size": [1100, 600]
+      },
+
+      "validate": ["position", "size", "monitor_index", "mode"]
+    },
+
+    {
+      "id": "cross_low_to_high",
+      "description": "Window on high-DPI monitor restores correctly when launched from low-DPI monitor",
+      "automation": "full",
+      "launch_monitor": 1,
+      "requires": {"min_monitors": 2, "different_scales": true},
+
+      "ron_file": "cross_monitor_low_to_high.ron",
+
+      "validate": ["position", "size", "monitor_index", "mode"]
+    },
+
+    {
+      "id": "borderless_mon1",
+      "description": "Borderless fullscreen restore on Monitor 1",
+      "automation": "full",
+      "launch_monitor": 1,
+
+      "ron_file": "fullscreen_borderless_mon1.ron",
+
+      "validate": ["monitor_index", "mode"]
+    },
+
+    {
+      "id": "exclusive_mon1_W3",
+      "description": "Exclusive fullscreen with DX12 crash workaround on Monitor 1",
+      "automation": "full",
+      "launch_monitor": 1,
+      "workaround_keys": ["W3"],
+
+      "workaround_validation": {
+        "feature_flag": "workaround-winit-3124",
+        "build_without": "--no-default-features --features workaround-winit-4341",
+        "build_with": "",
+        "without_behavior": "App crashes on startup (DXGI flip model issue with exclusive fullscreen)",
+        "with_behavior": "App starts correctly with brief windowed flash before entering fullscreen"
+      },
+
+      "ron_file": "fullscreen_exclusive_mon1.ron",
+
+      "validate": ["exit_code"]
+    },
+
+    {
+      "id": "dpi_drag_W2",
+      "description": "DPI drag stability - window should move smoothly between monitors with different scales",
+      "automation": "human_assisted",
+      "launch_monitor": 0,
+      "requires": {"min_monitors": 2, "different_scales": true},
+      "workaround_keys": ["W2"],
+
+      "workaround_validation": {
+        "feature_flag": "workaround-winit-4341",
+        "build_without": "--no-default-features --features workaround-winit-3124",
+        "build_with": "",
+        "without_behavior": "Window bounces or resizes incorrectly when dragged between monitors",
+        "with_behavior": "Window moves smoothly and resizes correctly when dragged between monitors"
+      },
+
+      "ron_file": "dpi_drag_stability.ron",
+
+      "instructions_without_workaround": [
+        "## PHASE 1: Testing WITHOUT workaround (expect bug)",
+        "1. App built WITHOUT workaround-winit-4341",
+        "2. Window should appear on Monitor 1 (low-DPI)",
+        "3. Slowly drag the window to Monitor 0 (high-DPI)",
+        "4. **EXPECTED BUG**: Window bounces back or resizes incorrectly"
+      ],
+      "instructions_with_workaround": [
+        "## PHASE 2: Testing WITH workaround (expect fix)",
+        "1. App rebuilt WITH workaround-winit-4341",
+        "2. Window should appear on Monitor 1 (low-DPI)",
+        "3. Slowly drag the window to Monitor 0 (high-DPI)",
+        "4. **EXPECTED**: Window moves smoothly and scales correctly"
+      ],
+
+      "success_criteria_without": "Bug confirmed: Window bounces or resizes incorrectly during drag",
+      "success_criteria_with": "Fix confirmed: Window drags smoothly between monitors"
+    }
+  ]
+}
