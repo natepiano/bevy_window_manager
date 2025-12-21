@@ -90,7 +90,15 @@
       "Bash(git -C /home/natemccoy/rust/bevy_window_manager diff)",
       "Bash(kscreen-doctor:*)",
       "Bash(WAYLAND_DISPLAY= xdpyinfo:*)",
-      "Bash(systemctl status:*)"
+      "Bash(systemctl status:*)",
+      "Bash(/Users/natemccoy/rust/bevy_window_manager/.claude/scripts/detect_zed_monitor.sh:*)",
+      "Bash(/Users/natemccoy/rust/bevy_window_manager/.claude/scripts/move_zed_to_monitor.sh:*)",
+      "Bash(paste:*)",
+      "Bash(cliclick:*)",
+      "Bash(BRP_EXTRAS_PORT=15703 cargo run:*)",
+      "Bash(git -C /Users/natemccoy/rust/bevy_window_manager status)",
+      "Bash(git -C /Users/natemccoy/rust/bevy_window_manager diff --stat)",
+      "Bash(git -C /Users/natemccoy/rust/bevy_window_manager diff)"
     ],
     "deny": [],
     "ask": []

@@ -5,11 +5,16 @@ Run automated integration tests for bevy_window_manager using BRP.
 **Usage**: `/test <platform> [monitor]`
 
 **Examples**:
-- `/test macos 0` - Run macOS tests on monitor 0
-- `/test windows 1` - Run Windows tests on monitor 1
+- `/test macos` - Run macOS tests on ALL monitors (auto-moves Zed)
 - `/test linux` - Run Linux tests on ALL monitors (auto-moves terminal)
+- `/test windows 1` - Run Windows tests on monitor 1
 
 **Arguments**: $ARGUMENTS
+
+**macOS Requirements**:
+- Tests run on all monitors automatically - no monitor argument needed
+- Zed window is auto-moved between monitors using AppleScript
+- Scripts query NSScreen directly for monitor geometry (no temp file dependency)
 
 **Linux Requirements**:
 - Must run from XWayland Konsole (launched via `.claude/scripts/linux_test.sh`)
@@ -41,10 +46,10 @@ Parse $ARGUMENTS → extract platform and monitor_index.
 
 Valid platforms: macos, windows, linux
 
-- **macOS/Windows**: Require monitor_index argument
-- **Linux**: No monitor_index needed (runs all monitors automatically)
+- **macOS/Linux**: No monitor_index needed (runs all monitors automatically)
+- **Windows**: Requires monitor_index argument
 
-Store as ${PLATFORM} and ${MONITOR_INDEX} (Linux: ${MONITOR_INDEX} = "all").
+Store as ${PLATFORM} and ${MONITOR_INDEX} (macOS/Linux: ${MONITOR_INDEX} = "all").
 </ParseArguments>
 
 <LinuxEnvironmentCheck>
@@ -62,8 +67,13 @@ Store as ${PLATFORM} and ${MONITOR_INDEX} (Linux: ${MONITOR_INDEX} = "all").
 </LinuxEnvironmentCheck>
 
 <LoadTestConfig>
-**macOS/Windows**:
+**Windows**:
 Load `.claude/config/${PLATFORM}_monitor${MONITOR_INDEX}.json`
+
+**macOS**:
+Load single unified config: `.claude/config/macos.json`
+- Tests are ordered by launch_monitor (Monitor 0 first, then Monitor 1, then human tests)
+- Each test has a `launch_monitor` field specifying which monitor Zed must be on
 
 **Linux**:
 Load single unified config: `.claude/config/linux.json`
@@ -96,21 +106,33 @@ Open the RON file in Zed/editor for inspection: `zed ${example_ron_path}`
      - Query Monitor component again → store X11-specific video modes as `${MONITOR_X_X11_VIDEO_MODE_*}` variables
    - Shutdown the X11 app
 
-4. Detect and verify terminal monitor:
-   - **macOS**: `osascript -e 'tell application "System Events" to get position of first window of process "Zed"'`
-     - Find which monitor contains this position → ${DETECTED_MONITOR}
+4. Detect editor/terminal monitor:
+   - **macOS**: Run `.claude/scripts/detect_zed_monitor.sh`
+     - Outputs "0" or "1" for the monitor index
    - **Linux**: Run `.claude/scripts/detect_konsole_monitor.sh`
      - Outputs "0" or "1" for the monitor index
      - If error: STOP with the error message (likely "Must run from XWayland Konsole")
+   - **Windows**: `powershell` to get terminal window position and compare to monitors
 
 5. Shutdown with `mcp__brp__brp_shutdown`
 
-6. Verify terminal is on correct monitor:
-   - **macOS/Windows**: If ${DETECTED_MONITOR} != ${MONITOR_INDEX}: STOP with error
-   - **Linux**: No verification needed (we auto-move to each monitor)
+6. No verification needed for macOS/Linux (we auto-move to each monitor).
+   - **Windows**: If ${DETECTED_MONITOR} != ${MONITOR_INDEX}: STOP with error
 
 Compute: ${NUM_MONITORS}, ${DIFFERENT_SCALES}
 </DiscoverMonitors>
+
+<MacOSZedMove>
+**macOS only**: Move Zed to target monitor before running that monitor's tests.
+
+Run: `.claude/scripts/move_zed_to_monitor.sh <monitor_index>`
+
+The script:
+- Positions Zed in left half of target monitor
+- Accounts for menu bar
+- Sizes window to half width and most of monitor height
+- Verifies position with detect script after move
+</MacOSZedMove>
 
 <LinuxTerminalMove>
 **Linux only**: Move Konsole to target monitor before running that monitor's tests.
@@ -147,7 +169,19 @@ Linux X11-specific values (differ from Wayland):
 </TemplateVariables>
 
 <RunTests>
-**macOS/Windows**: Run tests for single monitor config.
+**Windows**: Run tests for single monitor config.
+
+**macOS**: Run tests grouped by launch_monitor, with Zed moves only when monitor changes:
+
+**Phase 1: Monitor 0 Tests**
+1. Move Zed to Monitor 0 using <MacOSZedMove/>
+2. Run all tests with `launch_monitor: 0` (tests 1-6)
+
+**Phase 2: Monitor 1 Tests**
+3. Move Zed to Monitor 1 using <MacOSZedMove/>
+4. Run all tests with `launch_monitor: 1` (tests 7-8)
+
+**Total Zed moves: 2** (tests are ordered by launch_monitor)
 
 **Linux**: Run tests grouped by backend, with terminal moves only when monitor changes:
 
@@ -190,7 +224,8 @@ Unified test sequence that adapts based on JSON fields.
 ## Step 1: Determine Test Type
 
 Check which fields exist:
-- Is `automation: "human_only"`? → Execute <HumanTestFlow/> instead of Steps 2-10
+- Is `automation: "human_only"` or `"human_assisted"`? → Execute <HumanTestFlow/> instead of Steps 2-10
+- Has `click_fullscreen_button`? → This is a green button test (macOS only)
 - Has `workaround_validation`? → This is a workaround test (run twice)
 - Has `ron_file` + `mutation`? → This is a mutation test
 - Has `ron_file` only? → This is a simple restore test
@@ -243,6 +278,24 @@ For `backend: "wayland"`:
 
 **Otherwise** (no workaround_validation, no expected_log_warning):
 - Use `mcp__brp__brp_launch_bevy_example` with target_name "restore_window"
+
+## Step 3.5: Click Fullscreen Button (if `click_fullscreen_button: true`)
+
+**macOS only**: This step triggers macOS native fullscreen via the green button.
+
+1. Click the fullscreen button via AppleScript:
+   ```
+   osascript -e 'tell application "System Events" to tell process "restore_window" to click button 2 of window 1'
+   ```
+   (Button 2 is the AXFullScreenButton - the green maximize/fullscreen button)
+
+2. Wait 2 seconds for macOS fullscreen animation to complete
+
+3. Shutdown the app with `mcp__brp__brp_shutdown`
+
+4. Relaunch with `mcp__brp__brp_launch_bevy_example`
+
+5. Proceed to Step 4 to validate that fullscreen mode was restored
 
 ## Step 4: Validate Restore
 
@@ -345,15 +398,16 @@ The test runs TWICE - once without workaround, once with.
 - FAIL: Workaround did not fix the bug
 
 <HumanTestFlow>
-1. Write RON from `${test_ron_dir}/${test.ron_file}` to `${example_ron_path}`
-2. **If has `workaround_validation`**: run Phase 1 first (build_without flags), then Phase 2 (default features)
-3. Launch app using Bash with `run_in_background: true`
-4. Display instructions to user:
+1. **Move editor to launch_monitor**: Use <MacOSZedMove/> or <LinuxTerminalMove/> to move to `test.launch_monitor`
+2. Write RON from `${test_ron_dir}/${test.ron_file}` to `${example_ron_path}`
+3. **If has `workaround_validation`**: run Phase 1 first (build_without flags), then Phase 2 (default features)
+4. Launch app using Bash with `run_in_background: true`
+5. Display instructions to user:
    - For workaround tests: use `instructions_without_workaround` (Phase 1) or `instructions_with_workaround` (Phase 2)
    - For regular tests: use `instructions` array
-5. Use AskUserQuestion: "Did the test pass?" with options based on `success_criteria`
-6. Shutdown app, record result
-7. For workaround tests: repeat steps 3-6 for Phase 2
+6. Use AskUserQuestion: "Did the test pass?" with options based on `success_criteria`
+7. Shutdown app, record result
+8. For workaround tests: repeat steps 4-7 for Phase 2
 </HumanTestFlow>
 </TestSequence>
 
