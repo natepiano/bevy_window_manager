@@ -107,7 +107,6 @@ This design allows:
 | `workaround-winit-4443` | Linux X11 | [winit #4443](https://github.com/rust-windowing/winit/issues/4443) | Keyboard snap position fix |
 | `workaround-macos-scale-compensation` | macOS | [winit #4440](https://github.com/rust-windowing/winit/issues/4440) | Multi-monitor scale factor compensation |
 | `workaround-macos-drag-back-reset` | macOS | [winit #4441](https://github.com/rust-windowing/winit/issues/4441) | Window size reset on drag-back fix |
-| `workaround-bevy-22060` | macOS | [bevy #22060](https://github.com/bevyengine/bevy/issues/22060) | Fullscreen quit panic fix |
 
 ### Disabling Workarounds
 
@@ -118,7 +117,7 @@ To test without a specific workaround (e.g., to verify an upstream fix):
 cargo run --example restore_window --no-default-features
 
 # Disable only the macOS drag-back workaround
-cargo run --example restore_window --no-default-features --features workaround-winit-4341,workaround-winit-3124,workaround-macos-scale-compensation,workaround-bevy-22060
+cargo run --example restore_window --no-default-features --features workaround-winit-4341,workaround-winit-3124,workaround-macos-scale-compensation
 ```
 
 In your `Cargo.toml`, you can selectively enable features:

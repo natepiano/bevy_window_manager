@@ -1,8 +1,8 @@
 [package]
 name = "bevy_window_manager"
-version = "0.17.2"
+version = "0.18.0-rc.1"
 edition = "2024"
-description = "Bevy plugin for window state management, multi-monitor support, and position restoration"
+description = "Bevy plugin for primary window restoration and multi-monitor support"
 repository = "https://github.com/natepiano/bevy_window_manager"
 license = "MIT OR Apache-2.0"
 keywords = ["bevy", "gamedev", "monitor", "multi-monitor", "window"]
@@ -13,13 +13,13 @@ name = "bevy_window_manager"
 path = "src/lib.rs"
 
 [dependencies]
-bevy = "0.17.3"
+bevy = "0.18.0-rc.1"
 dirs = "6.0"
 ron = "0.12"
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
-bevy_brp_extras = "0.17.2"
+bevy_brp_extras = "0.18.0-rc.1"
 
 [target.'cfg(windows)'.dependencies]
 raw-window-handle = "0.6"
@@ -36,7 +36,6 @@ x11rb = { version = "0.13", default-features = false, features = ["dl-libxcb"] }
 
 [features]
 default = [
-  "workaround-bevy-22060",
   "workaround-macos-drag-back-reset",
   "workaround-macos-scale-compensation",
   "workaround-winit-3124",
@@ -44,17 +43,6 @@ default = [
   "workaround-winit-4443",
   "workaround-winit-4445",
 ]
-# macOS TLS panic on quit from exclusive fullscreen workaround
-# Issue: https://github.com/bevyengine/bevy/issues/22060
-# Fix: https://github.com/bevyengine/bevy/pull/22060
-#
-# When exiting while in exclusive fullscreen, winit's Window::drop calls
-# set_fullscreen(None), triggering a macOS callback that accesses TLS after
-# destruction - causing a panic. We exit fullscreen during world.clear_all()
-# before TLS destruction.
-#
-# Remove when using Bevy 0.18+, which includes the fix.
-workaround-bevy-22060 = []
 # macOS W4 drag-back size reset workaround
 # Issue: https://github.com/rust-windowing/winit/issues/4441
 #

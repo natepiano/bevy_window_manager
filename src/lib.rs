@@ -45,8 +45,6 @@
 
 #[cfg(all(target_os = "macos", feature = "workaround-macos-drag-back-reset"))]
 mod macos_drag_back_fix;
-#[cfg(all(target_os = "macos", feature = "workaround-bevy-22060"))]
-mod macos_fullscreen_fix;
 mod monitors;
 mod state;
 mod systems;
@@ -129,9 +127,6 @@ impl Plugin for WindowManagerPluginCustomPath {
 fn build_plugin(app: &mut App, path: PathBuf) {
     #[cfg(all(target_os = "macos", feature = "workaround-macos-drag-back-reset"))]
     macos_drag_back_fix::init(app);
-
-    #[cfg(all(target_os = "macos", feature = "workaround-bevy-22060"))]
-    macos_fullscreen_fix::init(app);
 
     #[cfg(all(target_os = "windows", feature = "workaround-winit-4341"))]
     windows_dpi_fix::init(app);

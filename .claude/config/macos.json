@@ -31,7 +31,7 @@
 
       "workaround_validation": {
         "feature_flag": "workaround-macos-scale-compensation",
-        "build_without": "--no-default-features --features workaround-winit-4341,workaround-bevy-22060",
+        "build_without": "--no-default-features --features workaround-winit-4341",
         "build_with": "",
         "without_behavior": "Window restores to wrong position/size on Monitor 1 due to scale factor mismatch",
         "with_behavior": "Window restores to correct position/size on Monitor 1"
@@ -51,27 +51,6 @@
       "ron_file": "fullscreen_borderless_mon0.ron",
 
       "validate": ["monitor_index", "mode"]
-    },
-
-    {
-      "id": "exclusive_quit_B1",
-      "description": "Exclusive fullscreen with TLS panic workaround - tests that app quits cleanly from exclusive fullscreen",
-      "automation": "full",
-      "launch_monitor": 0,
-      "workaround_keys": ["B1"],
-
-      "workaround_validation": {
-        "feature_flag": "workaround-bevy-22060",
-        "build_without": "--no-default-features --features workaround-winit-4341,workaround-macos-scale-compensation,workaround-macos-drag-back-reset",
-        "build_with": "",
-        "without_behavior": "App panics on quit (exit code 134) with TLS error",
-        "with_behavior": "App quits cleanly (exit code 0)"
-      },
-
-      "ron_file": "fullscreen_exclusive_mon0.ron",
-
-      "quit_method": "osascript_cmd_q",
-      "validate": ["exit_code"]
     },
 
     {
@@ -97,7 +76,7 @@
 
       "workaround_validation": {
         "feature_flag": "workaround-macos-drag-back-reset",
-        "build_without": "--no-default-features --features workaround-winit-4341,workaround-bevy-22060,workaround-macos-scale-compensation",
+        "build_without": "--no-default-features --features workaround-winit-4341,workaround-macos-scale-compensation",
         "build_with": "",
         "without_behavior": "Window size shrinks incorrectly when dragged from Monitor 1 back to Monitor 0",
         "with_behavior": "Window size is preserved when dragged back (brief visual flash is expected)"
@@ -144,7 +123,7 @@
 
       "workaround_validation": {
         "feature_flag": "workaround-macos-scale-compensation",
-        "build_without": "--no-default-features --features workaround-winit-4341,workaround-bevy-22060",
+        "build_without": "--no-default-features --features workaround-winit-4341",
         "build_with": "",
         "without_behavior": "Window restores to wrong position/size on Monitor 0 due to scale factor mismatch",
         "with_behavior": "Window restores to correct position/size on Monitor 0"

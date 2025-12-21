@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Removed
+
+- Internal `FullscreenExitGuard` workaround for macOS exclusive fullscreen crash - now fixed upstream in Bevy 0.18 ([bevy #22060](https://github.com/bevyengine/bevy/pull/22060))
+
 ## [0.17.2] - 2025-12-20
 
 ### Added
