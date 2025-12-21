@@ -216,10 +216,7 @@ pub enum MonitorScaleStrategy {
     #[cfg(target_os = "windows")]
     CompensateSizeOnly,
     /// Low→High DPI (1x→2x) - apply with compensation (ratio < 1). macOS only.
-    #[cfg(all(
-        not(target_os = "windows"),
-        feature = "workaround-macos-scale-compensation"
-    ))]
+    #[cfg(all(not(target_os = "windows"), feature = "workaround-winit-4440"))]
     LowerToHigher,
     /// High→Low DPI (2x→1x) - requires two phases (see enum docs). macOS only.
     HigherToLower(WindowRestoreState),
@@ -270,7 +267,7 @@ impl TargetPosition {
     pub const fn size(&self) -> UVec2 { UVec2::new(self.width, self.height) }
 
     /// Scale ratio between starting and target monitors.
-    #[cfg(any(target_os = "windows", feature = "workaround-macos-scale-compensation"))]
+    #[cfg(any(target_os = "windows", feature = "workaround-winit-4440"))]
     #[must_use]
     pub fn ratio(&self) -> f64 { self.starting_scale / self.target_scale }
 
@@ -278,10 +275,7 @@ impl TargetPosition {
     ///
     /// Multiplies position by the ratio to account for winit dividing by launch scale.
     /// Returns None if position is not available (Wayland).
-    #[cfg(all(
-        not(target_os = "windows"),
-        feature = "workaround-macos-scale-compensation"
-    ))]
+    #[cfg(all(not(target_os = "windows"), feature = "workaround-winit-4440"))]
     #[must_use]
     pub fn compensated_position(&self) -> Option<IVec2> {
         let ratio = self.ratio();
@@ -296,7 +290,7 @@ impl TargetPosition {
     /// Size compensated for scale factor differences.
     ///
     /// Multiplies size by the ratio to account for winit dividing by launch scale.
-    #[cfg(any(target_os = "windows", feature = "workaround-macos-scale-compensation"))]
+    #[cfg(any(target_os = "windows", feature = "workaround-winit-4440"))]
     #[must_use]
     pub fn compensated_size(&self) -> UVec2 {
         let ratio = self.ratio();

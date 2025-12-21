@@ -36,8 +36,8 @@ x11rb = { version = "0.13", default-features = false, features = ["dl-libxcb"] }
 
 [features]
 default = [
-  "workaround-macos-drag-back-reset",
-  "workaround-macos-scale-compensation",
+  "workaround-winit-4441",
+  "workaround-winit-4440",
   "workaround-winit-3124",
   "workaround-winit-4341",
   "workaround-winit-4443",
@@ -56,8 +56,8 @@ default = [
 # to a low-scale monitor, then dragging the window back to the high-scale monitor.
 # The flash is unavoidable without an upstream fix to winit #4441.
 #
-# Requires: workaround-macos-scale-compensation (the two-phase restore creates the W4 scenario)
-workaround-macos-drag-back-reset = ["workaround-macos-scale-compensation"]
+# Requires: workaround-winit-4440 (the two-phase restore creates the W4 scenario)
+workaround-winit-4441 = ["workaround-winit-4440"]
 # macOS scale factor compensation workaround
 # Issue: https://github.com/rust-windowing/winit/issues/4440
 #
@@ -70,7 +70,7 @@ workaround-macos-drag-back-reset = ["workaround-macos-scale-compensation"]
 #
 # Test without workaround: cargo run --example restore_window --no-default-features --features workaround-winit-4341
 # Test with workaround:    cargo run --example restore_window
-workaround-macos-scale-compensation = []
+workaround-winit-4440 = []
 # Windows DX12/DXGI exclusive fullscreen crash workaround
 # Issue: https://github.com/rust-windowing/winit/issues/3124
 #
@@ -81,7 +81,7 @@ workaround-macos-scale-compensation = []
 # winit. There's no Bevy issue for this yet - Bevy is the right place to fix it
 # since it orchestrates both window creation (winit) and surface creation (wgpu).
 #
-# Test without workaround: cargo run --example restore_window --no-default-features --features workaround-winit-4341,workaround-macos-scale-compensation
+# Test without workaround: cargo run --example restore_window --no-default-features --features workaround-winit-4341,workaround-winit-4440
 # Test with workaround:    cargo run --example restore_window
 workaround-winit-3124 = []
 # Windows DPI drag bounce workaround - remove when winit includes PR #4341

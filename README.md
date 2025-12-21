@@ -9,11 +9,13 @@ A Bevy plugin for window state persistence and multi-monitor utilities.
 
 ## Motivation
 
-Originally created as a mechanism to restore a window to its last known position when launching. I quickly discovered that on my MacBook Pro with Retina display (scale factor 2.0) and my external monitor with a scale factor 1.0, there were numerous issues with saving. Especially painful is the situation that winit uses the scale factor of where you're typing (launching) the application so that when it lands on a different monitor, you cannot reliably restore the window to its last known position when launching from a monitor with a different scale factor than the application window's target monitor.
+Originally created as a mechanism to restore the PrimaryWindow to its last known position when launching - the way you expect an app to work. I quickly discovered that on my MacBook Pro with Retina display (scale factor 2.0) and my external monitor (scale factor 1.0), there were numerous issues with saving/restoring positions across differently-scaled monitors. 
 
-`bevy_window_manager` plugin works around these issues by using winit directly to capture actual window positions and compensate for scale factor conversions. See the documentation in [`src/lib.rs`](src/lib.rs) for technical details.
+The first discovered issue is that winit uses the scale factor of the focused window from which you launch the application. And if the target monitor for the app has a different scale factor, then that will get factored into the size and position calculations resulting in something you definitely don't want.
 
-Windows has similar scale factor issues, plus additional quirks like invisible window borders that prevent precise placement. Linux X11 has its own quirks with window manager keyboard shortcuts not firing position events. As of 0.17.2, this plugin supports macOS, Windows, and Linux (X11 and Wayland) with workarounds for platform-specific issues (see [Platform Support](#platform-support) for details).
+`bevy_window_manager` plugin works around this issue by using winit directly to capture actual monitor position/size/scale and comparing it to the target position/size for the window and does the conversions correctly.
+
+Windows has similar scale factor issues, plus additional quirks like invisible window borders that prevent precise placement. Linux X11 has its own quirks with window manager keyboard shortcuts not firing position events. This plugin now supports macOS, Windows, and Linux (X11 and Wayland) with workarounds for platform-specific issues (see [Platform Support](#platform-support) for details).
 
 Future directions include comprehensive multi-monitor lifecycle support.
 
@@ -47,7 +49,7 @@ Query available monitors sorted by position:
 
 - `monitors.at(x, y)` – Find the monitor containing a position
 - `monitors.by_index(index)` – Get monitor by sorted index
-- `monitors.primary()` – Get the primary monitor (index 0)
+- `monitors.first()` – Get the first monitor (index 0)
 - `monitors.closest_to(x, y)` – Find the closest monitor to a position
 
 ### `MonitorInfo`
@@ -72,6 +74,7 @@ Requires `use bevy_window_manager::WindowExt`:
 
 | bevy_window_manager | Bevy |
 |---------------------|------|
+| 0.18                | 0.18 |
 | 0.17                | 0.17 |
 
 ## Platform Support
@@ -83,7 +86,6 @@ Requires `use bevy_window_manager::WindowExt`:
 | Linux X11 | ✅ Tested | Position and size restoration with keyboard snap workaround |
 | Linux Wayland | ✅ Tested | Size + fullscreen only (Wayland cannot query/set position) |
 
-This plugin was originally created to handle a MacBook Pro with external monitors at different scale factors, which caused window position/size corruption. Windows support was added in 0.17.1, and Linux support (X11 and Wayland) was added in 0.17.2 (see [CHANGELOG](CHANGELOG.md)).
 
 **Note on Windows testing**: Windows support has been tested in a VMware virtual machine with multiple monitors at different scale factors. Native Windows installations may behave differently - if you encounter issues, please open an issue with details about your monitor configuration.
 
@@ -105,8 +107,8 @@ This design allows:
 | `workaround-winit-4341` | Windows | [winit #4041](https://github.com/rust-windowing/winit/issues/4041) | DPI drag bounce fix |
 | `workaround-winit-3124` | Windows | [winit #3124](https://github.com/rust-windowing/winit/issues/3124) | DX12/DXGI fullscreen crash fix |
 | `workaround-winit-4443` | Linux X11 | [winit #4443](https://github.com/rust-windowing/winit/issues/4443) | Keyboard snap position fix |
-| `workaround-macos-scale-compensation` | macOS | [winit #4440](https://github.com/rust-windowing/winit/issues/4440) | Multi-monitor scale factor compensation |
-| `workaround-macos-drag-back-reset` | macOS | [winit #4441](https://github.com/rust-windowing/winit/issues/4441) | Window size reset on drag-back fix |
+| `workaround-winit-4440` | macOS | [winit #4440](https://github.com/rust-windowing/winit/issues/4440) | Multi-monitor scale factor compensation |
+| `workaround-winit-4441` | macOS | [winit #4441](https://github.com/rust-windowing/winit/issues/4441) | Window size reset on drag-back fix |
 
 ### Disabling Workarounds
 
@@ -117,14 +119,14 @@ To test without a specific workaround (e.g., to verify an upstream fix):
 cargo run --example restore_window --no-default-features
 
 # Disable only the macOS drag-back workaround
-cargo run --example restore_window --no-default-features --features workaround-winit-4341,workaround-winit-3124,workaround-macos-scale-compensation
+cargo run --example restore_window --no-default-features --features workaround-winit-4341,workaround-winit-3124,workaround-winit-4440
 ```
 
 In your `Cargo.toml`, you can selectively enable features:
 
 ```toml
 [dependencies]
-bevy_window_manager = { version = "0.17", default-features = false, features = ["workaround-winit-4341"] }
+bevy_window_manager = { version = "0.18", default-features = false, features = ["workaround-winit-4341"] }
 ```
 
 ## License

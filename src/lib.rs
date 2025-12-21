@@ -43,7 +43,7 @@
 //!
 //! See `examples/custom_path.rs` for how to override the full path to the state file.
 
-#[cfg(all(target_os = "macos", feature = "workaround-macos-drag-back-reset"))]
+#[cfg(all(target_os = "macos", feature = "workaround-winit-4441"))]
 mod macos_drag_back_fix;
 mod monitors;
 mod state;
@@ -58,7 +58,7 @@ mod x11_frame_extents;
 use std::path::PathBuf;
 
 use bevy::prelude::*;
-#[cfg(all(target_os = "macos", feature = "workaround-macos-drag-back-reset"))]
+#[cfg(all(target_os = "macos", feature = "workaround-winit-4441"))]
 pub use macos_drag_back_fix::DragBackSizeProtection;
 pub use monitors::CurrentMonitor;
 pub use monitors::MonitorInfo;
@@ -125,7 +125,7 @@ impl Plugin for WindowManagerPluginCustomPath {
 /// subsequent positions saves - which we dont' want to do until AFTER we've done
 /// the initial restore.
 fn build_plugin(app: &mut App, path: PathBuf) {
-    #[cfg(all(target_os = "macos", feature = "workaround-macos-drag-back-reset"))]
+    #[cfg(all(target_os = "macos", feature = "workaround-winit-4441"))]
     macos_drag_back_fix::init(app);
 
     #[cfg(all(target_os = "windows", feature = "workaround-winit-4341"))]

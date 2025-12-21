@@ -35,13 +35,14 @@ Before starting the release, verify:
     **STEP 0:** Execute <ArgumentValidation/>
     **STEP 1:** Execute <PreReleaseChecks/>
     **STEP 2:** Execute <ChangelogVerification/>
-    **STEP 3:** Execute <BumpVersion/>
-    **STEP 4:** Execute <PublishCrate/>
-    **STEP 5:** Execute <PushToGit/>
-    **STEP 6:** Execute <CreateReleaseBranch/>
-    **STEP 7:** Execute <CreateGitHubRelease/>
-    **STEP 8:** Execute <PostReleaseVerification/>
-    **STEP 9:** Execute <PrepareNextReleaseCycle/>
+    **STEP 3:** Execute <UpdateVersionCompatibility/>
+    **STEP 4:** Execute <BumpVersion/>
+    **STEP 5:** Execute <PublishCrate/>
+    **STEP 6:** Execute <PushToGit/>
+    **STEP 7:** Execute <CreateReleaseBranch/>
+    **STEP 8:** Execute <CreateGitHubRelease/>
+    **STEP 9:** Execute <PostReleaseVerification/>
+    **STEP 10:** Execute <PrepareNextReleaseCycle/>
 </ExecutionSteps>
 
 <ArgumentValidation>
@@ -94,8 +95,27 @@ head -20 CHANGELOG.md
   - Type **stop** to add missing entry
 </ChangelogVerification>
 
+<UpdateVersionCompatibility>
+## STEP 3: Update Version Compatibility Table
+
+**Skip this step if:**
+- This is a patch release (X.Y.Z where only Z changed from the previous release)
+- The README already has a row for this major.minor version
+
+**Update README.md** if this is a new major.minor version (e.g., 0.17 → 0.18):
+
+Add a new row to the Version Compatibility table:
+```markdown
+| ${MAJOR}.${MINOR}   | ${MAJOR}.${MINOR} |
+```
+
+The table should show the latest minor version for each Bevy release.
+
+→ **Auto-check**: Continue after updating (or skipping if not needed)
+</UpdateVersionCompatibility>
+
 <BumpVersion>
-## STEP 3: Bump Version
+## STEP 4: Bump Version
 
 → **I will check and update version if needed**
 
@@ -123,7 +143,7 @@ git commit -m "chore: bump version to ${VERSION}"
 </BumpVersion>
 
 <PublishCrate>
-## STEP 4: Publish to crates.io
+## STEP 5: Publish to crates.io
 
 **Dry run first:**
 ```bash
@@ -141,7 +161,7 @@ cargo publish
 </PublishCrate>
 
 <PushToGit>
-## STEP 5: Push to Git
+## STEP 6: Push to Git
 
 **Create and push tag:**
 ```bash
@@ -153,7 +173,7 @@ git push origin "v${VERSION}"
 </PushToGit>
 
 <CreateReleaseBranch>
-## STEP 6: Create Release Branch
+## STEP 7: Create Release Branch
 
 **Skip this step if:**
 - This is an RC release (X.Y.Z-rc.N)
@@ -175,7 +195,7 @@ git push origin release-0.17.1
 </CreateReleaseBranch>
 
 <CreateGitHubRelease>
-## STEP 7: Create GitHub Release
+## STEP 8: Create GitHub Release
 
 → **I will gather CHANGELOG entry and create a release using GitHub CLI**
 
@@ -189,7 +209,7 @@ gh release create "v${VERSION}" \
 </CreateGitHubRelease>
 
 <PostReleaseVerification>
-## STEP 8: Post-Release Verification
+## STEP 9: Post-Release Verification
 
 ```bash
 curl -s "https://crates.io/api/v1/crates/bevy_window_manager" | jq '.crate.max_version'
@@ -200,7 +220,7 @@ curl -s "https://crates.io/api/v1/crates/bevy_window_manager" | jq '.crate.max_v
 </PostReleaseVerification>
 
 <PrepareNextReleaseCycle>
-## STEP 9: Prepare for Next Release Cycle
+## STEP 10: Prepare for Next Release Cycle
 
 → **I will add [Unreleased] section to CHANGELOG.md**
 

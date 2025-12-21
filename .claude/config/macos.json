@@ -30,7 +30,7 @@
       "workaround_keys": ["W1"],
 
       "workaround_validation": {
-        "feature_flag": "workaround-macos-scale-compensation",
+        "feature_flag": "workaround-winit-4440",
         "build_without": "--no-default-features --features workaround-winit-4341",
         "build_with": "",
         "without_behavior": "Window restores to wrong position/size on Monitor 1 due to scale factor mismatch",
@@ -75,8 +75,8 @@
       "workaround_keys": ["W4"],
 
       "workaround_validation": {
-        "feature_flag": "workaround-macos-drag-back-reset",
-        "build_without": "--no-default-features --features workaround-winit-4341,workaround-macos-scale-compensation",
+        "feature_flag": "workaround-winit-4441",
+        "build_without": "--no-default-features --features workaround-winit-4341,workaround-winit-4440",
         "build_with": "",
         "without_behavior": "Window size shrinks incorrectly when dragged from Monitor 1 back to Monitor 0",
         "with_behavior": "Window size is preserved when dragged back (brief visual flash is expected)"
@@ -122,7 +122,7 @@
       "workaround_keys": ["W1"],
 
       "workaround_validation": {
-        "feature_flag": "workaround-macos-scale-compensation",
+        "feature_flag": "workaround-winit-4440",
         "build_without": "--no-default-features --features workaround-winit-4341",
         "build_with": "",
         "without_behavior": "Window restores to wrong position/size on Monitor 0 due to scale factor mismatch",
