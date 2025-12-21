@@ -268,30 +268,26 @@ pub fn load_target_position(
 ///
 /// For fullscreen modes, we still move to the target monitor so the fullscreen mode
 /// is applied on the correct monitor when `try_apply_restore` runs.
-///
-/// When moving to a different monitor, the window is hidden to avoid visual artifacts
-/// during the transition. It will be shown again when `restore_primary_window` completes.
 pub fn move_to_target_monitor(
     mut window: Single<&mut Window, With<PrimaryWindow>>,
     target: Res<TargetPosition>,
-    winit_info: Res<WinitInfo>,
 ) {
+    /// Visibility state for window during move operation.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum InitialVisibility {
+        /// Window remains visible during move.
+        Visible,
+        /// Window is hidden to avoid visual flash (`HigherToLower` two-phase restore).
+        Hidden,
+    }
+
     /// Computed parameters for the initial window move to target monitor.
     #[derive(Debug)]
     struct MoveParams {
-        position: IVec2,
-        width:    u32,
-        height:   u32,
-    }
-
-    // Hide window during cross-monitor moves to avoid visual artifacts
-    let is_cross_monitor = winit_info.starting_monitor_index != target.target_monitor_index;
-    if is_cross_monitor {
-        debug!(
-            "[move_to_target_monitor] Cross-monitor move: {} -> {}, hiding window",
-            winit_info.starting_monitor_index, target.target_monitor_index
-        );
-        window.visible = false;
+        position:   IVec2,
+        width:      u32,
+        height:     u32,
+        visibility: InitialVisibility,
     }
 
     // For fullscreen modes, just move to target monitor position (no 1x1 size)
@@ -352,18 +348,25 @@ pub fn move_to_target_monitor(
                 pos, comp_x, comp_y, ratio
             );
             MoveParams {
-                position: IVec2::new(comp_x, comp_y),
+                position:   IVec2::new(comp_x, comp_y),
                 // Use actual target size to avoid macOS caching tiny size
-                width:    target.width,
-                height:   target.height,
+                width:      target.width,
+                height:     target.height,
+                // Hide to avoid visual flash during two-phase restore
+                visibility: InitialVisibility::Hidden,
             }
         },
         _ => MoveParams {
-            position: pos,
-            width:    1,
-            height:   1,
+            position:   pos,
+            width:      1,
+            height:     1,
+            visibility: InitialVisibility::Visible,
         },
     };
+
+    if params.visibility == InitialVisibility::Hidden {
+        window.visible = false;
+    }
 
     debug!(
         "[move_to_target_monitor] position={:?} size={}x{} visible={}",
@@ -712,7 +715,6 @@ fn try_apply_restore(target: &TargetPosition, primary_window: &mut Window) -> Re
     // Handle fullscreen modes - use saved monitor index from TargetPosition
     if target.mode.is_fullscreen() {
         apply_fullscreen_restore(target, primary_window, target.target_monitor_index);
-        primary_window.visible = true;
         return RestoreStatus::Complete;
     }
 
@@ -760,6 +762,7 @@ fn try_apply_restore(target: &TargetPosition, primary_window: &mut Window) -> Re
             primary_window
                 .resolution
                 .set_physical_resolution(size.x, size.y);
+            primary_window.visible = true;
         },
         MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange) => {
             debug!("[Restore] HigherToLower: waiting for ScaleChanged message");
@@ -767,7 +770,6 @@ fn try_apply_restore(target: &TargetPosition, primary_window: &mut Window) -> Re
         },
     }
 
-    primary_window.visible = true;
     RestoreStatus::Complete
 }
 
