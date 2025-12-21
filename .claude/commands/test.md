@@ -57,7 +57,7 @@ Store as ${PLATFORM}. ${MONITOR_INDEX} = "all" for all platforms.
 <LinuxEnvironmentCheck>
 **Linux only**: Check if running from XWayland Konsole.
 
-1. Run `.claude/scripts/detect_konsole_monitor.sh`
+1. Run `.claude/scripts/linux_detect_konsole_monitor.sh`
 
 2. **If SUCCESS** (returns "0" or "1"):
    - We're in XWayland Konsole → proceed to <LoadTestConfig/>
@@ -114,7 +114,7 @@ Extract: platform, example_ron_path, test_ron_dir, tests array.
    - **Windows**: Run `powershell -File .claude/scripts/windows_detect_zed_monitor.ps1`
      - Outputs "0" or "1" for the monitor index
      - Uses Win32 APIs (EnumDisplayMonitors, GetWindowRect) for detection
-   - **Linux**: Run `.claude/scripts/detect_konsole_monitor.sh`
+   - **Linux**: Run `.claude/scripts/linux_detect_konsole_monitor.sh`
      - Outputs "0" or "1" for the monitor index
      - If error: STOP with the error message (likely "Must run from XWayland Konsole")
 
@@ -140,7 +140,7 @@ The script:
 <LinuxTerminalMove>
 **Linux only**: Move Konsole to target monitor before running that monitor's tests.
 
-Run: `.claude/scripts/move_konsole_to_monitor.sh <monitor_index>`
+Run: `.claude/scripts/linux_move_konsole_to_monitor.sh <monitor_index>`
 
 The script:
 - Positions Konsole in upper-left of target monitor

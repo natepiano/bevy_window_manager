@@ -107,7 +107,8 @@
       "mcp__brp__brp_extras_screenshot",
       "Bash(/Users/natemccoy/rust/bevy_window_manager/.claude/scripts/macos_detect_zed_monitor.sh:*)",
       "Bash(/Users/natemccoy/rust/bevy_window_manager/.claude/scripts/macos_move_zed_to_monitor.sh 1)",
-      "Bash(/Users/natemccoy/rust/bevy_window_manager/.claude/scripts/macos_move_zed_to_monitor.sh 0)"
+      "Bash(/Users/natemccoy/rust/bevy_window_manager/.claude/scripts/macos_move_zed_to_monitor.sh 0)",
+      "Bash(/home/natemccoy/rust/bevy_window_manager/.claude/scripts/linux_detect_konsole_monitor.sh:*)"
     ],
     "deny": [],
     "ask": []
