@@ -1,13 +1,18 @@
-# Moves Zed window to a target monitor (Windows)
-# Usage: windows_move_zed_to_monitor.ps1 <monitor_index>
+# Moves Zed window to a target Bevy monitor (Windows)
+# Usage: windows_move_zed_to_monitor.ps1 <target_index> <mon0_x> <mon0_y> <mon0_scale> <mon1_x> <mon1_y> <mon1_scale>
 #
 # Finds the Zed window titled "bevy_window_manager" (handles multiple Zed windows)
+# Matches Bevy monitor to Windows monitor by position, then moves window there
 # Positions it in the left half of the target monitor
-# Uses Win32 APIs for monitor and window manipulation
 
 param(
-    [Parameter(Mandatory=$true, Position=0)]
-    [int]$TargetIndex
+    [Parameter(Mandatory=$true, Position=0)][int]$TargetIndex,
+    [Parameter(Mandatory=$true, Position=1)][int]$Mon0X,
+    [Parameter(Mandatory=$true, Position=2)][int]$Mon0Y,
+    [Parameter(Mandatory=$true, Position=3)][double]$Mon0Scale,
+    [Parameter(Mandatory=$true, Position=4)][int]$Mon1X,
+    [Parameter(Mandatory=$true, Position=5)][int]$Mon1Y,
+    [Parameter(Mandatory=$true, Position=6)][double]$Mon1Scale
 )
 
 $ErrorActionPreference = "Stop"
@@ -142,8 +147,33 @@ if ($monitors.Count -eq 0) {
     exit 1
 }
 
-if ($TargetIndex -ge $monitors.Count) {
-    Write-Error "ERROR: Monitor index $TargetIndex out of range (have $($monitors.Count) monitors)"
+# Convert target Bevy monitor position to Windows logical coordinates
+if ($TargetIndex -eq 0) {
+    $targetBevyLogicalX = [int]($Mon0X / $Mon0Scale)
+    $targetBevyLogicalY = [int]($Mon0Y / $Mon0Scale)
+} else {
+    $targetBevyLogicalX = [int]($Mon1X / $Mon1Scale)
+    $targetBevyLogicalY = [int]($Mon1Y / $Mon1Scale)
+}
+
+# Find the Windows monitor that matches the target Bevy monitor by position
+$tolerance = 5
+$winMonitorIndex = -1
+for ($i = 0; $i -lt $monitors.Count; $i++) {
+    $mon = $monitors[$i]
+    if ([Math]::Abs($mon.Left - $targetBevyLogicalX) -le $tolerance -and
+        [Math]::Abs($mon.Top - $targetBevyLogicalY) -le $tolerance) {
+        $winMonitorIndex = $i
+        break
+    }
+}
+
+if ($winMonitorIndex -lt 0) {
+    Write-Error "ERROR: Could not find Windows monitor matching Bevy monitor $TargetIndex at logical ($targetBevyLogicalX, $targetBevyLogicalY)"
+    for ($i = 0; $i -lt $monitors.Count; $i++) {
+        $mon = $monitors[$i]
+        Write-Error "Windows Monitor $i`: ($($mon.Left), $($mon.Top))"
+    }
     exit 1
 }
 
@@ -156,7 +186,7 @@ if ($zedHwnd -eq [IntPtr]::Zero) {
 }
 
 # Get target monitor work area (excludes taskbar)
-$workArea = $workAreas[$TargetIndex]
+$workArea = $workAreas[$winMonitorIndex]
 
 # Calculate position: left half of monitor with margin
 $margin = 20
@@ -203,7 +233,7 @@ Start-Sleep -Milliseconds 200
 
 # Verify the move worked
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$detected = & "$scriptDir\windows_detect_zed_monitor.ps1"
+$detected = & "$scriptDir\windows_detect_zed_monitor.ps1" $Mon0X $Mon0Y $Mon0Scale $Mon1X $Mon1Y $Mon1Scale
 
 if ($detected -ne $TargetIndex.ToString()) {
     Write-Error "WARNING: Zed detected on monitor $detected, expected $TargetIndex"

@@ -126,9 +126,7 @@ Extract: platform, example_ron_path, test_ron_dir, tests array.
 4. Detect editor/terminal monitor:
    - **macOS**: Run `.claude/scripts/macos_detect_zed_monitor.sh`
      - Outputs "0" or "1" for the monitor index
-   - **Windows**: Run `powershell -File .claude/scripts/windows_detect_zed_monitor.ps1`
-     - Outputs "0" or "1" for the monitor index
-     - Uses Win32 APIs (EnumDisplayMonitors, GetWindowRect) for detection
+   - **Windows**: Use <WindowsZedMove/> detect script (same parameters, outputs "0" or "1")
    - **Linux**: Run `.claude/scripts/linux_detect_konsole_monitor.sh`
      - Outputs "0" or "1" for the monitor index
      - If error: STOP with the error message (likely "Must run from XWayland Konsole")
@@ -165,15 +163,29 @@ The script:
 </LinuxTerminalMove>
 
 <WindowsZedMove>
-**Windows only**: Move Zed to target monitor before running that monitor's tests.
+**Windows only**: Move/detect Zed on target monitor.
 
-Run: `powershell -File .claude/scripts/windows_move_zed_to_monitor.ps1 <monitor_index>`
+**Move script**:
+```
+powershell -Command "& '.claude/scripts/windows_move_zed_to_monitor.ps1' -TargetIndex <monitor_index> -Mon0X <mon0_x> -Mon0Y <mon0_y> -Mon0Scale <mon0_scale> -Mon1X (<mon1_x>) -Mon1Y (<mon1_y>) -Mon1Scale <mon1_scale>"
+```
 
-The script:
-- Uses Win32 APIs (EnumDisplayMonitors, SetWindowPos) for monitor/window manipulation
-- Positions Zed in left half of target monitor
+**Detect script**:
+```
+powershell -Command "& '.claude/scripts/windows_detect_zed_monitor.ps1' -Mon0X <mon0_x> -Mon0Y <mon0_y> -Mon0Scale <mon0_scale> -Mon1X (<mon1_x>) -Mon1Y (<mon1_y>) -Mon1Scale <mon1_scale>"
+```
+
+**IMPORTANT**: Negative coordinates must be wrapped in parentheses (e.g., `(-1631)`) to prevent PowerShell from interpreting them as parameter names.
+
+**Parameters**: Pass Bevy's physical monitor positions and scale factors from the `Monitors` resource.
+
+Both scripts:
+- Match Bevy monitors to Windows monitors by comparing positions (accounting for scale)
+- Use Win32 APIs (EnumDisplayMonitors) for monitor enumeration
+
+Move script additionally:
+- Positions Zed in left half of the matched Windows monitor
 - Accounts for taskbar via work area calculation
-- Sizes window to half width and most of monitor height
 - Verifies position with detect script after move
 </WindowsZedMove>
 
@@ -279,9 +291,16 @@ Check which fields exist:
 2. Substitute <TemplateVariables/> with discovered monitor values
    - **Linux X11 tests**: For tests with `backend: "x11"`, substitute `${MONITOR_X_VIDEO_MODE_*}`
      with the X11-specific values (`${MONITOR_X_X11_VIDEO_MODE_*}`) instead
-3. Write the substituted content to `${example_ron_path}`
+3. Write the substituted content to `${example_ron_path}`:
+   - **Windows**: `${example_ron_path}` = `%APPDATA%\restore_window\windows.ron` → `C:\Users\<user>\AppData\Roaming\restore_window\windows.ron`
+   - If the file already exists, Read it first (Write tool requires reading existing files before overwriting)
+   - If the file doesn't exist, just Write it directly
 
 Use Read tool then Write tool (NEVER heredoc).
+
+**Windows PowerShell notes**:
+- Use `-not` for negation (bash exclamation mark syntax doesn't work in PowerShell)
+- Example: `if (-not (Test-Path ...))` is correct
 
 ## Step 3: Launch App
 
@@ -475,7 +494,7 @@ Validation approach for X11 position workaround tests:
 <HumanTestFlow>
 1. **CRITICAL - Move editor to test's launch_monitor FIRST**: Read the test's `launch_monitor` field and move the editor there:
    - macOS: `.claude/scripts/macos_move_zed_to_monitor.sh <launch_monitor>`
-   - Windows: `powershell -File .claude/scripts/windows_move_zed_to_monitor.ps1 <launch_monitor>`
+   - Windows: Use <WindowsZedMove/> with target = `<launch_monitor>`
    - Linux: `.claude/scripts/linux_move_konsole_to_monitor.sh <launch_monitor>`
 2. Write RON from `${test_ron_dir}/${test.ron_file}` to `${example_ron_path}`
 3. **If has `workaround_validation`**: run Phase 1 first (build_without flags), then Phase 2 (default features)

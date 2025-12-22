@@ -1,9 +1,18 @@
 # Detects which monitor the Zed window is on (Windows)
-# Usage: windows_detect_zed_monitor.ps1
-# Outputs: "0" or "1" for the monitor index, or exits with error
+# Usage: windows_detect_zed_monitor.ps1 <mon0_x> <mon0_y> <mon0_scale> <mon1_x> <mon1_y> <mon1_scale>
+# Outputs: "0" or "1" for the Bevy monitor index, or exits with error
 #
 # Finds the Zed window titled "bevy_window_manager" (handles multiple Zed windows)
-# Uses Win32 APIs for monitor and window geometry
+# Matches Windows monitor to Bevy monitor by comparing positions (accounting for scale)
+
+param(
+    [Parameter(Mandatory=$true, Position=0)][int]$Mon0X,
+    [Parameter(Mandatory=$true, Position=1)][int]$Mon0Y,
+    [Parameter(Mandatory=$true, Position=2)][double]$Mon0Scale,
+    [Parameter(Mandatory=$true, Position=3)][int]$Mon1X,
+    [Parameter(Mandatory=$true, Position=4)][int]$Mon1Y,
+    [Parameter(Mandatory=$true, Position=5)][double]$Mon1Scale
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -137,20 +146,52 @@ if (-not [Win32Monitor]::GetWindowRect($zedHwnd, [ref]$rect)) {
 $centerX = [int](($rect.Left + $rect.Right) / 2)
 $centerY = [int](($rect.Top + $rect.Bottom) / 2)
 
-# Find which monitor contains the window center
+# Find which Windows monitor contains the window center
+$containingMonitor = $null
 for ($i = 0; $i -lt $monitors.Count; $i++) {
     $mon = $monitors[$i]
     if ($centerX -ge $mon.Left -and $centerX -lt $mon.Right -and
         $centerY -ge $mon.Top -and $centerY -lt $mon.Bottom) {
-        Write-Output $i
-        exit 0
+        $containingMonitor = $mon
+        break
     }
 }
 
-# If not found in any monitor, report error with debug info
-Write-Error "ERROR: Window center at ($centerX, $centerY) not within any monitor bounds"
-for ($i = 0; $i -lt $monitors.Count; $i++) {
-    $mon = $monitors[$i]
-    Write-Error "Monitor $i`: ($($mon.Left), $($mon.Top)) - ($($mon.Right), $($mon.Bottom))"
+if ($null -eq $containingMonitor) {
+    Write-Error "ERROR: Window center at ($centerX, $centerY) not within any monitor bounds"
+    for ($i = 0; $i -lt $monitors.Count; $i++) {
+        $mon = $monitors[$i]
+        Write-Error "Monitor $i`: ($($mon.Left), $($mon.Top)) - ($($mon.Right), $($mon.Bottom))"
+    }
+    exit 1
 }
+
+# Convert Bevy physical positions to Windows logical positions for matching
+$bevy0LogicalX = [int]($Mon0X / $Mon0Scale)
+$bevy0LogicalY = [int]($Mon0Y / $Mon0Scale)
+$bevy1LogicalX = [int]($Mon1X / $Mon1Scale)
+$bevy1LogicalY = [int]($Mon1Y / $Mon1Scale)
+
+# Match the containing Windows monitor to Bevy monitor by position
+# Use a tolerance of 5 pixels for floating point scale factor rounding
+$tolerance = 5
+$winMonX = $containingMonitor.Left
+$winMonY = $containingMonitor.Top
+
+if ([Math]::Abs($winMonX - $bevy0LogicalX) -le $tolerance -and
+    [Math]::Abs($winMonY - $bevy0LogicalY) -le $tolerance) {
+    Write-Output 0
+    exit 0
+}
+
+if ([Math]::Abs($winMonX - $bevy1LogicalX) -le $tolerance -and
+    [Math]::Abs($winMonY - $bevy1LogicalY) -le $tolerance) {
+    Write-Output 1
+    exit 0
+}
+
+# No match found - report debug info
+Write-Error "ERROR: Could not match Windows monitor at ($winMonX, $winMonY) to any Bevy monitor"
+Write-Error "Bevy Monitor 0 logical: ($bevy0LogicalX, $bevy0LogicalY)"
+Write-Error "Bevy Monitor 1 logical: ($bevy1LogicalX, $bevy1LogicalY)"
 exit 1
