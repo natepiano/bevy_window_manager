@@ -1,6 +1,6 @@
 [package]
 name = "bevy_window_manager"
-version = "0.18.0-rc.1"
+version = "0.18.0-dev"
 edition = "2024"
 description = "Bevy plugin for primary window restoration and multi-monitor support"
 repository = "https://github.com/natepiano/bevy_window_manager"
