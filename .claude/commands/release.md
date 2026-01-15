@@ -25,15 +25,47 @@ Each release gets both a tag and a release branch with 1:1 correspondence to cra
 
 **Throughout this release process**, when you see `${VERSION}` in bash commands, you must substitute the actual version number directly (e.g., "0.17.0") instead of using shell variables.
 
+**Example:**
+- Documentation shows: `git checkout -b release-${VERSION}`
+- You should run: `git checkout -b release-0.17.0`
+
+This applies to ALL bash commands in this process.
+
 ## Prerequisites
 
 Before starting the release, verify:
 1. You're on the `main` branch
 2. Working directory is clean (no uncommitted changes)
-3. `gh` CLI is installed and authenticated
+3. You're up to date with remote
+4. `gh` CLI is installed and authenticated
+
+<ProgressBehavior>
+**AT START**: Dynamically generate and display the full progress list (once only):
+
+1. Scan this document for all `## STEP N:` headers
+2. Extract step number and description from each header
+3. Count total steps and display as:
+
+```
+═══════════════════════════════════════════════════════════════
+                 RELEASE ${VERSION} - PROGRESS
+═══════════════════════════════════════════════════════════════
+[ ] STEP 0:  <description from "## STEP 0: ..." header>
+[ ] STEP 1:  <description from "## STEP 1: ..." header>
+... (continue for all steps found)
+═══════════════════════════════════════════════════════════════
+```
+
+**BEFORE EACH STEP**: Output single progress line using the total step count:
+```
+**[N/total] Step description...**
+```
+</ProgressBehavior>
 
 <ExecutionSteps>
     **EXECUTE THESE STEPS IN ORDER:**
+
+    Display <ProgressBehavior/> full list, then proceed:
 
     **STEP 0:** Execute <ArgumentValidation/>
     **STEP 1:** Execute <PreReleaseChecks/>
