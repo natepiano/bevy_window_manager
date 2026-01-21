@@ -38,9 +38,9 @@ pub trait WindowExt {
     /// # Returns
     ///
     /// A properly populated [`WindowMode`]:
-    /// - If `window.mode` is already fullscreen, returns it unchanged
-    /// - If window fills a monitor (macOS green button), returns `BorderlessFullscreen` with
-    ///   [`MonitorSelection::Index`] set to the correct monitor
+    /// - If `window.mode` is exclusive fullscreen, returns it unchanged (OS-managed)
+    /// - If window fills a monitor, returns `BorderlessFullscreen` with [`MonitorSelection::Index`]
+    ///   set to the correct monitor
     /// - Otherwise returns `Windowed`
     ///
     /// # Example
@@ -78,16 +78,13 @@ impl WindowExt for Window {
     }
 
     fn effective_mode(&self, monitors: &Monitors) -> WindowMode {
-        // Trust any fullscreen mode set programmatically
-        if matches!(
-            self.mode,
-            WindowMode::Fullscreen(_, _) | WindowMode::BorderlessFullscreen(_)
-        ) {
+        // Trust exclusive fullscreen - OS manages this mode
+        if matches!(self.mode, WindowMode::Fullscreen(_, _)) {
             return self.mode;
         }
 
-        // For Windowed mode, check actual screen coverage to detect macOS green button
-        // fullscreen where Bevy doesn't update window.mode.
+        // For Windowed and BorderlessFullscreen, check actual screen coverage
+        // to detect macOS green button fullscreen (Bevy doesn't update window.mode).
         // On Wayland, position is unavailable so we can only trust self.mode.
         let WindowPosition::At(pos) = self.position else {
             return self.mode;

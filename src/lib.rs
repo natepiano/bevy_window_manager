@@ -33,10 +33,12 @@
 //!
 //! App::new()
 //!     .add_plugins(DefaultPlugins)
-//!     // Uses executable name for config directory
 //!     .add_plugins(WindowManagerPlugin)
 //!     .run();
 //! ```
+//!
+//! The plugin automatically hides the window during startup and shows it after positioning
+//! is complete, preventing any visual flash at the default position.
 //!
 //! See `examples/custom_app_name.rs` for how to override the `app_name` used in the path
 //! (default is to choose executable name).
@@ -58,6 +60,7 @@ mod x11_frame_extents;
 use std::path::PathBuf;
 
 use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
 #[cfg(all(target_os = "macos", feature = "workaround-winit-4441"))]
 pub use macos_drag_back_fix::DragBackSizeProtection;
 pub use monitors::CurrentMonitor;
@@ -121,10 +124,47 @@ impl Plugin for WindowManagerPluginCustomPath {
     fn build(&self, app: &mut App) { build_plugin(app, self.path.clone()); }
 }
 
+/// Hide the primary window when created, before winit creates the OS window.
+///
+/// Uses an observer on `PrimaryWindow` component addition, so it works regardless
+/// of plugin order. The window will be shown after restore completes or immediately
+/// if no saved state.
+///
+/// Note: We observe `Add<PrimaryWindow>` rather than `Add<Window>` because when
+/// `Window` is added, `PrimaryWindow` may not exist yet. By observing `PrimaryWindow`,
+/// we know the `Window` component already exists on the entity.
+fn hide_window_on_creation(add: On<Add, PrimaryWindow>, mut windows: Query<&mut Window>) {
+    debug!(
+        "[hide_window_on_creation] Observer fired for entity {:?}",
+        add.entity
+    );
+    if let Ok(mut window) = windows.get_mut(add.entity) {
+        debug!("[hide_window_on_creation] Setting window.visible = false");
+        window.visible = false;
+    }
+}
+
 /// The run conditions allow us to separate the initial primary window restore from
 /// subsequent positions saves - which we dont' want to do until AFTER we've done
 /// the initial restore.
 fn build_plugin(app: &mut App, path: PathBuf) {
+    // Hide primary window to prevent flash at default position.
+    // Two cases to handle:
+    // 1. Window already exists (WindowManagerPlugin added after DefaultPlugins) - hide immediately
+    // 2. Window doesn't exist yet (WindowManagerPlugin added before DefaultPlugins) - use observer
+    {
+        let mut query = app
+            .world_mut()
+            .query_filtered::<&mut Window, With<PrimaryWindow>>();
+        if let Some(mut window) = query.iter_mut(app.world_mut()).next() {
+            debug!("[build_plugin] Window already exists, hiding immediately");
+            window.visible = false;
+        } else {
+            debug!("[build_plugin] Window doesn't exist yet, registering observer");
+            app.add_observer(hide_window_on_creation);
+        }
+    }
+
     #[cfg(all(target_os = "macos", feature = "workaround-winit-4441"))]
     macos_drag_back_fix::init(app);
 

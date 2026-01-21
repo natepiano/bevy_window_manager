@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `effective_mode` now correctly detects when exiting borderless fullscreen via macOS green button. Previously it trusted `window.mode` for `BorderlessFullscreen`, which isn't updated by Bevy/winit when exiting native fullscreen, causing the window to incorrectly save as fullscreen.
+- Window is now automatically hidden during startup and shown after restore to prevent visual flash at default position.
+
 ## [0.18.0] - 2026-01-15
 
 Stable release for Bevy 0.18.0 - no changes from 0.18.0-rc.1.
