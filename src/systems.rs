@@ -239,6 +239,21 @@ pub fn load_target_position(
         position
     );
 
+    // Windows W3 workaround (winit #3124): For exclusive fullscreen restore, we must
+    // show the window to ensure surfaces are created before the workaround applies
+    // fullscreen mode. Otherwise, we want visible = false to prevent the flickering
+    // jump from the default position to the restored position.
+    #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
+    if matches!(state.mode, SavedWindowMode::Fullscreen { .. }) {
+        debug!("[load_target_position] Windows exclusive fullscreen: showing window for surface creation");
+        commands.queue(|world: &mut World| {
+            let mut query = world.query_filtered::<&mut Window, With<PrimaryWindow>>();
+            if let Some(mut window) = query.iter_mut(world).next() {
+                window.visible = true;
+            }
+        });
+    }
+
     // Store inner dimensions - decoration is only needed for clamping above
     commands.insert_resource(TargetPosition {
         position,
