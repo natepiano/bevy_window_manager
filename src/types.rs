@@ -10,6 +10,43 @@ use bevy::window::WindowMode;
 use serde::Deserialize;
 use serde::Serialize;
 
+/// Event fired when window target state is loaded from the save file.
+///
+/// This is an [`EntityEvent`] triggered on the window entity during the restore process,
+/// before the window becomes visible. Dependent crates can observe this event to
+/// know the intended window size and mode.
+///
+/// Use an observer to receive this event:
+/// ```ignore
+/// // For all windows
+/// app.add_observer(|trigger: On<WindowTargetLoaded>| {
+///     let event = trigger.event();
+///     // Use event.entity, event.size, event.mode, etc.
+/// });
+///
+/// // For primary window only - check event.entity against PrimaryWindow query
+/// fn on_window_target_loaded(
+///     trigger: On<WindowTargetLoaded>,
+///     primary_window: Query<(), With<PrimaryWindow>>,
+/// ) {
+///     let event = trigger.event();
+///     if primary_window.get(event.entity).is_ok() {
+///         // Handle primary window only
+///     }
+/// }
+/// ```
+#[derive(EntityEvent, Debug, Clone, Reflect)]
+pub struct WindowTargetLoaded {
+    /// The window entity this event targets.
+    pub entity:   Entity,
+    /// Target position (None on Wayland where clients can't access window position).
+    pub position: Option<IVec2>,
+    /// Target size (content area, excluding window decoration).
+    pub size:     UVec2,
+    /// Target window mode.
+    pub mode:     WindowMode,
+}
+
 /// Threshold for considering two scale factors equal.
 ///
 /// Accounts for floating-point imprecision when comparing scale factors.

@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `WindowTargetLoaded` entity event triggered when window target state is loaded from save file, allowing dependent crates to know the intended size and mode before the window becomes visible.
+
 ### Fixed
 
 - `effective_mode` now correctly detects when exiting borderless fullscreen via macOS green button. Previously it trusted `window.mode` for `BorderlessFullscreen`, which isn't updated by Bevy/winit when exiting native fullscreen, causing the window to incorrectly save as fullscreen.

@@ -32,6 +32,7 @@ use bevy_window_manager::CurrentMonitor;
 use bevy_window_manager::Monitors;
 use bevy_window_manager::WindowExt;
 use bevy_window_manager::WindowManagerPlugin;
+use bevy_window_manager::WindowTargetLoaded;
 
 fn main() {
     App::new()
@@ -44,6 +45,7 @@ fn main() {
         }))
         .add_plugins(WindowManagerPlugin)
         .add_plugins(BrpExtrasPlugin::default())
+        .add_observer(on_window_target_loaded)
         .init_resource::<SelectedVideoModes>()
         .add_systems(Startup, setup)
         .add_systems(
@@ -57,6 +59,18 @@ fn main() {
             ),
         )
         .run();
+}
+
+// --- WindowTargetLoaded Test Support ---
+
+/// Resource inserted when `WindowTargetLoaded` event is received.
+/// Queryable via BRP to verify the event fired with expected values.
+#[derive(Resource, Debug, Clone, Reflect)]
+#[reflect(Resource)]
+struct WindowTargetLoadedReceived {
+    position: Option<IVec2>,
+    size:     UVec2,
+    mode:     WindowMode,
 }
 
 // --- Display UI ---
@@ -522,4 +536,18 @@ fn debug_scale_factor_changed(mut messages: MessageReader<WindowScaleFactorChang
             msg.scale_factor
         );
     }
+}
+
+/// Observer that logs when `WindowTargetLoaded` event is received and inserts a queryable resource.
+fn on_window_target_loaded(trigger: On<WindowTargetLoaded>, mut commands: Commands) {
+    let event = trigger.event();
+    info!(
+        "[on_window_target_loaded] WindowTargetLoaded received: entity={:?} position={:?} size={} mode={:?}",
+        event.entity, event.position, event.size, event.mode
+    );
+    commands.insert_resource(WindowTargetLoadedReceived {
+        position: event.position,
+        size:     event.size,
+        mode:     event.mode.clone(),
+    });
 }

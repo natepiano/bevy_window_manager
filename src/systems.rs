@@ -45,6 +45,7 @@ use crate::types::SavedWindowMode;
 use crate::types::TargetPosition;
 use crate::types::WindowDecoration;
 use crate::types::WindowRestoreState;
+use crate::types::WindowTargetLoaded;
 use crate::types::WinitInfo;
 use crate::types::X11FrameCompensated;
 use crate::window_ext::WindowExt;
@@ -119,6 +120,7 @@ pub fn init_winit_info(
 /// Runs after `init_winit_info` so we have access to starting monitor info.
 pub fn load_target_position(
     mut commands: Commands,
+    window_entity: Single<Entity, With<PrimaryWindow>>,
     monitors: Res<Monitors>,
     winit_info: Res<WinitInfo>,
     config: Res<RestoreWindowConfig>,
@@ -245,7 +247,9 @@ pub fn load_target_position(
     // jump from the default position to the restored position.
     #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
     if matches!(state.mode, SavedWindowMode::Fullscreen { .. }) {
-        debug!("[load_target_position] Windows exclusive fullscreen: showing window for surface creation");
+        debug!(
+            "[load_target_position] Windows exclusive fullscreen: showing window for surface creation"
+        );
         commands.queue(|world: &mut World| {
             let mut query = world.query_filtered::<&mut Window, With<PrimaryWindow>>();
             if let Some(mut window) = query.iter_mut(world).next() {
@@ -255,6 +259,7 @@ pub fn load_target_position(
     }
 
     // Store inner dimensions - decoration is only needed for clamping above
+    let window_mode = state.mode.to_window_mode(state.monitor_index);
     commands.insert_resource(TargetPosition {
         position,
         width,
@@ -267,6 +272,17 @@ pub fn load_target_position(
         #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
         fullscreen_restore_state: FullscreenRestoreState::WaitingForSurface,
     });
+
+    // Notify dependent crates of the target window state (triggered on window entity)
+    let size = UVec2::new(width, height);
+    commands
+        .entity(*window_entity)
+        .trigger(|entity| WindowTargetLoaded {
+            entity,
+            position,
+            size,
+            mode: window_mode,
+        });
 
     // Insert X11FrameCompensated token for platforms that don't need compensation.
     // On Linux + W6 + X11, the compensation system inserts this token after adjusting position.

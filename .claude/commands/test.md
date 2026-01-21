@@ -103,12 +103,16 @@ Extract: platform, example_ron_path, test_ron_dir, tests array.
 </LoadTestConfig>
 
 <DiscoverMonitors>
-1. Launch with `mcp__brp__brp_launch_bevy_example` target_name "restore_window"
+1. Write discovery RON file:
+   - Read `${test_ron_dir}/discovery.ron`
+   - Write to `${example_ron_path}` (ensures known state for WindowTargetLoaded validation)
 
-2. Query `mcp__brp__world_get_resources` resource "bevy_window_manager::monitors::Monitors"
+2. Launch with `mcp__brp__brp_launch_bevy_example` target_name "restore_window"
+
+3. Query `mcp__brp__world_get_resources` resource "bevy_window_manager::monitors::Monitors"
    - Store ${MONITORS} array with: index, scale, position, size
 
-3. Query for video modes using `mcp__brp__world_query`:
+4. Query for video modes using `mcp__brp__world_query`:
    - data: `{"components": ["bevy_window::monitor::Monitor"]}`
    - filter: `{}`
    - For each monitor, extract the `video_modes` array
@@ -123,7 +127,14 @@ Extract: platform, example_ron_path, test_ron_dir, tests array.
      - Query Monitor component again → store X11-specific video modes as `${MONITOR_X_X11_VIDEO_MODE_*}` variables
    - Shutdown the X11 app
 
-4. Detect editor/terminal monitor:
+5. Validate WindowTargetLoaded event fired:
+   - Query `mcp__brp__world_get_resources` resource "restore_window::WindowTargetLoadedReceived"
+   - Verify resource exists (if missing: FAIL "WindowTargetLoaded event did not fire")
+   - Verify `position` matches discovery.ron: `Some([100, 100])`
+   - Verify `size` matches discovery.ron: `[800, 600]`
+   - Verify `mode` matches discovery.ron: `Windowed`
+
+6. Detect editor/terminal monitor:
    - **macOS**: Run `.claude/scripts/macos_detect_zed_monitor.sh`
      - Outputs "0" or "1" for the monitor index
    - **Windows**: Use <WindowsZedMove/> detect script (same parameters, outputs "0" or "1")
@@ -131,9 +142,9 @@ Extract: platform, example_ron_path, test_ron_dir, tests array.
      - Outputs "0" or "1" for the monitor index
      - If error: STOP with the error message (likely "Must run from XWayland Konsole")
 
-5. Shutdown with `mcp__brp__brp_shutdown`
+7. Shutdown with `mcp__brp__brp_shutdown`
 
-6. No verification needed for any platform (we auto-move to each monitor).
+8. No verification needed for any platform (we auto-move to each monitor).
 
 Compute: ${NUM_MONITORS}, ${DIFFERENT_SCALES}
 </DiscoverMonitors>

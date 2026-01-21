@@ -70,6 +70,7 @@ pub use monitors::Monitors;
 use monitors::init_monitors;
 use types::RestoreWindowConfig;
 use types::TargetPosition;
+pub use types::WindowTargetLoaded;
 use types::X11FrameCompensated;
 pub use window_ext::WindowExt;
 
