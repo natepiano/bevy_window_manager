@@ -384,8 +384,8 @@ pub fn move_to_target_monitor(
         },
         _ => MoveParams {
             position: pos,
-            width:    1,
-            height:   1,
+            width:    target.width,
+            height:   target.height,
         },
     };
 

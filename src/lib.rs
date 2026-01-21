@@ -153,7 +153,16 @@ fn build_plugin(app: &mut App, path: PathBuf) {
     // Two cases to handle:
     // 1. Window already exists (WindowManagerPlugin added after DefaultPlugins) - hide immediately
     // 2. Window doesn't exist yet (WindowManagerPlugin added before DefaultPlugins) - use observer
-    {
+    //
+    // EXCEPTION: On Linux X11 with frame extent compensation (workaround-winit-4445),
+    // we cannot hide the window because the compensation system needs to query
+    // _NET_FRAME_EXTENTS, which requires the window to be visible/mapped.
+    #[cfg(all(target_os = "linux", feature = "workaround-winit-4445"))]
+    let should_hide = systems::is_wayland();
+    #[cfg(not(all(target_os = "linux", feature = "workaround-winit-4445")))]
+    let should_hide = true;
+
+    if should_hide {
         let mut query = app
             .world_mut()
             .query_filtered::<&mut Window, With<PrimaryWindow>>();
@@ -164,6 +173,8 @@ fn build_plugin(app: &mut App, path: PathBuf) {
             debug!("[build_plugin] Window doesn't exist yet, registering observer");
             app.add_observer(hide_window_on_creation);
         }
+    } else {
+        debug!("[build_plugin] Linux X11: skipping window hide for frame extent compensation");
     }
 
     #[cfg(all(target_os = "macos", feature = "workaround-winit-4441"))]

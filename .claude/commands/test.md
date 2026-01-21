@@ -17,14 +17,18 @@ Tests reference these tracked issues via `workaround_keys` in the JSON configs:
 
 **Key prefixes:** W = winit issue
 
-**Usage**: `/test <platform> [monitor]`
+**Usage**: `/test [flags]`
 
 **Examples**:
-- `/test macos` - Run macOS tests on ALL monitors (auto-moves Zed)
-- `/test linux` - Run Linux tests on ALL monitors (auto-moves terminal)
-- `/test windows` - Run Windows tests on ALL monitors (auto-moves Zed)
+- `/test` - Auto-detect OS and run tests on ALL monitors
+- `/test single-monitor` - Force single-monitor mode (skip multi-monitor tests)
 
 **Arguments**: $ARGUMENTS
+
+**OS Detection**: Platform is auto-detected using `uname -s`:
+- `Darwin` → macOS
+- `Linux` → Linux
+- `MINGW*`, `MSYS*`, `CYGWIN*` → Windows
 
 **macOS Requirements**:
 - Tests run on all monitors automatically - no monitor argument needed
@@ -62,11 +66,27 @@ Do NOT continue running more tests after a failure. Stop, explain what happened,
 </ExecutionSteps>
 
 <ParseArguments>
-Parse $ARGUMENTS → extract platform.
+Parse $ARGUMENTS → extract optional flags, then auto-detect platform.
 
-Valid platforms: macos, windows, linux
+**Step 1: Detect Platform**
 
-Store as ${PLATFORM}. ${MONITOR_INDEX} = "all" for all platforms.
+Run `uname -s` and map the result:
+- `Darwin` → platform=macos
+- `Linux` → platform=linux
+- `MINGW*`, `MSYS*`, `CYGWIN*` → platform=windows
+
+If detection fails, STOP with error: "Could not detect OS from uname -s"
+
+**Step 2: Parse Optional Flags**
+
+Optional flags (space-separated):
+- `single-monitor` - Force single-monitor mode (skip multi-monitor tests)
+
+Examples:
+- (no args) → forced_single_monitor=false
+- `single-monitor` → forced_single_monitor=true
+
+Store as ${PLATFORM}, ${FORCED_SINGLE_MONITOR}.
 </ParseArguments>
 
 <LinuxEnvironmentCheck>
@@ -78,8 +98,10 @@ Store as ${PLATFORM}. ${MONITOR_INDEX} = "all" for all platforms.
    - We're in XWayland Konsole → proceed to <LoadTestConfig/>
 
 3. **If FAILURE** ("No XWayland Konsole found"):
-   - Launch `.claude/scripts/linux_test.sh` (in background)
-   - Display message: "Launched XWayland Konsole. Run `/test linux` in the new terminal."
+   - Launch `.claude/scripts/linux_test.sh` with optional argument:
+     - If `${FORCED_SINGLE_MONITOR}` is true: `.claude/scripts/linux_test.sh single-monitor`
+     - Otherwise: `.claude/scripts/linux_test.sh`
+   - Display message: "Launched XWayland Konsole. Tests will run automatically in the new terminal."
    - STOP execution (do not continue to LoadTestConfig)
 </LinuxEnvironmentCheck>
 
@@ -146,8 +168,44 @@ Extract: platform, example_ron_path, test_ron_dir, tests array.
 
 8. No verification needed for any platform (we auto-move to each monitor).
 
-Compute: ${NUM_MONITORS}, ${DIFFERENT_SCALES}
+9. Compute and store:
+   - `${NUM_MONITORS}` - Count of monitors discovered
+   - `${DIFFERENT_SCALES}` - True if monitors have different scale factors
+   - `${SINGLE_MONITOR_MODE}` - True if `${NUM_MONITORS} == 1` OR `${FORCED_SINGLE_MONITOR} == true`
+
+10. **If `${SINGLE_MONITOR_MODE}` is true**:
+    - Display: "Single-monitor mode: filtering to single-monitor tests only"
+    - Display count of tests that will be skipped
 </DiscoverMonitors>
+
+<SingleMonitorFiltering>
+When `${SINGLE_MONITOR_MODE}` is true (either detected or forced), skip tests that require multiple monitors.
+
+**A test requires multiple monitors if ANY of these conditions are true:**
+
+1. **Explicit requirement**: `requires.min_monitors: 2`
+
+2. **Launch from monitor 1**: `launch_monitor: 1`
+   - Cannot launch from a monitor that doesn't exist
+
+3. **Targets monitor 1**: RON file or mutation targets monitor 1
+   - RON filename contains `_to_mon1` or `_mon1` suffix (e.g., `fullscreen_borderless_to_mon1.ron`)
+   - `mutation.target_monitor: 1`
+   - RON file contains `monitor_index: 1`
+
+4. **Cross-monitor test**: Test validates cross-monitor behavior
+   - Test ID contains `cross` (e.g., `x11_cross_high_to_low_W1`)
+   - `requires.different_scales: true` (implies multi-monitor)
+
+**Tests that ARE safe for single-monitor mode:**
+- `launch_monitor: 0` AND targets monitor 0 only
+- No cross-monitor requirements
+- Examples: `wayland_size_restore_mon0`, `x11_borderless_0_0`, `x11_exclusive_0_0`
+
+**When skipping a test**, record it as:
+- Status: ⊘ SKIP
+- Details: "Requires multiple monitors"
+</SingleMonitorFiltering>
 
 <MacOSZedMove>
 **macOS only**: Move Zed to target monitor before running that monitor's tests.
@@ -223,16 +281,25 @@ Linux X11-specific values (differ from Wayland):
 </TemplateVariables>
 
 <RunTests>
+## Pre-flight: Apply Single-Monitor Filtering
+
+**Before running any tests**, if `${SINGLE_MONITOR_MODE}` is true, filter the test list using <SingleMonitorFiltering/> rules:
+- Mark tests requiring multiple monitors as SKIP with reason "Requires multiple monitors"
+- Only proceed with tests that work on monitor 0 alone
+
+---
+
 **Windows**: Run tests in JSON order. Automated tests are grouped by launch_monitor, human tests are at the end.
 
 **Phase 1: Automated Tests**
 1. Move Zed to Monitor 0 using <WindowsZedMove/>
 2. Run all automated tests with `launch_monitor: 0`
-3. Move Zed to Monitor 1 using <WindowsZedMove/>
-4. Run all automated tests with `launch_monitor: 1`
+3. **If NOT single-monitor mode**:
+   - Move Zed to Monitor 1 using <WindowsZedMove/>
+   - Run all automated tests with `launch_monitor: 1`
 
 **Phase 2: Human-Assisted Tests**
-5. For each human test: move Zed to the test's `launch_monitor`, then run the test
+4. For each human test (that wasn't filtered): move Zed to the test's `launch_monitor`, then run the test
 
 **IMPORTANT**: Human tests appear at the END of the JSON array. Run them in order, moving Zed to each test's `launch_monitor` before running.
 
@@ -243,41 +310,48 @@ Linux X11-specific values (differ from Wayland):
 **Phase 1: Automated Tests**
 1. Move Zed to Monitor 0 using <MacOSZedMove/>
 2. Run all automated tests with `launch_monitor: 0`
-3. Move Zed to Monitor 1 using <MacOSZedMove/>
-4. Run all automated tests with `launch_monitor: 1`
+3. **If NOT single-monitor mode**:
+   - Move Zed to Monitor 1 using <MacOSZedMove/>
+   - Run all automated tests with `launch_monitor: 1`
 
 **Phase 2: Human-Assisted Tests**
-5. For each human test: move Zed to the test's `launch_monitor`, then run the test
+4. For each human test (that wasn't filtered): move Zed to the test's `launch_monitor`, then run the test
 
 **IMPORTANT**: Human tests appear at the END of the JSON array. Run them in order, moving Zed to each test's `launch_monitor` before running.
+
+---
 
 **Linux**: Run tests in JSON order. Automated tests are grouped by backend then launch_monitor, human tests are at the end.
 
 **Phase 1: Wayland Automated Tests**
 1. Move Konsole to Monitor 0 using <LinuxTerminalMove/>
 2. Run all Wayland automated tests with `launch_monitor: 0`
-3. Move Konsole to Monitor 1 using <LinuxTerminalMove/>
-4. Run all Wayland automated tests with `launch_monitor: 1`
+3. **If NOT single-monitor mode**:
+   - Move Konsole to Monitor 1 using <LinuxTerminalMove/>
+   - Run all Wayland automated tests with `launch_monitor: 1`
 
 **Phase 2: X11 Automated Tests**
-5. Move Konsole to Monitor 0 using <LinuxTerminalMove/>
-6. Run all X11 automated tests with `launch_monitor: 0`
-7. Move Konsole to Monitor 1 using <LinuxTerminalMove/>
-8. Run all X11 automated tests with `launch_monitor: 1`
+4. Move Konsole to Monitor 0 using <LinuxTerminalMove/>
+5. Run all X11 automated tests with `launch_monitor: 0`
+6. **If NOT single-monitor mode**:
+   - Move Konsole to Monitor 1 using <LinuxTerminalMove/>
+   - Run all X11 automated tests with `launch_monitor: 1`
 
 **Phase 3: Human-Assisted Tests**
-9. For each human test: move Konsole to the test's `launch_monitor`, then run the test
+7. For each human test (that wasn't filtered): move Konsole to the test's `launch_monitor`, then run the test
 
 **IMPORTANT**: Human tests appear at the END of the JSON array. Run them in order, moving Konsole to each test's `launch_monitor` before running.
 
+---
+
 For each test in order:
 
-1. **Check requirements** - skip if not met
+1. **Check requirements** - skip if not met (including single-monitor filtering)
 
 2. **Resolve target_monitor**:
-   - `"launch"` → current monitor (the one Konsole is on)
-   - `"other"` → first monitor that isn't current
-   - Explicit number → that monitor index
+   - `"launch"` → current monitor (the one editor/terminal is on)
+   - `"other"` → first monitor that isn't current (skip in single-monitor mode)
+   - Explicit number → that monitor index (skip if > 0 in single-monitor mode)
 
 3. **Execute test** using <TestSequence/>
 
