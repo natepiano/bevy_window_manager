@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Fix panic when laptop lid is closed (monitor removed event). `save_window_state` and `effective_mode` now handle empty monitor list gracefully instead of panicking in `Monitors::closest_to()`.
 - `effective_mode` now correctly detects when exiting borderless fullscreen via macOS green button. Previously it trusted `window.mode` for `BorderlessFullscreen`, which isn't updated by Bevy/winit when exiting native fullscreen, causing the window to incorrectly save as fullscreen.
 - Window is now automatically hidden during startup and shown after restore to prevent visual flash at default position.
 

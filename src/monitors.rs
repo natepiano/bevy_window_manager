@@ -73,6 +73,12 @@ impl Monitors {
     #[must_use]
     pub fn by_index(&self, index: usize) -> Option<&MonitorInfo> { self.list.get(index) }
 
+    /// Returns true if no monitors are available.
+    ///
+    /// This can happen when the laptop lid is closed or all displays are disconnected.
+    #[must_use]
+    pub fn is_empty(&self) -> bool { self.list.is_empty() }
+
     /// Get the first monitor (index 0). Used as fallback when no specific monitor is known.
     ///
     /// # Panics

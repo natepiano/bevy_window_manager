@@ -429,6 +429,12 @@ pub fn save_window_state(
 ) {
     let (window_entity, window, existing_monitor) = *window;
 
+    // Can't save state if no monitors exist (e.g., laptop lid closed).
+    // This also prevents saving stale `effective_mode` values (see `WindowExt::effective_mode`).
+    if monitors.is_empty() {
+        return;
+    }
+
     // Get window position for saving state.
     //
     // On X11, bevy's cached window.position doesn't update when the window manager

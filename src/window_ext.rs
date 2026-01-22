@@ -83,6 +83,14 @@ impl WindowExt for Window {
             return self.mode;
         }
 
+        // Can't determine effective mode without monitors (e.g., laptop lid closed).
+        // Returns `self.mode` which may be stale (won't reflect macOS green button exit).
+        // This is acceptable because `save_window_state` skips saving when monitors are
+        // empty, so stale values won't be persisted.
+        if monitors.is_empty() {
+            return self.mode;
+        }
+
         // For Windowed and BorderlessFullscreen, check actual screen coverage
         // to detect macOS green button fullscreen (Bevy doesn't update window.mode).
         // On Wayland, position is unavailable so we can only trust self.mode.
