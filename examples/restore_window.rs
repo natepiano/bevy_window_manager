@@ -548,6 +548,6 @@ fn on_window_target_loaded(trigger: On<WindowTargetLoaded>, mut commands: Comman
     commands.insert_resource(WindowTargetLoadedReceived {
         position: event.position,
         size:     event.size,
-        mode:     event.mode.clone(),
+        mode:     event.mode,
     });
 }

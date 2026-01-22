@@ -115,6 +115,48 @@ pub fn init_winit_info(
     });
 }
 
+/// Calculate restored window position, with optional clamping for macOS.
+///
+/// On macOS, clamps to monitor bounds because macOS may resize/reposition windows
+/// that extend beyond the screen. macOS does not allow windows to span monitors.
+///
+/// On Windows and Linux X11, windows can legitimately span multiple monitors,
+/// so we preserve the exact saved position without clamping.
+fn clamp_position_to_monitor(
+    saved_x: i32,
+    saved_y: i32,
+    target_info: &crate::monitors::MonitorInfo,
+    outer_width: u32,
+    outer_height: u32,
+) -> IVec2 {
+    if cfg!(target_os = "macos") {
+        let mon_right = target_info.position.x + target_info.size.x as i32;
+        let mon_bottom = target_info.position.y + target_info.size.y as i32;
+
+        let mut x = saved_x;
+        let mut y = saved_y;
+
+        if x + outer_width as i32 > mon_right {
+            x = mon_right - outer_width as i32;
+        }
+        if y + outer_height as i32 > mon_bottom {
+            y = mon_bottom - outer_height as i32;
+        }
+        x = x.max(target_info.position.x);
+        y = y.max(target_info.position.y);
+
+        if x != saved_x || y != saved_y {
+            debug!(
+                "[clamp_position_to_monitor] Clamped: ({saved_x}, {saved_y}) -> ({x}, {y}) for outer size {outer_width}x{outer_height}"
+            );
+        }
+
+        IVec2::new(x, y)
+    } else {
+        IVec2::new(saved_x, saved_y)
+    }
+}
+
 /// Load saved window state and create `TargetPosition` resource.
 ///
 /// Runs after `init_winit_info` so we have access to starting monitor info.
@@ -185,51 +227,8 @@ pub fn load_target_position(
     // fixes (e.g., Bevy processing position before size) resolve the issue.
     let strategy = determine_scale_strategy(starting_scale, target_scale);
 
-    // Calculate final position, with optional clamping.
-    // Position may be None on Wayland where clients can't access window position.
-    //
-    // On macOS, we clamp to monitor bounds because macOS may resize/reposition windows
-    // that extend beyond the screen. macOS does not allow windows to span monitors.
-    //
-    // On Windows and Linux X11, windows can legitimately span multiple monitors,
-    // so we preserve the exact saved position without clamping.
-    let position = saved_pos.map(|(saved_x, saved_y)| {
-        if cfg!(target_os = "macos") {
-            // macOS: clamp to monitor bounds (using outer dimensions for accurate bounds).
-            // macOS may resize/reposition windows that extend beyond the screen.
-            let mon_right = target_info.position.x + target_info.size.x as i32;
-            let mon_bottom = target_info.position.y + target_info.size.y as i32;
-
-            let mut x = saved_x;
-            let mut y = saved_y;
-
-            if x + outer_width as i32 > mon_right {
-                x = mon_right - outer_width as i32;
-            }
-            if y + outer_height as i32 > mon_bottom {
-                y = mon_bottom - outer_height as i32;
-            }
-            x = x.max(target_info.position.x);
-            y = y.max(target_info.position.y);
-
-            if x != saved_x || y != saved_y {
-                debug!(
-                    "[load_target_position] Clamped position: ({}, {}) -> ({}, {}) for outer size {}x{}",
-                    saved_x, saved_y, x, y, outer_width, outer_height
-                );
-            }
-
-            IVec2::new(x, y)
-        } else {
-            // Windows/Linux: use saved position directly, no clamping.
-            // Windows users can legitimately position windows partially off-screen,
-            // and the invisible border offset means saved positions may be slightly
-            // outside monitor bounds.
-            // On Linux X11, windows can span multiple monitors.
-            // On Linux Wayland, position is None anyway so this code path isn't reached.
-            IVec2::new(saved_x, saved_y)
-        }
-    });
+    let position = saved_pos
+        .map(|(x, y)| clamp_position_to_monitor(x, y, target_info, outer_width, outer_height));
 
     debug!(
         "[load_target_position] Starting monitor={} scale={}, Target monitor={} scale={}, strategy={:?}, position={:?}",

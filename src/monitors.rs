@@ -77,7 +77,7 @@ impl Monitors {
     ///
     /// This can happen when the laptop lid is closed or all displays are disconnected.
     #[must_use]
-    pub fn is_empty(&self) -> bool { self.list.is_empty() }
+    pub const fn is_empty(&self) -> bool { self.list.is_empty() }
 
     /// Get the first monitor (index 0). Used as fallback when no specific monitor is known.
     ///
