@@ -18,6 +18,7 @@ Each release gets both a tag and a release branch with 1:1 correspondence to cra
 - Branch: `release-0.17.1`
 
 ## Usage
+- `/release patch` - Auto-detect latest published version and increment patch (e.g., `0.18.0` → `0.18.1`). Skips STEP 10 (main stays at current dev version).
 - `/release X.Y.Z-rc.N` - Release as RC version (e.g., `0.17.0-rc.1`)
 - `/release X.Y.Z` - Release as final version (e.g., `0.17.0`)
 
@@ -77,18 +78,28 @@ Before starting the release, verify:
     **STEP 7:** Execute <PushReleaseBranch/>
     **STEP 8:** Execute <CreateGitHubRelease/>
     **STEP 9:** Execute <PostReleaseVerification/>
-    **STEP 10:** Execute <PrepareNextReleaseCycle/>
+    **STEP 10:** Execute <PrepareNextReleaseCycle/> **(Skip if `${IS_PATCH_RELEASE}` is true)**
 </ExecutionSteps>
 
 <ArgumentValidation>
 ## STEP 0: Argument Validation
 
-**Validate the version format** (must match `X.Y.Z` or `X.Y.Z-rc.N`):
+**If argument is `patch`:**
+1. Query crates.io for the latest published version:
+```bash
+curl -s "https://crates.io/api/v1/crates/bevy_window_manager" | jq -r '.crate.max_version'
+```
+2. Parse the version and increment the patch number (e.g., `0.18.0` → `0.18.1`)
+3. Set `${VERSION}` to the incremented patch version
+4. Set `${IS_PATCH_RELEASE}` to `true` (this will skip STEP 10)
+
+**Otherwise, validate the version format** (must match `X.Y.Z` or `X.Y.Z-rc.N`):
 → **Auto-check**: Continue if version is valid format, stop with clear error if invalid
+→ Set `${IS_PATCH_RELEASE}` to `false`
 
 **Confirm version:**
 ```bash
-echo "Release version set to: $ARGUMENTS"
+echo "Release version set to: ${VERSION}"
 ```
 </ArgumentValidation>
 
@@ -278,6 +289,8 @@ curl -s "https://crates.io/api/v1/crates/bevy_window_manager" | jq '.crate.max_v
 <PrepareNextReleaseCycle>
 ## STEP 10: Prepare for Next Release Cycle
 
+**Skip this step if `${IS_PATCH_RELEASE}` is true** - main is already at the correct dev version.
+
 **Return to main branch:**
 ```bash
 git checkout main
@@ -313,6 +326,7 @@ git push origin main
 
 ## Branch Workflow Summary
 
+**Standard Release (e.g., `/release 0.18.0`):**
 ```
 main (0.18.0-dev) ─────────────────────────────────────────→ (0.19.0-dev)
          │                                                        ↑
@@ -321,11 +335,20 @@ main (0.18.0-dev) ────────────────────�
                                               bump main to next dev
 ```
 
+**Patch Release (e.g., `/release patch` when main is 0.19.0-dev):**
+```
+main (0.19.0-dev) ────────────────────────────────────────→ (stays 0.19.0-dev)
+         │
+         └─→ release-0.18.1 (0.18.1) ─→ publish ─→ tag v0.18.1
+```
+Use `/release patch` when main has bug fixes that are compatible with the previous release line. Main stays at its current dev version.
+
 **Key Points:**
 - Main ALWAYS has `-dev` versions
 - Release branches are created BEFORE any version changes
 - Publishing happens exclusively from release branches
-- After release, main bumps to next `-dev` version
+- After standard release, main bumps to next `-dev` version
+- Patch releases (`/release patch`) skip bumping main - use when backporting fixes
 - Each release branch can receive patches independently
 
 ## Rollback Instructions
