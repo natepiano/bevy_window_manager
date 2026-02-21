@@ -97,6 +97,13 @@ curl -s "https://crates.io/api/v1/crates/bevy_window_manager" | jq -r '.crate.ma
 → **Auto-check**: Continue if version is valid format, stop with clear error if invalid
 → Set `${IS_PATCH_RELEASE}` to `false`
 
+**Verify version is not already published on crates.io:**
+```bash
+curl -s "https://crates.io/api/v1/crates/bevy_window_manager" | jq -r '.versions[].num'
+```
+→ **Auto-check**: If `${VERSION}` appears in the list, stop with error: "Version ${VERSION} is already published on crates.io. Use a different version number."
+→ Continue if version is not yet published
+
 **Confirm version:**
 ```bash
 echo "Release version set to: ${VERSION}"
