@@ -52,12 +52,11 @@ pub fn init(app: &mut App) {
     app.add_systems(
         Update,
         (
-            detect_user_resize,
-            handle_drag_back_scale_change,
-            apply_pending_correction,
+            detect_user_resize.run_if(resource_exists::<DragBackSizeProtection>),
+            handle_drag_back_scale_change.run_if(resource_exists::<DragBackSizeProtection>),
+            apply_pending_correction.run_if(resource_exists::<DragBackSizeProtection>),
         )
-            .chain()
-            .run_if(resource_exists::<DragBackSizeProtection>),
+            .chain(),
     );
 }
 

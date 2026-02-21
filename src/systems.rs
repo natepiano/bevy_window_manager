@@ -51,12 +51,22 @@ use crate::types::X11FrameCompensated;
 use crate::window_ext::WindowExt;
 
 /// Populate `WinitInfo` resource from winit (decoration and starting monitor).
+///
+/// # Panics
+///
+/// Panics if no monitors are available (e.g., laptop lid closed at startup).
+/// Window management requires at least one monitor to function.
 pub fn init_winit_info(
     mut commands: Commands,
     window_entity: Single<Entity, With<PrimaryWindow>>,
     monitors: Res<Monitors>,
     _non_send: NonSendMarker,
 ) {
+    assert!(
+        !monitors.is_empty(),
+        "No monitors available - cannot initialize window manager without a display"
+    );
+
     WINIT_WINDOWS.with(|ww| {
         let ww = ww.borrow();
         if let Some(winit_window) = ww.get_window(*window_entity) {
