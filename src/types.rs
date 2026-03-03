@@ -192,6 +192,11 @@ pub struct X11FrameCompensated;
 /// at the correct location when we later apply size in `ApplySize`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowRestoreState {
+    /// Initial state: window needs to be moved to the target monitor to trigger a scale change.
+    /// Handled by `restore_windows` which calls `apply_initial_move` and transitions to
+    /// `WaitingForScaleChange`. This unified entry point replaces the old separate paths
+    /// (PreStartup `move_to_target_monitor` for primary, inline guard for managed).
+    NeedInitialMove,
     /// Position applied with compensation, waiting for `ScaleChanged` message.
     WaitingForScaleChange,
     /// Scale changed, ready to apply final size (position already set in phase 1).

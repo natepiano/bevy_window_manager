@@ -55,7 +55,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                title: "Window Restore Test".into(),
+                title: "Window Restore - Primary Window".into(),
                 ..default()
             }),
             ..default()

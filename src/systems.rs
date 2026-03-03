@@ -91,22 +91,26 @@ pub fn init_winit_info(
                 is_wayland()
             );
 
-            // Log what current_monitor() returns for comparison
-            let current_monitor_index = winit_window.current_monitor().and_then(|cm| {
-                let cm_pos = cm.position();
-                let idx = monitors.at(cm_pos.x, cm_pos.y).map(|m| m.index);
-                debug!(
-                    "[init_winit_info] current_monitor() position=({}, {}) -> index={:?}",
-                    cm_pos.x, cm_pos.y, idx
-                );
-                idx
-            });
-            debug!(
-                "[init_winit_info] current_monitor_index={:?}",
-                current_monitor_index
-            );
-
-            let starting_monitor = monitors.closest_to(pos.x, pos.y);
+            // Use winit's current_monitor() as the primary source for starting monitor.
+            // Falls back to position-based detection if current_monitor() returns None.
+            let starting_monitor = winit_window
+                .current_monitor()
+                .and_then(|cm| {
+                    let cm_pos = cm.position();
+                    let info = monitors.at(cm_pos.x, cm_pos.y);
+                    debug!(
+                        "[init_winit_info] current_monitor() position=({}, {}) -> index={:?}",
+                        cm_pos.x, cm_pos.y, info.map(|m| m.index)
+                    );
+                    info.copied()
+                })
+                .unwrap_or_else(|| {
+                    debug!(
+                        "[init_winit_info] current_monitor() unavailable, falling back to closest_to({}, {})",
+                        pos.x, pos.y
+                    );
+                    *monitors.closest_to(pos.x, pos.y)
+                });
             let starting_monitor_index = starting_monitor.index;
 
             debug!(
@@ -117,7 +121,7 @@ pub fn init_winit_info(
             // Insert initial CurrentMonitor component on window entity
             commands
                 .entity(*window_entity)
-                .insert(CurrentMonitor(*starting_monitor));
+                .insert(CurrentMonitor(starting_monitor));
 
             commands.insert_resource(WinitInfo {
                 starting_monitor_index,
@@ -320,9 +324,8 @@ pub fn load_target_position(
 /// Apply the initial window move to the target monitor.
 ///
 /// Sets position and size based on the `TargetPosition` strategy, handling fullscreen,
-/// Wayland (no position), and cross-DPI scenarios. Used by both the primary window
-/// (`move_to_target_monitor` at `PreStartup`) and managed windows (`restore_managed_window`
-/// at runtime).
+/// Wayland (no position), and cross-DPI scenarios. Called from `restore_windows` during
+/// the `HigherToLower(NeedInitialMove)` phase for both primary and managed windows.
 ///
 /// On macOS with `HigherToLower` strategy, the position is compensated because winit
 /// divides coordinates by the launch monitor's scale factor.
@@ -420,18 +423,6 @@ pub fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
     window
         .resolution
         .set_physical_resolution(params.width, params.height);
-}
-
-/// Move primary window to target monitor at `PreStartup`.
-///
-/// Delegates to [`apply_initial_move`] which handles all the cross-DPI compensation.
-pub fn move_to_target_monitor(
-    mut windows: Query<(&mut Window, &TargetPosition), With<PrimaryWindow>>,
-) {
-    let Ok((mut window, target)) = windows.single_mut() else {
-        return;
-    };
-    apply_initial_move(&target, &mut window);
 }
 
 /// Cached window state for change detection comparison.
@@ -667,21 +658,17 @@ pub fn restore_windows(
     let scale_changed = scale_changed_messages.read().last().is_some();
 
     for (entity, mut target, mut window) in &mut windows {
-        // Managed windows skip `apply_initial_move` (called at PreStartup for primary only)
-        // because `create_windows` hasn't created the winit window yet in the observer.
-        // For `HigherToLower`, we must move the window to the target monitor first to
-        // trigger a scale change — `try_apply_restore` waits for this before applying size.
-        // Other strategies (`ApplyUnchanged`, `LowerToHigher`) work correctly when
-        // `try_apply_restore` handles them directly, because the compensation accounts
-        // for winit using the current (launch) monitor's scale factor.
-        if window.position == bevy::window::WindowPosition::Automatic
-            && target.position.is_some()
-            && matches!(
-                target.monitor_scale_strategy,
-                MonitorScaleStrategy::HigherToLower(_)
-            )
-        {
+        // Unified initial move for HigherToLower: both primary and managed windows
+        // enter here via `NeedInitialMove`. We call `apply_initial_move` to set the
+        // compensated position (triggering a monitor scale change), then transition
+        // to `WaitingForScaleChange` to wait for the scale event before applying size.
+        if matches!(
+            target.monitor_scale_strategy,
+            MonitorScaleStrategy::HigherToLower(WindowRestoreState::NeedInitialMove)
+        ) {
             apply_initial_move(&target, &mut window);
+            target.monitor_scale_strategy =
+                MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange);
             continue;
         }
 
@@ -972,8 +959,9 @@ fn try_apply_restore(target: &TargetPosition, window: &mut Window) -> RestoreSta
             );
             window.resolution.set_physical_resolution(size.x, size.y);
         },
-        MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange) => {
-            debug!("[Restore] HigherToLower: waiting for ScaleChanged message");
+        MonitorScaleStrategy::HigherToLower(WindowRestoreState::NeedInitialMove)
+        | MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange) => {
+            debug!("[Restore] HigherToLower: waiting for initial move or ScaleChanged message");
             return RestoreStatus::Waiting;
         },
     }
@@ -1020,7 +1008,7 @@ pub fn determine_scale_strategy(starting_scale: f64, target_scale: f64) -> Monit
         MonitorScaleStrategy::LowerToHigher
     } else {
         // High DPI -> low DPI
-        MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange)
+        MonitorScaleStrategy::HigherToLower(WindowRestoreState::NeedInitialMove)
     }
 }
 

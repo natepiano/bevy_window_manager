@@ -496,11 +496,7 @@ fn build_plugin(app: &mut App, path: PathBuf, persistence: ManagedWindowPersiste
         .add_observer(on_managed_window_load)
         .add_systems(
             PreStartup,
-            (
-                systems::init_winit_info,
-                systems::load_target_position,
-                systems::move_to_target_monitor.run_if(has_restoring_windows),
-            )
+            (systems::init_winit_info, systems::load_target_position)
                 .chain()
                 .after(init_monitors),
         );
