@@ -32,8 +32,6 @@
 //!
 //! See `examples/custom_path.rs` for how to override the full path to the state file.
 
-#[cfg(all(target_os = "macos", feature = "workaround-winit-4441"))]
-mod macos_drag_back_fix;
 #[cfg(target_os = "macos")]
 mod macos_tabbing_fix;
 mod monitors;
@@ -453,9 +451,6 @@ fn build_plugin(app: &mut App, path: PathBuf, persistence: ManagedWindowPersiste
     } else {
         debug!("[build_plugin] Linux X11: skipping window hide for frame extent compensation");
     }
-
-    #[cfg(all(target_os = "macos", feature = "workaround-winit-4441"))]
-    macos_drag_back_fix::init(app);
 
     #[cfg(target_os = "macos")]
     macos_tabbing_fix::init(app);

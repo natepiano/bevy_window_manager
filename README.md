@@ -150,7 +150,6 @@ This design allows:
 | `workaround-winit-3124` | Windows | [winit #3124](https://github.com/rust-windowing/winit/issues/3124) | DX12/DXGI fullscreen crash fix |
 | `workaround-winit-4443` | Linux X11 | [winit #4443](https://github.com/rust-windowing/winit/issues/4443) | Keyboard snap position fix |
 | `workaround-winit-4440` | Windows, macOS, Linux X11 | [winit #4440](https://github.com/rust-windowing/winit/issues/4440) | Multi-monitor scale factor compensation |
-| `workaround-winit-4441` | macOS | [winit #4441](https://github.com/rust-windowing/winit/issues/4441) | Window size reset on drag-back fix |
 
 ### Disabling Workarounds
 
@@ -159,9 +158,6 @@ To test without a specific workaround (e.g., to verify an upstream fix):
 ```bash
 # Disable all workarounds
 cargo run --example restore_window --no-default-features
-
-# Disable only workaround-winit-4441 (enable all others)
-cargo run --example restore_window --no-default-features --features workaround-winit-4341,workaround-winit-3124,workaround-winit-4440,workaround-winit-4443
 ```
 
 In your `Cargo.toml`, you can selectively enable features:

@@ -41,28 +41,12 @@ x11rb = { version = "0.13", default-features = false, features = ["dl-libxcb"] }
 
 [features]
 default = [
-  "workaround-winit-4441",
   "workaround-winit-4440",
   "workaround-winit-3124",
   "workaround-winit-4341",
   "workaround-winit-4443",
   "workaround-winit-4445",
 ]
-# macOS W4 drag-back size reset workaround
-# Issue: https://github.com/rust-windowing/winit/issues/4441
-#
-# When restoring a window from High DPI to Low DPI, AppKit caches the Phase 1
-# wrong-scale size. When the user drags the window back to the High DPI monitor,
-# AppKit resets the window to that cached size. This workaround detects the
-# drag-back and re-applies the correct size.
-#
-# Trade-off: Causes a brief visual flash when the correction is applied. This only
-# occurs in the specific scenario of: launching from a high-scale monitor, restoring
-# to a low-scale monitor, then dragging the window back to the high-scale monitor.
-# The flash is unavoidable without an upstream fix to winit #4441.
-#
-# Requires: workaround-winit-4440 (the two-phase restore creates the W4 scenario)
-workaround-winit-4441 = ["workaround-winit-4440"]
 # Scale factor compensation workaround (Windows, macOS, Linux X11)
 # Issue: https://github.com/rust-windowing/winit/issues/4440
 #

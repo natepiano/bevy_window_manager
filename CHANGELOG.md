@@ -20,9 +20,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Fix panic when laptop lid is closed (monitor removed event). `save_window_state` and `effective_mode` now handle empty monitor list gracefully instead of panicking in `Monitors::closest_to()`.
 - `effective_mode` now correctly detects when exiting borderless fullscreen via macOS green button. Previously it trusted `window.mode` for `BorderlessFullscreen`, which isn't updated by Bevy/winit when exiting native fullscreen, causing the window to incorrectly save as fullscreen.
 - Window is now automatically hidden during startup and shown after restore to prevent visual flash at default position.
-- Fix panic in `DragBackSizeProtection` systems when resizing a window. Bevy's `auto_insert_apply_deferred` flushed resource removal commands between chained systems, causing subsequent systems to fail validation despite the shared `run_if` guard passing. Each system now has its own `run_if(resource_exists::<DragBackSizeProtection>)` guard.
 
 ### Removed
+
+- Remove `workaround-winit-4441` (macOS drag-back size fix). The underlying AppKit behavior was fixed in macOS Tahoe 26.3, and the workaround now causes incorrect size doubling when dragging between monitors.
 
 - Remove `WindowExt` trait; unify monitor detection and effective mode in `CurrentMonitor` component via `update_current_monitor` system
 
@@ -50,7 +51,6 @@ Stable release for Bevy 0.18.0 - no changes from 0.18.0-rc.1.
 
 - Windows platform support with proper multi-monitor window restore
 - Windows DPI drag fix: workaround for window bouncing/resizing bug when dragging between monitors with different scale factors ([winit #4041](https://github.com/rust-windowing/winit/issues/4041), fix in [PR #4341](https://github.com/rust-windowing/winit/pull/4341) not yet released)
-- macOS drag-back size fix: workaround for window size resetting when dragging back to launch monitor after cross-DPI restore ([winit #4441](https://github.com/rust-windowing/winit/issues/4441)). **Trade-off:** Causes a brief visual flash in this rare scenario (launching from high-scale, restoring to low-scale, then dragging back to high-scale). Controlled by `workaround-winit-4441` feature flag.
 - `app_name` field in `WindowState` to track which application saved the state file
 
 ### Fixed

@@ -105,36 +105,6 @@
     },
 
     {
-      "id": "dpi_drag_stability_W4",
-      "description": "Tests AppKit per-scale size tracking bug - window size should not reset when dragging between monitors",
-      "automation": "human_assisted",
-      "launch_monitor": 0,
-      "requires": {"min_monitors": 2, "different_scales": true},
-      "workaround_keys": ["W4"],
-
-      "workaround_validation": {
-        "feature_flag": "workaround-winit-4441",
-        "build_without": "--no-default-features --features workaround-winit-4440",
-        "build_with": "",
-        "without_behavior": "Window size shrinks incorrectly when dragged from Monitor 1 back to Monitor 0",
-        "with_behavior": "Window size is preserved when dragged back (brief visual flash is expected)"
-      },
-
-      "ron_file": "dpi_drag_size_stability.ron",
-
-      "instructions": [
-        "Window should appear on Monitor 1 (low-DPI)",
-        "Drag the window back to Monitor 0 (high-DPI)",
-        "Observe the window size after dragging"
-      ],
-
-      "success_criteria": {
-        "without_workaround": "Window size shrinks (appears smaller than before)",
-        "with_workaround": "Window size is preserved (same logical size, brief flash is OK)"
-      }
-    },
-
-    {
       "id": "borderless_green_button_exit",
       "description": "Exit borderless fullscreen via green button - validates effective_mode detects exit",
       "automation": "human_assisted",
