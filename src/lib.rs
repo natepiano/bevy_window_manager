@@ -38,7 +38,6 @@ mod monitors;
 mod state;
 mod systems;
 mod types;
-mod window_ext;
 #[cfg(all(target_os = "windows", feature = "workaround-winit-4341"))]
 mod windows_dpi_fix;
 #[cfg(all(target_os = "linux", feature = "workaround-winit-4445"))]
@@ -65,8 +64,6 @@ pub use types::WindowIdentifier;
 pub use types::WindowPositioned;
 pub use types::WindowState;
 pub use types::WindowTargetLoaded;
-pub use window_ext::WindowExt;
-
 /// The main plugin. See module docs for usage.
 ///
 /// Default state file locations:
@@ -199,8 +196,14 @@ fn on_managed_window_added(
 
     if !already_saved {
         if let Ok(window) = windows.get(entity) {
-            let monitor = window.monitor(&monitors);
-            let mode = SavedWindowMode::from(&window.effective_mode(&monitors));
+            let monitor = match window.position {
+                bevy::window::WindowPosition::At(pos) => *monitors.monitor_for_window(
+                    pos,
+                    window.physical_width(),
+                    window.physical_height(),
+                ),
+                _ => *monitors.first(),
+            };
             let position = match window.position {
                 bevy::window::WindowPosition::At(pos) => Some((pos.x, pos.y)),
                 _ => None,
@@ -210,7 +213,7 @@ fn on_managed_window_added(
                 width: window.physical_width(),
                 height: window.physical_height(),
                 monitor_index: monitor.index,
-                mode,
+                mode: SavedWindowMode::Windowed,
                 app_name: String::new(),
             };
 
@@ -517,22 +520,14 @@ fn build_plugin(app: &mut App, path: PathBuf, persistence: ManagedWindowPersiste
         systems::restore_windows.run_if(has_restoring_windows),
     );
 
-    // Linux: includes Wayland monitor detection with ordering constraint
-    #[cfg(target_os = "linux")]
+    // Unified monitor detection + save window state
     app.add_systems(
         Update,
         (
-            systems::update_wayland_monitor.run_if(systems::is_wayland),
+            systems::update_current_monitor,
             systems::save_window_state
                 .run_if(no_restoring_windows)
-                .after(systems::update_wayland_monitor),
+                .after(systems::update_current_monitor),
         ),
-    );
-
-    // Non-Linux: no Wayland handling needed
-    #[cfg(not(target_os = "linux"))]
-    app.add_systems(
-        Update,
-        systems::save_window_state.run_if(no_restoring_windows),
     );
 }

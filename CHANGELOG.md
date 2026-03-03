@@ -22,6 +22,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Window is now automatically hidden during startup and shown after restore to prevent visual flash at default position.
 - Fix panic in `DragBackSizeProtection` systems when resizing a window. Bevy's `auto_insert_apply_deferred` flushed resource removal commands between chained systems, causing subsequent systems to fail validation despite the shared `run_if` guard passing. Each system now has its own `run_if(resource_exists::<DragBackSizeProtection>)` guard.
 
+### Removed
+
+- Remove `WindowExt` trait; unify monitor detection and effective mode in `CurrentMonitor` component via `update_current_monitor` system
+
 ## [0.18.0] - 2026-01-15
 
 Stable release for Bevy 0.18.0 - no changes from 0.18.0-rc.1.

@@ -1,23 +1,14 @@
 //! Systems for window restoration and state management.
 //!
-//! # Wayland Monitor Detection
+//! # Monitor Detection
 //!
-//! On Wayland, `window.position` always returns `(0,0)` for security/privacy reasons.
-//! Position-based monitor detection (which works on X11/macOS/Windows) therefore always
-//! returns Monitor 0.
+//! [`update_current_monitor`] is the unified system that maintains `CurrentMonitor` on all
+//! managed windows. It handles both position-based detection (non-Wayland) and winit polling
+//! (Wayland), plus computes the effective window mode.
 //!
-//! ## Solution: The `CurrentMonitor` Component
-//!
-//! We use a `CurrentMonitor` component on the Window entity:
-//!
-//! - **Non-Wayland**: [`save_window_state`] detects via position and updates the component
-//! - **Wayland**: [`update_wayland_monitor`] polls winit's `current_monitor()` each frame
-//!
-//! ## Why focus matters
-//!
-//! On Wayland, [`save_window_state`] runs on `Changed<Window>` which fires on focus changes,
-//! cursor movement, etc. Since position-based detection always returns Monitor 0, we must
-//! preserve the existing `CurrentMonitor` component value rather than overwriting it.
+//! On Wayland, `window.position` always returns `(0,0)` for security/privacy reasons, so
+//! position-based detection would always return Monitor 0. Instead, winit's `current_monitor()`
+//! is polled each frame.
 //!
 //! We only trust `current_monitor()` when the window has focus because testing showed
 //! incorrect values when unfocused (possibly our own bug, possibly winit behavior).
@@ -36,6 +27,7 @@ use super::types::WindowState;
 #[cfg(all(target_os = "macos", feature = "workaround-winit-4441"))]
 use crate::macos_drag_back_fix::DragBackSizeProtection;
 use crate::monitors::CurrentMonitor;
+use crate::monitors::MonitorInfo;
 use crate::monitors::Monitors;
 #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
 use crate::types::FullscreenRestoreState;
@@ -50,7 +42,6 @@ use crate::types::WindowRestoreState;
 use crate::types::WindowTargetLoaded;
 use crate::types::WinitInfo;
 use crate::types::X11FrameCompensated;
-use crate::window_ext::WindowExt;
 
 /// Populate `WinitInfo` resource from winit (decoration and starting monitor).
 ///
@@ -121,7 +112,10 @@ pub fn init_winit_info(
             // Insert initial CurrentMonitor component on window entity
             commands
                 .entity(*window_entity)
-                .insert(CurrentMonitor(starting_monitor));
+                .insert(CurrentMonitor {
+                    monitor:        starting_monitor,
+                    effective_mode: WindowMode::Windowed,
+                });
 
             commands.insert_resource(WinitInfo {
                 starting_monitor_index,
@@ -446,7 +440,6 @@ pub struct CachedWindowState {
     clippy::option_if_let_else
 )]
 pub fn save_window_state(
-    mut commands: Commands,
     config: Res<RestoreWindowConfig>,
     monitors: Res<Monitors>,
     persistence: Res<crate::ManagedWindowPersistence>,
@@ -467,7 +460,6 @@ pub fn save_window_state(
     _non_send: NonSendMarker,
 ) {
     // Can't save state if no monitors exist (e.g., laptop lid closed).
-    // This also prevents saving stale `effective_mode` values (see `WindowExt::effective_mode`).
     if monitors.is_empty() {
         return;
     }
@@ -508,31 +500,17 @@ pub fn save_window_state(
             "[save_window_state] [{key}] SAVE DETAIL: pos={pos:?} physical={}x{} logical={:.0}x{:.0} res_scale={res_scale}",
             width, height, logical_w, logical_h
         );
-        let mode: SavedWindowMode = (&window.effective_mode(&monitors)).into();
-
-        // Get monitor info. See module docs for Wayland monitor detection details.
-        // On non-Wayland: use position-based detection if we have a real position,
-        // otherwise preserve the existing `CurrentMonitor` (set by `init_winit_info`
-        // via `current_monitor()`). Position `Automatic` means we don't have a real
-        // position yet, so position-based detection would return the wrong monitor.
-        let (monitor_index, monitor_scale) = if is_wayland() {
-            existing_monitor.map_or_else(
-                || {
-                    let p = monitors.first();
-                    (p.index, p.scale)
-                },
-                |m| (m.index, m.scale),
-            )
-        } else if matches!(window.position, bevy::window::WindowPosition::At(_)) {
-            let info = window.monitor(&monitors);
-            commands.entity(window_entity).insert(CurrentMonitor(*info));
-            (info.index, info.scale)
-        } else if let Some(m) = existing_monitor {
-            (m.index, m.scale)
-        } else {
-            let info = window.monitor(&monitors);
-            (info.index, info.scale)
-        };
+        // Read monitor and effective mode from `CurrentMonitor` (maintained by
+        // `update_current_monitor`)
+        let (monitor_index, monitor_scale) = existing_monitor.map_or_else(
+            || {
+                let p = monitors.first();
+                (p.index, p.scale)
+            },
+            |m| (m.index, m.scale),
+        );
+        let mode: SavedWindowMode =
+            existing_monitor.map_or_else(|| (&window.mode).into(), |m| (&m.effective_mode).into());
 
         let entry = cached.entry(window_entity).or_default();
 
@@ -808,49 +786,109 @@ pub fn is_wayland() -> bool {
             .unwrap_or(false)
 }
 
-/// Polls winit's `current_monitor()` on Wayland to update `CurrentMonitor`.
-/// Only runs on Wayland; only updates when window has focus.
-/// See module docs for Wayland monitor detection details.
-#[cfg(target_os = "linux")]
-pub fn update_wayland_monitor(
+/// Unified monitor detection system. Maintains `CurrentMonitor` on all managed windows.
+///
+/// - **Non-Wayland**: detects monitor from window position using center-point logic
+/// - **Wayland**: polls winit's `current_monitor()` (only trusted when focused)
+/// - **All platforms**: computes `effective_mode` (handles macOS green button fullscreen)
+pub fn update_current_monitor(
     mut commands: Commands,
-    windows: Query<(Entity, &Window), Or<(With<PrimaryWindow>, With<crate::ManagedWindow>)>>,
+    windows: Query<
+        (Entity, &Window, Option<&CurrentMonitor>),
+        Or<(With<PrimaryWindow>, With<crate::ManagedWindow>)>,
+    >,
     monitors: Res<Monitors>,
-    mut cached_indices: Local<std::collections::HashMap<Entity, Option<usize>>>,
     _non_send: NonSendMarker,
 ) {
-    for (window_entity, window) in &windows {
-        // Only trust current_monitor() when window has focus - winit returns
-        // the focused monitor, not the window's monitor, when unfocused
-        if !window.focused {
-            continue;
-        }
+    if monitors.is_empty() {
+        return;
+    }
 
-        let detected_index: Option<usize> = WINIT_WINDOWS.with(|ww| {
-            let ww = ww.borrow();
-            ww.get_window(window_entity).and_then(|winit_window| {
-                winit_window.current_monitor().and_then(|current_monitor| {
-                    let pos = current_monitor.position();
-                    monitors.at(pos.x, pos.y).map(|mon| mon.index)
-                })
-            })
+    for (entity, window, existing) in &windows {
+        // Detect which monitor this window is on
+        let monitor_info = if is_wayland() {
+            // Wayland: poll winit's current_monitor() when focused, otherwise preserve existing
+            if window.focused {
+                wayland_detect_monitor(entity, &monitors)
+                    .unwrap_or_else(|| existing.map_or(*monitors.first(), |cm| cm.monitor))
+            } else {
+                existing.map_or(*monitors.first(), |cm| cm.monitor)
+            }
+        } else if let bevy::window::WindowPosition::At(pos) = window.position {
+            // Non-Wayland with known position: use center-point detection
+            *monitors.monitor_for_window(pos, window.physical_width(), window.physical_height())
+        } else {
+            // Position unknown (e.g., Automatic): preserve existing or fallback
+            existing.map_or(*monitors.first(), |cm| cm.monitor)
+        };
+
+        // Compute effective mode
+        let effective_mode = compute_effective_mode(window, &monitor_info, &monitors);
+
+        let new_current = CurrentMonitor {
+            monitor: monitor_info,
+            effective_mode,
+        };
+
+        // Only insert if changed to avoid unnecessary change detection triggers
+        let changed = existing.map_or(true, |cm| {
+            cm.monitor.index != new_current.monitor.index
+                || cm.effective_mode != new_current.effective_mode
         });
 
-        let cached = cached_indices.get(&window_entity).copied().flatten();
-
-        // Only update if monitor changed
-        if Some(detected_index) != Some(Some(cached.unwrap_or(usize::MAX))) {
-            if let Some(idx) = detected_index
-                && let Some(info) = monitors.by_index(idx)
-            {
-                debug!(
-                    "[update_wayland_monitor] Monitor changed: {:?} -> {}",
-                    cached, idx
-                );
-                commands.entity(window_entity).insert(CurrentMonitor(*info));
-            }
-            cached_indices.insert(window_entity, detected_index);
+        if changed {
+            commands.entity(entity).insert(new_current);
         }
+    }
+}
+
+/// Detect monitor on Wayland by polling winit's `current_monitor()`.
+fn wayland_detect_monitor(entity: Entity, monitors: &Monitors) -> Option<MonitorInfo> {
+    WINIT_WINDOWS.with(|ww| {
+        let ww = ww.borrow();
+        ww.get_window(entity).and_then(|winit_window| {
+            winit_window.current_monitor().and_then(|current_monitor| {
+                let pos = current_monitor.position();
+                monitors.at(pos.x, pos.y).copied()
+            })
+        })
+    })
+}
+
+/// Compute the effective window mode, including macOS green button detection.
+///
+/// On macOS, clicking the green "maximize" button fills the screen but `window.mode`
+/// remains `Windowed`. This detects that case and returns `BorderlessFullscreen`.
+fn compute_effective_mode(
+    window: &Window,
+    monitor_info: &MonitorInfo,
+    monitors: &Monitors,
+) -> WindowMode {
+    // Trust exclusive fullscreen - OS manages this mode
+    if matches!(window.mode, WindowMode::Fullscreen(_, _)) {
+        return window.mode;
+    }
+
+    // Can't determine effective mode without monitors
+    if monitors.is_empty() {
+        return window.mode;
+    }
+
+    // On Wayland, position is unavailable so we can only trust self.mode
+    let bevy::window::WindowPosition::At(pos) = window.position else {
+        return window.mode;
+    };
+
+    // Check if window spans full width and reaches bottom of monitor
+    let full_width = window.physical_width() == monitor_info.size.x;
+    let left_aligned = pos.x == monitor_info.position.x;
+    let reaches_bottom = pos.y + window.physical_height() as i32
+        == monitor_info.position.y + monitor_info.size.y as i32;
+
+    if full_width && left_aligned && reaches_bottom {
+        WindowMode::BorderlessFullscreen(MonitorSelection::Index(monitor_info.index))
+    } else {
+        WindowMode::Windowed
     }
 }
 
@@ -899,7 +937,8 @@ fn apply_window_geometry(
                 pos, size.x, size.y
             );
         }
-        window.set_position_and_size(pos, size);
+        window.position = WindowPosition::At(pos);
+        window.resolution.set_physical_resolution(size.x, size.y);
     } else {
         if let Some(r) = ratio {
             debug!(

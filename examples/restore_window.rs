@@ -45,7 +45,6 @@ use bevy_window_manager::Monitors;
 use bevy_window_manager::PRIMARY_WINDOW_KEY;
 use bevy_window_manager::RestoreWindowConfig;
 use bevy_window_manager::SavedWindowMode;
-use bevy_window_manager::WindowExt;
 use bevy_window_manager::WindowManagerPlugin;
 use bevy_window_manager::WindowPositioned;
 use bevy_window_manager::WindowState;
@@ -220,10 +219,9 @@ fn build_comparison_spans(
     file_state: Option<&WindowState>,
     window: &Window,
     monitor: &CurrentMonitor,
-    monitors_res: &Monitors,
     font: &TextFont,
 ) {
-    let effective_mode = window.effective_mode(monitors_res);
+    let effective_mode = monitor.effective_mode;
     let scale = window.resolution.scale_factor();
 
     // Current values
@@ -423,7 +421,7 @@ fn update_primary_display(
         add_span(cb, &font, &format!("{monitor_row}\n\n"), DEFAULT_COLOR);
 
         // Comparison table
-        build_comparison_spans(cb, file_state, window, monitor, &monitors_res, &font);
+        build_comparison_spans(cb, file_state, window, monitor, &font);
 
         // Video modes
         add_span(
@@ -452,7 +450,7 @@ fn update_primary_display(
         // Managed windows list
         let mut managed_lines = Vec::new();
         for (mw, managed, current_monitor) in &managed_q {
-            let mon = current_monitor.map_or_else(|| *mw.monitor(&monitors_res), |cm| cm.0);
+            let mon = current_monitor.map_or(*monitors_res.first(), |cm| cm.monitor);
             let pos = match mw.position {
                 WindowPosition::At(p) => format!("({}, {})", p.x, p.y),
                 _ => "Automatic".to_string(),
@@ -496,8 +494,10 @@ fn update_secondary_displays(
         let Ok((window, current_monitor)) = windows.get(display.0) else {
             continue;
         };
-        let monitor_info = current_monitor
-            .map_or_else(|| CurrentMonitor(*window.monitor(&monitors_res)), |cm| *cm);
+        let monitor_info = current_monitor.copied().unwrap_or(CurrentMonitor {
+            monitor:        *monitors_res.first(),
+            effective_mode: window.mode,
+        });
         let name = managed_q
             .get(display.0)
             .map_or("unknown", |m| &m.window_name);
@@ -530,7 +530,7 @@ fn update_secondary_displays(
             );
 
             // Comparison table
-            build_comparison_spans(cb, file_state, window, &monitor_info, &monitors_res, &font);
+            build_comparison_spans(cb, file_state, window, &monitor_info, &font);
 
             // Video modes
             add_span(
@@ -629,15 +629,16 @@ fn handle_window_mode_input(
         return;
     };
 
-    let monitor =
-        current_monitor.map_or_else(|| CurrentMonitor(*window.monitor(&monitors_res)), |cm| *cm);
+    let monitor = current_monitor.copied().unwrap_or(CurrentMonitor {
+        monitor:        *monitors_res.first(),
+        effective_mode: window.mode,
+    });
 
     // Sync `window.mode` to the effective mode so bevy's cached state matches reality.
     // The OS can change fullscreen state (e.g. macOS green button) without updating
     // `window.mode`, causing bevy's `changed_windows` to skip the mode change.
-    let effective = window.effective_mode(&monitors_res);
-    if window.mode != effective {
-        window.mode = effective;
+    if window.mode != monitor.effective_mode {
+        window.mode = monitor.effective_mode;
     }
 
     let video_modes: Vec<VideoMode> = bevy_monitors

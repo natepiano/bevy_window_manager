@@ -5,6 +5,7 @@
 
 use bevy::prelude::*;
 use bevy::window::Monitor;
+use bevy::window::WindowMode;
 
 /// Plugin that manages the `Monitors` resource.
 pub struct MonitorPlugin;
@@ -38,23 +39,35 @@ pub struct Monitors {
     list: Vec<MonitorInfo>,
 }
 
-/// Component storing the current monitor for a window.
+/// Component storing the current monitor and effective window mode.
 ///
-/// Query this alongside your window to get monitor information:
+/// This is the single source of truth for which monitor a window is on and its
+/// effective display mode. Updated automatically by the plugin's unified monitor
+/// detection system.
+///
+/// The `effective_mode` field reflects what the user actually sees, even when
+/// `window.mode` is stale (e.g., macOS green button fullscreen reports `Windowed`).
+///
+/// Derefs to [`MonitorInfo`] for convenient access to monitor fields:
 /// ```ignore
 /// fn my_system(q: Query<(&Window, &CurrentMonitor), With<PrimaryWindow>>) {
 ///     let (window, monitor) = q.single();
-///     println!("Window on monitor {} at scale {}", monitor.index, monitor.scale);
+///     println!("Monitor {} at scale {}, mode: {:?}", monitor.index, monitor.scale, monitor.effective_mode);
 /// }
 /// ```
 #[derive(Component, Clone, Copy, Debug, Reflect)]
 #[reflect(Component)]
-pub struct CurrentMonitor(pub MonitorInfo);
+pub struct CurrentMonitor {
+    /// The monitor this window is currently on.
+    pub monitor:        MonitorInfo,
+    /// The effective window mode, accounting for OS-level fullscreen changes.
+    pub effective_mode: WindowMode,
+}
 
 impl std::ops::Deref for CurrentMonitor {
     type Target = MonitorInfo;
 
-    fn deref(&self) -> &Self::Target { &self.0 }
+    fn deref(&self) -> &Self::Target { &self.monitor }
 }
 
 impl Monitors {
@@ -93,6 +106,17 @@ impl Monitors {
         self.list
             .first()
             .expect("Monitors::first() requires at least one monitor")
+    }
+
+    /// Find the monitor a window is on, using window center for detection.
+    ///
+    /// Uses the center point to correctly handle windows spanning monitor boundaries
+    /// and to avoid Windows invisible border offset (winit #4107).
+    #[must_use]
+    pub fn monitor_for_window(&self, position: IVec2, width: u32, height: u32) -> &MonitorInfo {
+        let center_x = position.x + (width / 2) as i32;
+        let center_y = position.y + (height / 2) as i32;
+        self.closest_to(center_x, center_y)
     }
 
     /// Find the monitor at position, or the closest one if outside all bounds.

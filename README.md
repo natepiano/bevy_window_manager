@@ -56,13 +56,20 @@ Query available monitors sorted by position:
 
 Information about a single monitor: `index`, `scale`, `position`, and `size`.
 
-### `WindowExt` Extension Trait
+### `CurrentMonitor` Component
 
-Requires `use bevy_window_manager::WindowExt`:
+Automatically maintained on all managed windows. Query it to get monitor info and effective mode:
 
-- `window.monitor(&monitors)` – Get the monitor this window is currently on
-- `window.effective_mode(&monitors)` – Detect effective window mode (handles macOS green button fullscreen)
-- `window.set_position_and_size(position, size)` – Set both in one call
+```rust
+fn my_system(q: Query<(&Window, &CurrentMonitor), With<PrimaryWindow>>) {
+    let (window, monitor) = q.single();
+    println!("Monitor {}, scale {}", monitor.index, monitor.scale);
+    println!("Effective mode: {:?}", monitor.effective_mode);
+}
+```
+
+- `monitor.index`, `monitor.scale`, `monitor.position`, `monitor.size` – Monitor info (via `Deref<Target = MonitorInfo>`)
+- `monitor.effective_mode` – The actual window mode, even when `window.mode` is stale (e.g., macOS green button fullscreen reports `Windowed` but the window is actually fullscreen)
 
 ### Plugin Configuration
 
