@@ -446,11 +446,6 @@ fn has_restoring_windows(q: Query<(), With<TargetPosition>>) -> bool { !q.is_emp
 /// Run condition: returns true if no entity has a `TargetPosition` component.
 fn no_restoring_windows(q: Query<(), With<TargetPosition>>) -> bool { q.is_empty() }
 
-/// Run condition: returns true if any entity needs monitor detection.
-fn has_pending_monitor_detection(q: Query<(), With<types::NeedsMonitorDetection>>) -> bool {
-    !q.is_empty()
-}
-
 /// The run conditions allow us to separate the initial primary window restore from
 /// subsequent positions saves - which we dont' want to do until AFTER we've done
 /// the initial restore.
@@ -520,13 +515,6 @@ fn build_plugin(app: &mut App, path: PathBuf, persistence: ManagedWindowPersiste
     app.add_systems(
         Update,
         systems::restore_windows.run_if(has_restoring_windows),
-    );
-
-    // Detect correct monitor for windows that launched with no save file.
-    // Runs once per window (removes `NeedsMonitorDetection` after detection).
-    app.add_systems(
-        Update,
-        systems::detect_monitor_after_creation.run_if(has_pending_monitor_detection),
     );
 
     // Linux: includes Wayland monitor detection with ordering constraint

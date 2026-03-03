@@ -36,12 +36,10 @@ use super::types::WindowState;
 #[cfg(all(target_os = "macos", feature = "workaround-winit-4441"))]
 use crate::macos_drag_back_fix::DragBackSizeProtection;
 use crate::monitors::CurrentMonitor;
-use crate::monitors::MonitorInfo;
 use crate::monitors::Monitors;
 #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
 use crate::types::FullscreenRestoreState;
 use crate::types::MonitorScaleStrategy;
-use crate::types::NeedsMonitorDetection;
 use crate::types::SCALE_FACTOR_EPSILON;
 use crate::types::SavedWindowMode;
 use crate::types::TargetPosition;
@@ -195,18 +193,13 @@ pub fn load_target_position(
 
     let Some(state) = config.loaded_states.get(state::PRIMARY_WINDOW_KEY).cloned() else {
         debug!("[load_target_position] No saved bevy_window_manager state, showing window");
-        // No saved state - show window at default position (user may have started hidden).
-        // Insert `NeedsMonitorDetection` so a one-shot Update system can nudge the window
-        // to force macOS to report the actual monitor (at PreStartup it reports the
-        // macOS primary monitor, not the launch monitor).
-        let entity = *window_entity;
+        // No saved state - show window at default position (user may have started hidden)
         commands.queue(|world: &mut World| {
             let mut query = world.query_filtered::<&mut Window, With<PrimaryWindow>>();
             if let Some(mut window) = query.iter_mut(world).next() {
                 window.visible = true;
             }
         });
-        commands.entity(entity).insert(NeedsMonitorDetection);
         return;
     };
 
@@ -467,7 +460,6 @@ pub fn save_window_state(
         (
             Or<(With<PrimaryWindow>, With<crate::ManagedWindow>)>,
             Changed<Window>,
-            Without<NeedsMonitorDetection>,
         ),
     >,
     primary_q: Query<(), With<PrimaryWindow>>,
@@ -806,122 +798,6 @@ enum RestoreStatus {
     Complete,
     /// Waiting for conditions to be met (scale change, window position, etc.).
     Waiting,
-}
-
-/// Detect the correct monitor for windows that launched with no save file.
-///
-/// At startup, `current_monitor()` and `outer_position()` return stale data
-/// (macOS primary monitor). This two-phase system:
-///
-/// 1. **Phase 1** (`Pending`): Triggers a winit event by calling `request_redraw()` on the winit
-///    window, which forces macOS to process the window placement.
-/// 2. **Phase 2** (`WaitingForEvent`): After bevy has processed the winit events, checks if
-///    `Window.position` has changed from `Automatic` to `At(pos)`, which means we now have a real
-///    position for monitor detection.
-///
-/// Falls back to scale-factor matching if position never becomes available.
-pub fn detect_monitor_after_creation(
-    mut commands: Commands,
-    windows: Query<(Entity, &Window), With<NeedsMonitorDetection>>,
-    monitors: Res<Monitors>,
-    mut winit_info: ResMut<WinitInfo>,
-    mut phase: Local<std::collections::HashMap<Entity, u8>>,
-    _non_send: NonSendMarker,
-) {
-    for (entity, window) in &windows {
-        let frame = phase.entry(entity).or_insert(0);
-
-        if *frame == 0 {
-            // Phase 1: trigger winit events by requesting a redraw and nudging size
-            debug!("[detect_monitor_after_creation] Phase 1: triggering winit events");
-            WINIT_WINDOWS.with(|ww| {
-                let ww = ww.borrow();
-                if let Some(winit_window) = ww.get_window(entity) {
-                    winit_window.request_redraw();
-                    // Also try requesting inner size to force a resize event
-                    let mut inner = winit_window.inner_size();
-                    inner.width = inner.width.saturating_sub(1);
-                    let _ = winit_window.request_inner_size(inner);
-                }
-            });
-            *frame = 1;
-            continue;
-        }
-
-        // Phase 2+: check if we have a real position now
-        debug!(
-            "[detect_monitor_after_creation] Phase 2 (frame {}): position={:?} scale={}",
-            frame,
-            window.position,
-            window.resolution.scale_factor()
-        );
-
-        // Check if bevy now has a real position from winit events
-        let detected = match window.position {
-            bevy::window::WindowPosition::At(pos) => {
-                debug!(
-                    "[detect_monitor_after_creation] Got real position ({}, {})",
-                    pos.x, pos.y
-                );
-                monitors
-                    .at(pos.x, pos.y)
-                    .or_else(|| Some(monitors.closest_to(pos.x, pos.y)))
-                    .copied()
-            },
-            _ => {
-                // Still Automatic — try scale factor matching as fallback
-                let window_scale = window.resolution.scale_factor();
-                let mut matching: Vec<MonitorInfo> = Vec::new();
-                let mut idx = 0;
-                while let Some(m) = monitors.by_index(idx) {
-                    if (m.scale - f64::from(window_scale)).abs() < SCALE_FACTOR_EPSILON {
-                        matching.push(*m);
-                    }
-                    idx += 1;
-                }
-
-                if matching.len() == 1 {
-                    debug!(
-                        "[detect_monitor_after_creation] Scale {window_scale} uniquely matches monitor {}",
-                        matching[0].index
-                    );
-                    Some(matching[0])
-                } else if *frame < 5 {
-                    // Wait a few more frames for the position event
-                    debug!(
-                        "[detect_monitor_after_creation] Waiting for position event (frame {frame})"
-                    );
-                    *frame += 1;
-                    continue;
-                } else {
-                    debug!(
-                        "[detect_monitor_after_creation] Giving up after {frame} frames, using current_monitor fallback"
-                    );
-                    WINIT_WINDOWS.with(|ww| {
-                        let ww = ww.borrow();
-                        ww.get_window(entity).and_then(|winit_window| {
-                            winit_window.current_monitor().and_then(|cm| {
-                                let cm_pos = cm.position();
-                                monitors.at(cm_pos.x, cm_pos.y).copied()
-                            })
-                        })
-                    })
-                }
-            },
-        };
-
-        if let Some(monitor_info) = detected {
-            debug!(
-                "[detect_monitor_after_creation] Correcting starting monitor to {} (scale={})",
-                monitor_info.index, monitor_info.scale
-            );
-            commands.entity(entity).insert(CurrentMonitor(monitor_info));
-            winit_info.starting_monitor_index = monitor_info.index;
-        }
-
-        phase.remove(&entity);
-        commands.entity(entity).remove::<NeedsMonitorDetection>();
-    }
 }
 
 /// Run condition: returns true if running on Wayland.

@@ -171,15 +171,6 @@ impl WinitInfo {
     }
 }
 
-/// Marker for windows that need monitor detection after creation.
-///
-/// At PreStartup, macOS reports the primary monitor via `current_monitor()`,
-/// not the monitor where the app was launched. This marker triggers a one-shot
-/// system that nudges the window to force macOS to report the actual monitor,
-/// then updates `CurrentMonitor` and `WinitInfo`.
-#[derive(Component)]
-pub struct NeedsMonitorDetection;
-
 /// Token indicating X11 frame extent compensation is complete (W6 workaround).
 ///
 /// This component gates `restore_windows` - the restore system cannot process
