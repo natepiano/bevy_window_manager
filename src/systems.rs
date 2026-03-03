@@ -210,12 +210,17 @@ pub fn load_target_position(
     let starting_info = monitors.by_index(starting_monitor_index);
     let starting_scale = starting_info.map_or(1.0, |m| m.scale);
 
-    let Some(target_info) = monitors.by_index(state.monitor_index) else {
-        debug!(
-            "[load_target_position] Target monitor index {} not found",
+    // Fall back to the first monitor if the saved monitor no longer exists
+    // (e.g., external display unplugged). Drop the saved position since it
+    // referred to coordinates on the missing monitor.
+    let (target_info, fallback_pos) = if let Some(info) = monitors.by_index(state.monitor_index) {
+        (info, saved_pos)
+    } else {
+        warn!(
+            "[load_target_position] Target monitor {} not found, falling back to monitor 0",
             state.monitor_index
         );
-        return;
+        (monitors.first(), None)
     };
 
     let target_scale = target_info.scale;
@@ -244,17 +249,12 @@ pub fn load_target_position(
     // fixes (e.g., Bevy processing position before size) resolve the issue.
     let strategy = determine_scale_strategy(starting_scale, target_scale);
 
-    let position = saved_pos
+    let position = fallback_pos
         .map(|(x, y)| clamp_position_to_monitor(x, y, target_info, outer_width, outer_height));
 
     debug!(
         "[load_target_position] Starting monitor={} scale={}, Target monitor={} scale={}, strategy={:?}, position={:?}",
-        starting_monitor_index,
-        starting_scale,
-        state.monitor_index,
-        target_scale,
-        strategy,
-        position
+        starting_monitor_index, starting_scale, target_info.index, target_scale, strategy, position
     );
 
     // Windows W3 workaround (winit #3124): For exclusive fullscreen restore, we must
@@ -285,11 +285,9 @@ pub fn load_target_position(
         starting_scale,
         monitor_scale_strategy: strategy,
         mode: state.mode,
-        target_monitor_index: state.monitor_index,
+        target_monitor_index: target_info.index,
         #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
         fullscreen_restore_state: FullscreenRestoreState::WaitingForSurface,
-        #[cfg(target_os = "macos")]
-        macos_deferred_fullscreen: None,
     });
 
     // Insert X11FrameCompensated token for platforms that don't need compensation.
@@ -680,19 +678,6 @@ pub fn restore_windows(
             try_apply_restore(&target, &mut window),
             RestoreStatus::Complete
         ) {
-            // macOS two-phase fullscreen: apply the deferred fullscreen mode now that
-            // the window is positioned on the correct monitor. This prevents macOS
-            // from tabbing multiple fullscreen windows into the same space.
-            #[cfg(target_os = "macos")]
-            if let Some(ref deferred) = target.macos_deferred_fullscreen {
-                let window_mode = deferred.to_window_mode(target.target_monitor_index);
-                window.mode = window_mode;
-                debug!(
-                    "[Restore] macOS: applied deferred fullscreen {:?}",
-                    window_mode
-                );
-            }
-
             // Insert W4 drag-back protection for HigherToLower restores
             #[cfg(all(target_os = "macos", feature = "workaround-winit-4441"))]
             if was_higher_to_lower {
@@ -795,15 +780,9 @@ pub fn is_wayland() -> bool {
 pub fn update_current_monitor(
     mut commands: Commands,
     windows: Query<
-        (
-            Entity,
-            &Window,
-            Option<&CurrentMonitor>,
-            Option<&crate::ManagedWindow>,
-        ),
+        (Entity, &Window, Option<&CurrentMonitor>),
         Or<(With<PrimaryWindow>, With<crate::ManagedWindow>)>,
     >,
-    primary_q: Query<&CurrentMonitor, With<PrimaryWindow>>,
     monitors: Res<Monitors>,
     _non_send: NonSendMarker,
 ) {
@@ -811,7 +790,7 @@ pub fn update_current_monitor(
         return;
     }
 
-    for (entity, window, existing, managed) in &windows {
+    for (entity, window, existing) in &windows {
         // Detect which monitor this window is on
         let monitor_info = if is_wayland() {
             // Wayland: poll winit's current_monitor() when focused, otherwise preserve existing
@@ -829,26 +808,8 @@ pub fn update_current_monitor(
             existing.map_or(*monitors.first(), |cm| cm.monitor)
         };
 
-        // On macOS, when a managed window is on the same monitor as a fullscreen primary,
-        // it's likely auto-tabbed into the primary's fullscreen space (not independently
-        // fullscreen). Skip the effective_mode override to avoid saving it as
-        // `BorderlessFullscreen`, which would create a separate fullscreen space on restore.
-        let is_likely_auto_tabbed = cfg!(target_os = "macos")
-            && managed.is_some()
-            && primary_q.iter().next().is_some_and(|primary_cm| {
-                primary_cm.monitor.index == monitor_info.index
-                    && matches!(
-                        primary_cm.effective_mode,
-                        WindowMode::BorderlessFullscreen(_) | WindowMode::Fullscreen(_, _)
-                    )
-            });
-
         // Compute effective mode
-        let effective_mode = if is_likely_auto_tabbed {
-            window.mode
-        } else {
-            compute_effective_mode(window, &monitor_info, &monitors)
-        };
+        let effective_mode = compute_effective_mode(window, &monitor_info, &monitors);
 
         let new_current = CurrentMonitor {
             monitor: monitor_info,

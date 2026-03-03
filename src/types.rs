@@ -292,35 +292,26 @@ pub enum MonitorScaleStrategy {
 pub struct TargetPosition {
     /// Final clamped position (adjusted to fit within target monitor).
     /// None on Wayland where clients can't access window position.
-    pub position:                  Option<IVec2>,
+    pub position:                 Option<IVec2>,
     /// Target width (content area, excluding window decoration).
-    pub width:                     u32,
+    pub width:                    u32,
     /// Target height (content area, excluding window decoration).
-    pub height:                    u32,
+    pub height:                   u32,
     /// Scale factor of the target monitor.
-    pub target_scale:              f64,
+    pub target_scale:             f64,
     /// Scale factor of the monitor where the window starts (keyboard focus monitor).
-    pub starting_scale:            f64,
+    pub starting_scale:           f64,
     /// Strategy for handling scale factor differences between monitors.
-    pub monitor_scale_strategy:    MonitorScaleStrategy,
+    pub monitor_scale_strategy:   MonitorScaleStrategy,
     /// Window mode to restore.
-    pub mode:                      SavedWindowMode,
+    pub mode:                     SavedWindowMode,
     /// Target monitor index for fullscreen restore.
     /// On non-Wayland platforms, this could be derived from position, but Wayland
     /// doesn't provide window position, so we store it explicitly.
-    pub target_monitor_index:      usize,
+    pub target_monitor_index:     usize,
     /// Fullscreen restore state (Windows only, DX12/DXGI workaround).
     #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
-    pub fullscreen_restore_state:  FullscreenRestoreState,
-    /// macOS two-phase fullscreen restore for managed windows.
-    ///
-    /// When multiple windows both go `BorderlessFullscreen`, macOS tabs them into
-    /// the same fullscreen space instead of placing them on separate monitors. To
-    /// work around this, managed fullscreen windows are first restored as Windowed
-    /// (positioned on the target monitor), then switched to fullscreen after
-    /// positioning completes. This field stashes the deferred fullscreen mode.
-    #[cfg(target_os = "macos")]
-    pub macos_deferred_fullscreen: Option<SavedWindowMode>,
+    pub fullscreen_restore_state: FullscreenRestoreState,
 }
 
 impl TargetPosition {

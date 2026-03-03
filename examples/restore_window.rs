@@ -4,13 +4,12 @@
 //! Run with: `cargo run --example restore_window`
 //!
 //! Controls (all windows):
-//! - Press `1` for exclusive fullscreen (uses selected video mode) WARNING: Exclusive fullscreen on
+//! - Press `1` or `Enter` for exclusive fullscreen (uses selected video mode) WARNING: Exclusive fullscreen on
 //!   macOS may panic on exit due to winit bugs. See: <https://github.com/rust-windowing/winit/issues/3668>
 //! - Press `2` for borderless fullscreen (recommended on macOS)
 //! - Press `W` or `Escape` for windowed mode
 //! - Press `Up`/`Down` to cycle through available video modes
 //!
-//! Controls (primary window only):
 //! - Press `Space` to spawn a new managed window
 //! - Press `P` to toggle persistence mode (`RememberAll` / `ActiveOnly`)
 //! - Press `Ctrl+Shift+Backspace` to clear saved state and quit
@@ -68,7 +67,7 @@ fn main() {
             (
                 update_primary_display,
                 update_secondary_displays,
-                handle_primary_input,
+                handle_global_input,
                 handle_window_mode_input,
                 debug_winit_monitor,
                 debug_window_changed,
@@ -452,7 +451,7 @@ fn update_primary_display(
             &font,
             &format!(
                 "\nControls:\n\
-                 [1] Exclusive Fullscreen  [2] Borderless Fullscreen\n\
+                 [1/Enter] Exclusive Fullscreen  [2] Borderless Fullscreen\n\
                  [W/Esc] Windowed\n\
                  [Space] Spawn managed window\n\
                  [P] Toggle persistence ({persistence:?})\n\
@@ -555,13 +554,17 @@ fn update_secondary_displays(
                 DEFAULT_COLOR,
             );
 
-            // Controls (mode switching only for secondary)
+            // Controls
             add_span(
                 cb,
                 &font,
                 "\nControls:\n\
-                 [1] Exclusive Fullscreen  [2] Borderless Fullscreen\n\
-                 [W/Esc] Windowed\n",
+                 [1/Enter] Exclusive Fullscreen  [2] Borderless Fullscreen\n\
+                 [W/Esc] Windowed\n\
+                 [Space] Spawn managed window\n\
+                 [P] Toggle persistence\n\
+                 [Ctrl+Shift+Backspace] Clear state and quit\n\
+                 [Q] Quit\n",
                 DEFAULT_COLOR,
             );
         });
@@ -570,15 +573,20 @@ fn update_secondary_displays(
 
 // --- Input Handling ---
 
-/// Handle primary-window-only inputs: spawn windows, toggle persistence, quit, reset.
-fn handle_primary_input(
+/// Handle global inputs: spawn windows, toggle persistence, quit, reset.
+///
+/// These work from any focused window, not just the primary.
+fn handle_global_input(
     keys: Res<ButtonInput<KeyCode>>,
-    primary_window: Single<&Window, With<PrimaryWindow>>,
+    windows: Query<&Window>,
+    managed_entities: Query<Entity, With<ManagedWindow>>,
     mut commands: Commands,
     mut counter: ResMut<WindowCounter>,
     mut persistence: ResMut<ManagedWindowPersistence>,
+    mut app_exit: MessageWriter<AppExit>,
 ) {
-    if !primary_window.focused {
+    // Only process input when any window is focused
+    if !windows.iter().any(|w| w.focused) {
         return;
     }
 
@@ -624,12 +632,26 @@ fn handle_primary_input(
                 info!("[restore_window] Cleared state file: {state_path:?}");
             }
         }
-        std::process::exit(0);
+        // despawn_managed_and_exit(&managed_entities, &mut commands, &mut app_exit);
+        app_exit.write(AppExit::Success);
     }
 
     if keys.just_pressed(KeyCode::KeyQ) {
-        std::process::exit(0);
+        // despawn_managed_and_exit(&managed_entities, &mut commands, &mut app_exit);
+        app_exit.write(AppExit::Success);
     }
+}
+
+/// Despawn all managed windows before exiting to prevent macOS hang during shutdown.
+fn despawn_managed_and_exit(
+    managed_entities: &Query<Entity, With<ManagedWindow>>,
+    commands: &mut Commands,
+    app_exit: &mut MessageWriter<AppExit>,
+) {
+    for entity in managed_entities.iter() {
+        commands.entity(entity).despawn();
+    }
+    app_exit.write(AppExit::Success);
 }
 
 /// Compute the state file path using the same logic as the plugin.
@@ -663,7 +685,12 @@ fn handle_window_mode_input(
     // Sync `window.mode` to the effective mode so bevy's cached state matches reality.
     // The OS can change fullscreen state (e.g. macOS green button) without updating
     // `window.mode`, causing bevy's `changed_windows` to skip the mode change.
-    if window.mode != monitor.effective_mode {
+    //
+    // Skip sync when the user has explicitly set an exclusive fullscreen mode — macOS
+    // may reject it and briefly oscillate between Fullscreen and Windowed. Syncing
+    // during that transition creates a feedback loop.
+    let is_explicit_fullscreen = matches!(window.mode, WindowMode::Fullscreen(_, _));
+    if !is_explicit_fullscreen && window.mode != monitor.effective_mode {
         window.mode = monitor.effective_mode;
     }
 
@@ -682,7 +709,7 @@ fn handle_window_mode_input(
         selected.set(monitor.index, current_idx + 1);
     }
 
-    if keys.just_pressed(KeyCode::Digit1) {
+    if keys.just_pressed(KeyCode::Digit1) || keys.just_pressed(KeyCode::Enter) {
         let selected_idx = selected
             .get(monitor.index)
             .min(video_modes.len().saturating_sub(1));

@@ -34,6 +34,8 @@
 
 #[cfg(all(target_os = "macos", feature = "workaround-winit-4441"))]
 mod macos_drag_back_fix;
+#[cfg(target_os = "macos")]
+mod macos_tabbing_fix;
 mod monitors;
 mod state;
 mod systems;
@@ -325,7 +327,6 @@ fn on_managed_window_load(
         &monitors,
         &winit_info,
         &mut commands,
-        &mut windows,
         primary_scale,
     );
 }
@@ -346,24 +347,26 @@ fn on_managed_window_load(
 /// which uses `set_outer_position` with the window's actual backing scale factor.
 fn restore_managed_window(
     entity: Entity,
-    window_name: &str,
+    _window_name: &str,
     saved_state: &types::WindowState,
     monitors: &Monitors,
     winit_info: &types::WinitInfo,
     commands: &mut Commands,
-    windows: &mut Query<&mut Window>,
     primary_scale: f64,
 ) {
-    let Some(target_info) = monitors.by_index(saved_state.monitor_index) else {
-        debug!(
-            "[restore_managed_window] Target monitor {} not found, showing window",
-            saved_state.monitor_index
-        );
-        if let Ok(mut window) = windows.get_mut(entity) {
-            window.visible = true;
-        }
-        return;
-    };
+    // Fall back to the first monitor if the saved monitor no longer exists
+    // (e.g., external display unplugged). Drop the saved position since it
+    // referred to coordinates on the missing monitor.
+    let (target_info, fallback_position) =
+        if let Some(info) = monitors.by_index(saved_state.monitor_index) {
+            (info, saved_state.position)
+        } else {
+            warn!(
+                "[restore_managed_window] Target monitor {} not found, falling back to monitor 0",
+                saved_state.monitor_index
+            );
+            (monitors.first(), None)
+        };
 
     let target_scale = target_info.scale;
     let width = saved_state.width;
@@ -379,7 +382,7 @@ fn restore_managed_window(
     let starting_scale = primary_scale;
     let strategy = systems::determine_scale_strategy(starting_scale, target_scale);
 
-    let position = saved_state.position.map(|(x, y)| {
+    let position = fallback_position.map(|(x, y)| {
         systems::clamp_position_to_monitor(x, y, target_info, outer_width, outer_height)
     });
 
@@ -388,7 +391,7 @@ fn restore_managed_window(
         saved_state.position,
         outer_width,
         outer_height,
-        saved_state.monitor_index,
+        target_info.index,
         target_info.position.x,
         target_info.position.y,
         target_info.size.x,
@@ -400,29 +403,6 @@ fn restore_managed_window(
     // `with_position`, which converts `PhysicalPosition` using the wrong scale factor
     // (`NSScreen::mainScreen` scale instead of the target monitor's scale).
 
-    // On macOS, managed windows that were fullscreen need two-phase restore:
-    // first position as Windowed on the target monitor, then apply fullscreen.
-    // This prevents macOS from tabbing multiple fullscreen windows into the same space.
-    //
-    // We also set `window.position = Centered(target_monitor)` so that `create_windows`
-    // places the OS window on the correct monitor from creation. Without this, macOS
-    // creates the window on the focused (primary) monitor and immediately pulls it
-    // into the primary's fullscreen tab group.
-    #[cfg(target_os = "macos")]
-    let (mode, macos_deferred_fullscreen) = if saved_state.mode.is_fullscreen() {
-        debug!(
-            "[restore_managed_window] macOS: deferring fullscreen {:?} for \"{window_name}\", centering on monitor {}",
-            saved_state.mode, saved_state.monitor_index
-        );
-        if let Ok(mut window) = windows.get_mut(entity) {
-            window.position =
-                WindowPosition::Centered(MonitorSelection::Index(saved_state.monitor_index));
-        }
-        (SavedWindowMode::Windowed, Some(saved_state.mode.clone()))
-    } else {
-        (saved_state.mode.clone(), None)
-    };
-    #[cfg(not(target_os = "macos"))]
     let mode = saved_state.mode.clone();
 
     let target = TargetPosition {
@@ -433,11 +413,9 @@ fn restore_managed_window(
         starting_scale,
         monitor_scale_strategy: strategy,
         mode,
-        target_monitor_index: saved_state.monitor_index,
+        target_monitor_index: target_info.index,
         #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
         fullscreen_restore_state: types::FullscreenRestoreState::WaitingForSurface,
-        #[cfg(target_os = "macos")]
-        macos_deferred_fullscreen,
     };
 
     commands.entity(entity).insert(target);
@@ -492,6 +470,9 @@ fn build_plugin(app: &mut App, path: PathBuf, persistence: ManagedWindowPersiste
 
     #[cfg(all(target_os = "macos", feature = "workaround-winit-4441"))]
     macos_drag_back_fix::init(app);
+
+    // #[cfg(target_os = "macos")]
+    // macos_tabbing_fix::init(app);
 
     #[cfg(all(target_os = "windows", feature = "workaround-winit-4341"))]
     windows_dpi_fix::init(app);

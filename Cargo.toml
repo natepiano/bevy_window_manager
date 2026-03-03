@@ -30,6 +30,11 @@ windows = { version = "0.62.2", features = [
   "Win32_UI_WindowsAndMessaging",
 ] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+raw-window-handle = "0.6"
+objc2 = "0.5"
+objc2-app-kit = { version = "0.2", features = ["NSView", "NSWindow", "NSResponder"] }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 raw-window-handle = "0.6"
 x11rb = { version = "0.13", default-features = false, features = ["dl-libxcb"] }
