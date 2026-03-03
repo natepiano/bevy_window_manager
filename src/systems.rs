@@ -669,10 +669,18 @@ pub fn restore_windows(
     for (entity, mut target, mut window) in &mut windows {
         // Managed windows skip `apply_initial_move` (called at PreStartup for primary only)
         // because `create_windows` hasn't created the winit window yet in the observer.
-        // Do the initial move here now that the winit window exists. This is needed for
-        // `HigherToLower` to trigger the scale change, and for other strategies to set
-        // the correct position before `try_apply_restore` runs.
-        if window.position == bevy::window::WindowPosition::Automatic && target.position.is_some() {
+        // For `HigherToLower`, we must move the window to the target monitor first to
+        // trigger a scale change — `try_apply_restore` waits for this before applying size.
+        // Other strategies (`ApplyUnchanged`, `LowerToHigher`) work correctly when
+        // `try_apply_restore` handles them directly, because the compensation accounts
+        // for winit using the current (launch) monitor's scale factor.
+        if window.position == bevy::window::WindowPosition::Automatic
+            && target.position.is_some()
+            && matches!(
+                target.monitor_scale_strategy,
+                MonitorScaleStrategy::HigherToLower(_)
+            )
+        {
             apply_initial_move(&target, &mut window);
             continue;
         }
