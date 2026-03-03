@@ -471,8 +471,8 @@ fn build_plugin(app: &mut App, path: PathBuf, persistence: ManagedWindowPersiste
     #[cfg(all(target_os = "macos", feature = "workaround-winit-4441"))]
     macos_drag_back_fix::init(app);
 
-    // #[cfg(target_os = "macos")]
-    // macos_tabbing_fix::init(app);
+    #[cfg(target_os = "macos")]
+    macos_tabbing_fix::init(app);
 
     #[cfg(all(target_os = "windows", feature = "workaround-winit-4341"))]
     windows_dpi_fix::init(app);

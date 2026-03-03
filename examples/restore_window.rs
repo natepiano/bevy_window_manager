@@ -632,17 +632,28 @@ fn handle_global_input(
                 info!("[restore_window] Cleared state file: {state_path:?}");
             }
         }
-        // despawn_managed_and_exit(&managed_entities, &mut commands, &mut app_exit);
-        app_exit.write(AppExit::Success);
+        despawn_managed_and_exit(&managed_entities, &mut commands, &mut app_exit);
     }
 
     if keys.just_pressed(KeyCode::KeyQ) {
-        // despawn_managed_and_exit(&managed_entities, &mut commands, &mut app_exit);
-        app_exit.write(AppExit::Success);
+        despawn_managed_and_exit(&managed_entities, &mut commands, &mut app_exit);
     }
 }
 
-/// Despawn all managed windows before exiting to prevent macOS hang during shutdown.
+/// Despawn all managed windows before writing `AppExit::Success`.
+///
+/// Bevy's graceful shutdown via `AppExit::Success` intermittently hangs on macOS
+/// (spinning beach ball, requires force quit). This was reproduced in a bare Bevy
+/// app with no plugins — it's a Bevy/winit issue, not ours. The hang is much more
+/// reliable when `NSWindow.tabbingMode` is set to `Disallowed` (our tabbing fix).
+///
+/// The alternative — `std::process::exit(0)` — never hangs but panics when exiting
+/// exclusive fullscreen with multiple windows, because it bypasses winit's cleanup
+/// of fullscreen state before TLS destruction.
+///
+/// Despawning managed windows first lets them go through Bevy's normal window
+/// teardown path (rendering thread gets notified), leaving only the primary window
+/// for the `exiting()` callback to handle. This avoids the hang in practice.
 fn despawn_managed_and_exit(
     managed_entities: &Query<Entity, With<ManagedWindow>>,
     commands: &mut Commands,
