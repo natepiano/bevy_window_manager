@@ -143,21 +143,21 @@ Extract: platform, example_ron_path, test_ron_dir, tests array.
 
    **Linux X11 values**: Monitor scales and video modes differ between Wayland and X11/XWayland.
    - Shutdown the Wayland app
-   - Relaunch with `WAYLAND_DISPLAY= cargo run --example restore_window` (background)
+   - Relaunch with `WAYLAND_DISPLAY= cargo run --example restore_window` (background, `dangerouslyDisableSandbox: true` for GPU access)
    - Wait for BRP ready, then:
      - Query Monitors resource again → store as `${MONITOR_X_X11_SCALE}` variables
      - Query Monitor component again → store X11-specific video modes as `${MONITOR_X_X11_VIDEO_MODE_*}` variables
    - Shutdown the X11 app
 
-5. Validate WindowTargetLoaded event fired:
-   - Query `mcp__brp__world_get_resources` resource "restore_window::WindowTargetLoadedReceived"
-   - Verify resource exists (if missing: FAIL "WindowTargetLoaded event did not fire")
-   - Verify `position` matches discovery.ron: `Some([100, 100])`
+5. Validate WindowRestored event fired:
+   - Query `mcp__brp__world_get_resources` resource "restore_window::WindowRestoredReceived"
+   - Verify resource exists (if missing: FAIL "WindowRestored event did not fire")
+   - Verify `position` matches discovery.ron: `[100, 100]`
    - Verify `size` matches discovery.ron: `[800, 600]`
    - Verify `mode` matches discovery.ron: `Windowed`
 
 6. Detect editor/terminal monitor:
-   - **macOS**: Run `.claude/scripts/macos_detect_zed_monitor.sh`
+   - **macOS**: Run `.claude/scripts/macos_detect_zed_monitor.sh` (with `dangerouslyDisableSandbox: true`)
      - Outputs "0" or "1" for the monitor index
    - **Windows**: Use <WindowsZedMove/> detect script (same parameters, outputs "0" or "1")
    - **Linux**: Run `.claude/scripts/linux_detect_konsole_monitor.sh`
@@ -210,7 +210,7 @@ When `${SINGLE_MONITOR_MODE}` is true (either detected or forced), skip tests th
 <MacOSZedMove>
 **macOS only**: Move Zed to target monitor before running that monitor's tests.
 
-Run: `.claude/scripts/macos_move_zed_to_monitor.sh <monitor_index>`
+Run `.claude/scripts/macos_move_zed_to_monitor.sh <monitor_index>` (with `dangerouslyDisableSandbox: true`)
 
 The script:
 - Positions Zed in left half of target monitor
@@ -400,7 +400,7 @@ For `backend: "wayland"`:
 
 **If test has `expected_log_warning`**:
 - Must launch with Bash to capture logs (not mcp__brp__brp_launch_bevy_example)
-- Use Bash with `run_in_background: true`:
+- Use Bash with `run_in_background: true` and `dangerouslyDisableSandbox: true` (GPU/Metal requires sandbox bypass):
   ```
   RUST_LOG=bevy_window_manager=warn cargo run --example restore_window
   ```
@@ -415,7 +415,7 @@ For `backend: "wayland"`:
 
 **If test has `workaround_validation`**:
 - Determine feature flags from `workaround_validation.build_without` or default
-- Use Bash with `run_in_background: true`:
+- Use Bash with `run_in_background: true` and `dangerouslyDisableSandbox: true` (GPU/Metal requires sandbox bypass):
   ```
   cargo run --example restore_window ${FEATURE_FLAGS}
   ```
@@ -430,7 +430,7 @@ For `backend: "wayland"`:
 
 **macOS only**: This step triggers macOS native fullscreen via the green button.
 
-1. Click the fullscreen button via AppleScript:
+1. Click the fullscreen button via AppleScript (with `dangerouslyDisableSandbox: true`):
    ```
    osascript -e 'tell application "System Events" to tell process "restore_window" to click button 2 of window 1'
    ```
@@ -514,7 +514,7 @@ Query Window again and validate new values match mutation targets.
 ## Step 7: Shutdown
 
 **If test has `quit_method: "osascript_cmd_q"`**:
-- Use osascript to send real Cmd+Q:
+- Use osascript to send real Cmd+Q (with `dangerouslyDisableSandbox: true`):
   ```
   osascript -e 'tell application "System Events" to keystroke "q" using command down'
   ```
@@ -578,12 +578,12 @@ Validation approach for X11 position workaround tests:
 
 <HumanTestFlow>
 1. **CRITICAL - Move editor to test's launch_monitor FIRST**: Read the test's `launch_monitor` field and move the editor there:
-   - macOS: `.claude/scripts/macos_move_zed_to_monitor.sh <launch_monitor>`
+   - macOS: `.claude/scripts/macos_move_zed_to_monitor.sh <launch_monitor>` (with `dangerouslyDisableSandbox: true`)
    - Windows: Use <WindowsZedMove/> with target = `<launch_monitor>`
    - Linux: `.claude/scripts/linux_move_konsole_to_monitor.sh <launch_monitor>`
 2. Write RON from `${test_ron_dir}/${test.ron_file}` to `${example_ron_path}`
 3. **If has `workaround_validation`**: run Phase 1 first (build_without flags), then Phase 2 (default features)
-4. Launch app using Bash with `run_in_background: true`
+4. Launch app using Bash with `run_in_background: true` and `dangerouslyDisableSandbox: true` (GPU/Metal requires sandbox bypass)
 5. Display instructions to user:
    - For workaround tests: use `instructions_without_workaround` (Phase 1) or `instructions_with_workaround` (Phase 2)
    - For regular tests: use `instructions` array

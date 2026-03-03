@@ -1,9 +1,11 @@
-(
-    // Monitor 1 (HDMI) at (0, 0), scale 1
-    position: None,
-    width: 800,
-    height: 600,
-    monitor_index: 1,
-    mode: Windowed,
-    app_name: "restore_window",
-)
+{
+    "primary": (
+        // Monitor 1 (HDMI) at (0, 0), scale 1
+        position: None,
+        width: 800,
+        height: 600,
+        monitor_index: 1,
+        mode: Windowed,
+        app_name: "restore_window",
+    ),
+}

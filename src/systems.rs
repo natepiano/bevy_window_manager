@@ -3,15 +3,12 @@
 //! # Monitor Detection
 //!
 //! [`update_current_monitor`] is the unified system that maintains `CurrentMonitor` on all
-//! managed windows. It handles both position-based detection (non-Wayland) and winit polling
-//! (Wayland), plus computes the effective window mode.
+//! managed windows. It uses winit's `current_monitor()` as the primary detection method,
+//! with position-based center-point detection as a fallback. This ensures correct monitor
+//! identification even for newly spawned windows whose `window.position` is still `Automatic`.
 //!
-//! On Wayland, `window.position` always returns `(0,0)` for security/privacy reasons, so
-//! position-based detection would always return Monitor 0. Instead, winit's `current_monitor()`
-//! is polled each frame.
-//!
-//! We only trust `current_monitor()` when the window has focus because testing showed
-//! incorrect values when unfocused (possibly our own bug, possibly winit behavior).
+//! On Wayland, `window.position` always returns `(0,0)` for security/privacy reasons, making
+//! winit's `current_monitor()` the only viable detection method on that platform.
 
 use bevy::ecs::system::NonSendMarker;
 use bevy::prelude::*;
@@ -29,10 +26,10 @@ use crate::macos_drag_back_fix::DragBackSizeProtection;
 use crate::monitors::CurrentMonitor;
 use crate::monitors::MonitorInfo;
 use crate::monitors::Monitors;
+use crate::restore_plan;
 #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
 use crate::types::FullscreenRestoreState;
 use crate::types::MonitorScaleStrategy;
-use crate::types::SCALE_FACTOR_EPSILON;
 use crate::types::SavedWindowMode;
 use crate::types::TargetPosition;
 use crate::types::WindowDecoration;
@@ -124,48 +121,6 @@ pub fn init_winit_info(
     });
 }
 
-/// Calculate restored window position, with optional clamping for macOS.
-///
-/// On macOS, clamps to monitor bounds because macOS may resize/reposition windows
-/// that extend beyond the screen. macOS does not allow windows to span monitors.
-///
-/// On Windows and Linux X11, windows can legitimately span multiple monitors,
-/// so we preserve the exact saved position without clamping.
-pub fn clamp_position_to_monitor(
-    saved_x: i32,
-    saved_y: i32,
-    target_info: &crate::monitors::MonitorInfo,
-    outer_width: u32,
-    outer_height: u32,
-) -> IVec2 {
-    if cfg!(target_os = "macos") {
-        let mon_right = target_info.position.x + target_info.size.x as i32;
-        let mon_bottom = target_info.position.y + target_info.size.y as i32;
-
-        let mut x = saved_x;
-        let mut y = saved_y;
-
-        if x + outer_width as i32 > mon_right {
-            x = mon_right - outer_width as i32;
-        }
-        if y + outer_height as i32 > mon_bottom {
-            y = mon_bottom - outer_height as i32;
-        }
-        x = x.max(target_info.position.x);
-        y = y.max(target_info.position.y);
-
-        if x != saved_x || y != saved_y {
-            debug!(
-                "[clamp_position_to_monitor] Clamped: ({saved_x}, {saved_y}) -> ({x}, {y}) for outer size {outer_width}x{outer_height}"
-            );
-        }
-
-        IVec2::new(x, y)
-    } else {
-        IVec2::new(saved_x, saved_y)
-    }
-}
-
 /// Load saved window state and insert `TargetPosition` component on the primary window entity.
 ///
 /// Runs after `init_winit_info` so we have access to starting monitor info.
@@ -201,60 +156,40 @@ pub fn load_target_position(
         state.position, state.width, state.height, state.monitor_index, state.mode
     );
 
-    // Position may be None on Wayland where clients can't access window position.
-    // We can still restore fullscreen mode, size, and monitor.
-    let saved_pos = state.position;
-
     // Get starting monitor from WinitInfo
     let starting_monitor_index = winit_info.starting_monitor_index;
     let starting_info = monitors.by_index(starting_monitor_index);
     let starting_scale = starting_info.map_or(1.0, |m| m.scale);
 
-    // Fall back to the first monitor if the saved monitor no longer exists
-    // (e.g., external display unplugged). Drop the saved position since it
-    // referred to coordinates on the missing monitor.
-    let (target_info, fallback_pos) = if let Some(info) = monitors.by_index(state.monitor_index) {
-        (info, saved_pos)
-    } else {
+    let (target_info, fallback_position, used_fallback) =
+        restore_plan::resolve_target_monitor_and_position(
+            state.monitor_index,
+            state.position,
+            &monitors,
+        );
+    if used_fallback {
         warn!(
             "[load_target_position] Target monitor {} not found, falling back to monitor 0",
             state.monitor_index
         );
-        (monitors.first(), None)
-    };
+    }
 
-    let target_scale = target_info.scale;
-
-    // File stores inner dimensions (content area)
-    let width = state.width;
-    let height = state.height;
-
-    // Calculate outer dimensions for clamping (inner + decoration)
-    let decoration = winit_info.decoration();
-    let outer_width = width + decoration.x;
-    let outer_height = height + decoration.y;
-
-    // Determine monitor scale strategy based on scale relationship and platform.
-    //
-    // On Windows, winit handles position coordinates correctly, but Bevy's
-    // set_physical_resolution still applies scale conversion. We use CompensateSizeOnly
-    // when scales differ, or ApplyUnchanged when they match.
-    //
-    // On macOS, winit's coordinate handling is broken for multi-monitor setups with
-    // different scale factors. Bevy processes size before position, so winit's
-    // request_inner_size uses the launch monitor's scale factor instead of the target's.
-    // We must compensate both position and size based on the scale factor relationship.
-    //
-    // The macOS compensation can be disabled via feature flag to test if upstream
-    // fixes (e.g., Bevy processing position before size) resolve the issue.
-    let strategy = determine_scale_strategy(starting_scale, target_scale);
-
-    let position = fallback_pos
-        .map(|(x, y)| clamp_position_to_monitor(x, y, target_info, outer_width, outer_height));
+    let target = restore_plan::compute_target_position(
+        &state,
+        target_info,
+        fallback_position,
+        winit_info.decoration(),
+        starting_scale,
+    );
 
     debug!(
         "[load_target_position] Starting monitor={} scale={}, Target monitor={} scale={}, strategy={:?}, position={:?}",
-        starting_monitor_index, starting_scale, target_info.index, target_scale, strategy, position
+        starting_monitor_index,
+        starting_scale,
+        target.target_monitor_index,
+        target.target_scale,
+        target.monitor_scale_strategy,
+        target.position
     );
 
     // Windows W3 workaround (winit #3124): For exclusive fullscreen restore, we must
@@ -274,21 +209,8 @@ pub fn load_target_position(
         });
     }
 
-    // Store inner dimensions - decoration is only needed for clamping above
     let entity = *window_entity;
-
-    commands.entity(entity).insert(TargetPosition {
-        position,
-        width,
-        height,
-        target_scale,
-        starting_scale,
-        monitor_scale_strategy: strategy,
-        mode: state.mode,
-        target_monitor_index: target_info.index,
-        #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
-        fullscreen_restore_state: FullscreenRestoreState::WaitingForSurface,
-    });
+    commands.entity(entity).insert(target);
 
     // Insert X11FrameCompensated token for platforms that don't need compensation.
     // On Linux + W6 + X11, the compensation system inserts this token after adjusting position.
@@ -774,9 +696,13 @@ pub fn is_wayland() -> bool {
 
 /// Unified monitor detection system. Maintains `CurrentMonitor` on all managed windows.
 ///
-/// - **Non-Wayland**: detects monitor from window position using center-point logic
-/// - **Wayland**: polls winit's `current_monitor()` (only trusted when focused)
-/// - **All platforms**: computes `effective_mode` (handles macOS green button fullscreen)
+/// Detection priority:
+/// 1. winit's `current_monitor()` — most reliable, works even before `window.position` is set
+/// 2. Position-based center-point detection — uses `window.position` when available
+/// 3. Existing `CurrentMonitor` value — preserves last-known monitor during transient states
+/// 4. `monitors.first()` — last resort fallback
+///
+/// All platforms: computes `effective_mode` (handles macOS green button fullscreen)
 pub fn update_current_monitor(
     mut commands: Commands,
     windows: Query<
@@ -791,22 +717,10 @@ pub fn update_current_monitor(
     }
 
     for (entity, window, existing) in &windows {
-        // Detect which monitor this window is on
-        let monitor_info = if is_wayland() {
-            // Wayland: poll winit's current_monitor() when focused, otherwise preserve existing
-            if window.focused {
-                wayland_detect_monitor(entity, &monitors)
-                    .unwrap_or_else(|| existing.map_or(*monitors.first(), |cm| cm.monitor))
-            } else {
-                existing.map_or(*monitors.first(), |cm| cm.monitor)
-            }
-        } else if let bevy::window::WindowPosition::At(pos) = window.position {
-            // Non-Wayland with known position: use center-point detection
-            *monitors.monitor_for_window(pos, window.physical_width(), window.physical_height())
-        } else {
-            // Position unknown (e.g., Automatic): preserve existing or fallback
-            existing.map_or(*monitors.first(), |cm| cm.monitor)
-        };
+        let monitor_info = winit_detect_monitor(entity, &monitors)
+            .or_else(|| position_detect_monitor(window, &monitors))
+            .or_else(|| existing.map(|cm| cm.monitor))
+            .unwrap_or(*monitors.first());
 
         // Compute effective mode
         let effective_mode = compute_effective_mode(window, &monitor_info, &monitors);
@@ -828,8 +742,8 @@ pub fn update_current_monitor(
     }
 }
 
-/// Detect monitor on Wayland by polling winit's `current_monitor()`.
-fn wayland_detect_monitor(entity: Entity, monitors: &Monitors) -> Option<MonitorInfo> {
+/// Detect monitor via winit's `current_monitor()`.
+fn winit_detect_monitor(entity: Entity, monitors: &Monitors) -> Option<MonitorInfo> {
     WINIT_WINDOWS.with(|ww| {
         let ww = ww.borrow();
         ww.get_window(entity).and_then(|winit_window| {
@@ -839,6 +753,15 @@ fn wayland_detect_monitor(entity: Entity, monitors: &Monitors) -> Option<Monitor
             })
         })
     })
+}
+
+/// Detect monitor from `window.position` using center-point logic.
+fn position_detect_monitor(window: &Window, monitors: &Monitors) -> Option<MonitorInfo> {
+    if let bevy::window::WindowPosition::At(pos) = window.position {
+        Some(*monitors.monitor_for_window(pos, window.physical_width(), window.physical_height()))
+    } else {
+        None
+    }
 }
 
 /// Compute the effective window mode, including macOS green button detection.
@@ -1003,53 +926,4 @@ fn try_apply_restore(target: &TargetPosition, window: &mut Window) -> RestoreSta
     // Show window now that restore is complete
     window.visible = true;
     RestoreStatus::Complete
-}
-
-/// Determine the monitor scale strategy based on platform and scale factors.
-/// Windows: compensate size only when scales differ.
-#[cfg(all(target_os = "windows", feature = "workaround-winit-4440"))]
-fn determine_scale_strategy(starting_scale: f64, target_scale: f64) -> MonitorScaleStrategy {
-    if (starting_scale - target_scale).abs() < SCALE_FACTOR_EPSILON {
-        MonitorScaleStrategy::ApplyUnchanged
-    } else {
-        MonitorScaleStrategy::CompensateSizeOnly
-    }
-}
-
-/// Determine the monitor scale strategy based on platform and scale factors.
-/// Windows without workaround: always use `ApplyUnchanged`.
-#[cfg(all(target_os = "windows", not(feature = "workaround-winit-4440")))]
-fn determine_scale_strategy(_starting_scale: f64, _target_scale: f64) -> MonitorScaleStrategy {
-    MonitorScaleStrategy::ApplyUnchanged
-}
-
-/// Determine the monitor scale strategy based on platform and scale factors.
-/// macOS with workaround: compensate position and size based on scale relationship.
-/// Wayland: always use `ApplyUnchanged` (can't detect starting monitor, can't set position).
-#[cfg(all(not(target_os = "windows"), feature = "workaround-winit-4440"))]
-pub fn determine_scale_strategy(starting_scale: f64, target_scale: f64) -> MonitorScaleStrategy {
-    // On Wayland, we can't reliably detect the starting monitor (outer_position returns 0,0
-    // and current_monitor/primary_monitor return None at init). Since we also can't set
-    // position on Wayland, skip scale compensation entirely.
-    if is_wayland() {
-        return MonitorScaleStrategy::ApplyUnchanged;
-    }
-
-    if (starting_scale - target_scale).abs() < SCALE_FACTOR_EPSILON {
-        MonitorScaleStrategy::ApplyUnchanged
-    } else if starting_scale < target_scale {
-        // Low DPI -> high DPI
-        MonitorScaleStrategy::LowerToHigher
-    } else {
-        // High DPI -> low DPI
-        MonitorScaleStrategy::HigherToLower(WindowRestoreState::NeedInitialMove)
-    }
-}
-
-/// Determine the monitor scale strategy based on platform and scale factors.
-/// macOS without workaround: always use `ApplyUnchanged`.
-#[cfg(all(not(target_os = "windows"), not(feature = "workaround-winit-4440")))]
-pub fn determine_scale_strategy(_starting_scale: f64, _target_scale: f64) -> MonitorScaleStrategy {
-    // Without workaround, assume upstream fixes handle scale factor correctly
-    MonitorScaleStrategy::ApplyUnchanged
 }

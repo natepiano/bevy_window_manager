@@ -37,6 +37,7 @@ mod macos_drag_back_fix;
 #[cfg(target_os = "macos")]
 mod macos_tabbing_fix;
 mod monitors;
+mod restore_plan;
 mod state;
 mod systems;
 mod types;
@@ -354,44 +355,44 @@ fn restore_managed_window(
     commands: &mut Commands,
     primary_scale: f64,
 ) {
-    // Fall back to the first monitor if the saved monitor no longer exists
-    // (e.g., external display unplugged). Drop the saved position since it
-    // referred to coordinates on the missing monitor.
-    let (target_info, fallback_position) =
-        if let Some(info) = monitors.by_index(saved_state.monitor_index) {
-            (info, saved_state.position)
-        } else {
-            warn!(
-                "[restore_managed_window] Target monitor {} not found, falling back to monitor 0",
-                saved_state.monitor_index
-            );
-            (monitors.first(), None)
-        };
-
-    let target_scale = target_info.scale;
-    let width = saved_state.width;
-    let height = saved_state.height;
+    let (target_info, fallback_position, used_fallback) =
+        restore_plan::resolve_target_monitor_and_position(
+            saved_state.monitor_index,
+            saved_state.position,
+            monitors,
+        );
+    if used_fallback {
+        warn!(
+            "[restore_managed_window] Target monitor {} not found, falling back to monitor 0",
+            saved_state.monitor_index
+        );
+    }
 
     let decoration = winit_info.decoration();
-    let outer_width = width + decoration.x;
-    let outer_height = height + decoration.y;
+    let outer_width = saved_state.width + decoration.x;
+    let outer_height = saved_state.height + decoration.y;
 
     // The window is created on the focused window's monitor (the primary window's monitor)
     // without explicit positioning. Its starting scale matches the primary monitor, not the
     // target monitor.
-    let starting_scale = primary_scale;
-    let strategy = systems::determine_scale_strategy(starting_scale, target_scale);
-
-    let position = fallback_position.map(|(x, y)| {
-        systems::clamp_position_to_monitor(x, y, target_info, outer_width, outer_height)
-    });
+    let target = restore_plan::compute_target_position(
+        saved_state,
+        target_info,
+        fallback_position,
+        decoration,
+        primary_scale,
+    );
 
     debug!(
-        "[restore_managed_window] saved_pos={:?} clamped_pos={position:?} target_scale={target_scale} outer={}x{} size={width}x{height} monitor={} mon_pos=({},{}) mon_size=({},{})",
+        "[restore_managed_window] saved_pos={:?} clamped_pos={:?} target_scale={} outer={}x{} size={}x{} monitor={} mon_pos=({},{}) mon_size=({},{})",
         saved_state.position,
+        target.position,
+        target.target_scale,
         outer_width,
         outer_height,
-        target_info.index,
+        target.width,
+        target.height,
+        target.target_monitor_index,
         target_info.position.x,
         target_info.position.y,
         target_info.size.x,
@@ -402,21 +403,6 @@ fn restore_managed_window(
     // `create_windows` runs. Setting position here would cause `create_windows` to use
     // `with_position`, which converts `PhysicalPosition` using the wrong scale factor
     // (`NSScreen::mainScreen` scale instead of the target monitor's scale).
-
-    let mode = saved_state.mode.clone();
-
-    let target = TargetPosition {
-        position,
-        width,
-        height,
-        target_scale,
-        starting_scale,
-        monitor_scale_strategy: strategy,
-        mode,
-        target_monitor_index: target_info.index,
-        #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
-        fullscreen_restore_state: types::FullscreenRestoreState::WaitingForSurface,
-    };
 
     commands.entity(entity).insert(target);
 
