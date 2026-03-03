@@ -8,7 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Multi-window save/restore via `ManagedWindow` component with `ManagedWindowPersistence` resource to control closed-window behavior.
 - `WindowTargetLoaded` entity event triggered when window target state is loaded from save file, allowing dependent crates to know the intended size and mode before the window becomes visible.
+
+### Changed
+
+- State file format changed from single `WindowState` to `HashMap<String, WindowState>` with automatic migration from old format.
 
 ### Fixed
 

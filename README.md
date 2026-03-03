@@ -69,6 +69,41 @@ Requires `use bevy_window_manager::WindowExt`:
 - `WindowManagerPlugin` – Uses executable name for config directory
 - `WindowManagerPlugin::with_app_name("name")` – Custom app name
 - `WindowManagerPlugin::with_path(path)` – Full control over state file path
+- `WindowManagerPlugin::with_persistence(mode)` – Set persistence behavior for managed windows
+
+### Multi-Window Support
+
+Add `ManagedWindow` to any secondary window to opt it into save/restore:
+
+```rust
+use bevy_window_manager::ManagedWindow;
+
+commands.spawn((
+    Window {
+        title: "Inspector".into(),
+        ..default()
+    },
+    ManagedWindow {
+        window_name: "inspector".to_string(),
+    },
+));
+```
+
+Each managed window gets the same restore treatment as the primary window — scale factor compensation, position clamping, and platform workarounds.
+
+Control what happens when windows are closed with `ManagedWindowPersistence`:
+
+- `RememberAll` (default) — closed windows keep their saved state for next launch
+- `ActiveOnly` — only currently open windows are persisted
+
+```rust
+use bevy_window_manager::ManagedWindowPersistence;
+use bevy_window_manager::WindowManagerPlugin;
+
+app.add_plugins(WindowManagerPlugin::with_persistence(ManagedWindowPersistence::ActiveOnly));
+```
+
+See `examples/multi_window.rs` for a complete interactive example.
 
 ## Version Compatibility
 

@@ -150,5 +150,32 @@ pub fn install_dpi_fix(
     }
 }
 
+/// Install DPI fix on newly added `ManagedWindow` entities.
+pub fn install_dpi_fix_on_managed(
+    new_windows: Query<Entity, Added<crate::ManagedWindow>>,
+    _non_send: NonSendMarker,
+) {
+    for entity in &new_windows {
+        let Some(hwnd) = get_hwnd(entity) else {
+            warn!("[windows_dpi_fix] Could not get HWND for managed window {entity:?}");
+            continue;
+        };
+
+        // SAFETY: SetWindowSubclass is safe with valid HWND
+        let result = unsafe { SetWindowSubclass(hwnd, Some(subclass_proc), SUBCLASS_ID, 0) };
+
+        if result.as_bool() {
+            debug!(
+                "[windows_dpi_fix] Installed DPI change workaround on managed window {entity:?}"
+            );
+        } else {
+            warn!("[windows_dpi_fix] Failed to install subclass on managed window {entity:?}");
+        }
+    }
+}
+
 /// Initialize the Windows DPI fix.
-pub fn init(app: &mut App) { app.add_systems(Startup, install_dpi_fix); }
+pub fn init(app: &mut App) {
+    app.add_systems(Startup, install_dpi_fix);
+    app.add_systems(Update, install_dpi_fix_on_managed);
+}

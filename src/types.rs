@@ -1,5 +1,6 @@
 //! Type definitions for window restoration.
 
+use std::fmt;
 use std::path::PathBuf;
 
 use bevy::prelude::*;
@@ -9,6 +10,24 @@ use bevy::window::VideoModeSelection;
 use bevy::window::WindowMode;
 use serde::Deserialize;
 use serde::Serialize;
+
+/// Identifies a managed window by its role: primary or named secondary.
+#[derive(Debug, Clone, PartialEq, Eq, Reflect)]
+pub enum WindowIdentifier {
+    /// The primary window (key `"primary"` in the state file).
+    Primary,
+    /// A secondary managed window with a unique name.
+    Managed(String),
+}
+
+impl fmt::Display for WindowIdentifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Primary => write!(f, "primary"),
+            Self::Managed(name) => write!(f, "{name}"),
+        }
+    }
+}
 
 /// Event fired when window target state is loaded from the save file.
 ///
@@ -38,13 +57,15 @@ use serde::Serialize;
 #[derive(EntityEvent, Debug, Clone, Reflect)]
 pub struct WindowTargetLoaded {
     /// The window entity this event targets.
-    pub entity:   Entity,
+    pub entity:    Entity,
+    /// Identifier for this window (primary or managed name).
+    pub window_id: WindowIdentifier,
     /// Target position (None on Wayland where clients can't access window position).
-    pub position: Option<IVec2>,
+    pub position:  Option<IVec2>,
     /// Target size (content area, excluding window decoration).
-    pub size:     UVec2,
+    pub size:      UVec2,
     /// Target window mode.
-    pub mode:     WindowMode,
+    pub mode:      WindowMode,
 }
 
 /// Threshold for considering two scale factors equal.
@@ -152,12 +173,12 @@ impl WinitInfo {
 
 /// Token indicating X11 frame extent compensation is complete (W6 workaround).
 ///
-/// This resource gates `restore_primary_window` - the restore system cannot run
-/// until this token exists. On Linux X11 with W6 workaround enabled, this ensures
-/// frame extents are queried and position is compensated before restore proceeds.
-/// On other platforms/configurations, the token is inserted immediately during
-/// `load_target_position` since no compensation is needed.
-#[derive(Resource)]
+/// This component gates `restore_windows` - the restore system cannot process
+/// a window until this token exists on the entity. On Linux X11 with W6 workaround
+/// enabled, this ensures frame extents are queried and position is compensated
+/// before restore proceeds. On other platforms/configurations, the token is
+/// inserted immediately during `load_target_position` since no compensation is needed.
+#[derive(Component)]
 pub struct X11FrameCompensated;
 
 /// State for `MonitorScaleStrategy::HigherToLower` (high→low DPI restore).
@@ -260,7 +281,7 @@ pub enum MonitorScaleStrategy {
 /// Bevy's `Window.resolution` represents and what we save to the state file.
 /// Outer dimensions (including title bar) are only used during loading for
 /// clamping calculations.
-#[derive(Resource)]
+#[derive(Component)]
 pub struct TargetPosition {
     /// Final clamped position (adjusted to fit within target monitor).
     /// None on Wayland where clients can't access window position.
@@ -330,11 +351,35 @@ impl TargetPosition {
     }
 }
 
+/// Event fired when a window restore completes and the window becomes visible.
+///
+/// Carries the target values from `TargetPosition` so consumers know what was intended.
+/// Triggered on the window entity right before `TargetPosition` is removed.
+#[derive(EntityEvent, Debug, Clone, Reflect)]
+pub struct WindowPositioned {
+    /// The window entity this event targets.
+    pub entity:        Entity,
+    /// Identifier for this window (primary or managed name).
+    pub window_id:     WindowIdentifier,
+    /// Target position that was applied (None on Wayland).
+    pub position:      Option<IVec2>,
+    /// Target size that was applied (content area).
+    pub size:          UVec2,
+    /// Window mode that was applied.
+    pub mode:          WindowMode,
+    /// Monitor index the window was restored to.
+    pub monitor_index: usize,
+}
+
 /// Configuration for the `RestoreWindowPlugin`.
 #[derive(Resource, Clone)]
 pub struct RestoreWindowConfig {
     /// Full path to the state file.
-    pub path: PathBuf,
+    pub path:          PathBuf,
+    /// Snapshot of window states as loaded from the file at startup.
+    /// Populated during restore so downstream code can compare intended vs actual state.
+    /// Entries persist as a read-only snapshot for the example's File column.
+    pub loaded_states: std::collections::HashMap<String, WindowState>,
 }
 
 /// Saved window state.
@@ -347,4 +392,52 @@ pub struct WindowState {
     pub mode:          SavedWindowMode,
     #[serde(default)]
     pub app_name:      String,
+}
+
+/// Marks a window entity as managed by the window manager plugin.
+///
+/// Add this component to any secondary window entity to opt into automatic
+/// save/restore behavior. The primary window is always managed automatically
+/// using the key `"primary"` in the state file.
+///
+/// Each managed window must have a unique `window_name`. Duplicate names
+/// will cause a panic.
+///
+/// # Example
+///
+/// ```ignore
+/// commands.spawn((
+///     Window { title: "Inspector".into(), ..default() },
+///     ManagedWindow { window_name: "inspector".into() },
+/// ));
+/// ```
+#[derive(Component, Clone, Reflect)]
+#[reflect(Component)]
+pub struct ManagedWindow {
+    /// Unique name used as the key in the state file.
+    pub window_name: String,
+}
+
+/// Controls what happens to saved state when a managed window is despawned.
+///
+/// Set as a resource on the app to control persistence behavior for all windows.
+#[derive(Resource, Default, Clone, Debug, PartialEq, Eq, Reflect)]
+#[reflect(Resource)]
+pub enum ManagedWindowPersistence {
+    /// Default: saved state persists even if window is closed during the session.
+    /// All windows ever opened are remembered in the state file.
+    #[default]
+    RememberAll,
+    /// Only windows open at time of save are persisted.
+    /// Closing a window removes its entry from the state file.
+    ActiveOnly,
+}
+
+/// Internal registry to track managed window names and detect duplicates.
+#[derive(Resource, Default)]
+pub struct ManagedWindowRegistry {
+    /// Set of registered window names (for duplicate detection).
+    pub names:    std::collections::HashSet<String>,
+    /// Map from entity to window name (for cleanup on removal).
+    pub entities: std::collections::HashMap<Entity, String>,
 }

@@ -11,7 +11,6 @@
 
 use bevy::ecs::system::NonSendMarker;
 use bevy::prelude::*;
-use bevy::window::PrimaryWindow;
 use bevy::winit::WINIT_WINDOWS;
 use raw_window_handle::HasWindowHandle;
 use raw_window_handle::RawWindowHandle;
@@ -61,39 +60,40 @@ fn get_x11_window_id<W: HasWindowHandle>(window: &W) -> Option<u32> {
 /// but `set_outer_position` expects the frame position. We subtract the title
 /// bar height to get the correct frame position.
 ///
-/// Inserts `X11FrameCompensated` token when successful, which gates
-/// `restore_primary_window`. If frame extents aren't available yet,
+/// Inserts `X11FrameCompensated` component when successful, which gates
+/// `restore_windows`. If frame extents aren't available yet,
 /// returns silently and retries next frame.
 pub fn compensate_target_position(
     mut commands: Commands,
-    window_entity: Single<Entity, With<PrimaryWindow>>,
-    mut target: ResMut<TargetPosition>,
+    mut windows: Query<(Entity, &mut TargetPosition), Without<X11FrameCompensated>>,
     _non_send: NonSendMarker,
 ) {
-    let Some(pos) = target.position else {
-        // No position to compensate (Wayland) - mark as done
-        commands.insert_resource(X11FrameCompensated);
-        return;
-    };
+    for (entity, mut target) in &mut windows {
+        let Some(pos) = target.position else {
+            // No position to compensate (Wayland) - mark as done
+            commands.entity(entity).insert(X11FrameCompensated);
+            continue;
+        };
 
-    let frame_top = WINIT_WINDOWS.with(|ww| {
-        let ww = ww.borrow();
-        ww.get_window(*window_entity).and_then(|winit_window| {
-            let window_id = get_x11_window_id(&**winit_window)?;
-            query_frame_top(window_id)
-        })
-    });
+        let frame_top = WINIT_WINDOWS.with(|ww| {
+            let ww = ww.borrow();
+            ww.get_window(entity).and_then(|winit_window| {
+                let window_id = get_x11_window_id(&**winit_window)?;
+                query_frame_top(window_id)
+            })
+        });
 
-    let Some(frame_top) = frame_top else {
-        // WM hasn't set frame extents yet - try again next frame
-        return;
-    };
+        let Some(frame_top) = frame_top else {
+            // WM hasn't set frame extents yet - try again next frame
+            continue;
+        };
 
-    let compensated = IVec2::new(pos.x, pos.y - frame_top);
-    info!(
-        "[W6] Compensating position: {:?} -> {:?} (frame_top={})",
-        pos, compensated, frame_top
-    );
-    target.position = Some(compensated);
-    commands.insert_resource(X11FrameCompensated);
+        let compensated = IVec2::new(pos.x, pos.y - frame_top);
+        info!(
+            "[W6] Compensating position: {:?} -> {:?} (frame_top={})",
+            pos, compensated, frame_top
+        );
+        target.position = Some(compensated);
+        commands.entity(entity).insert(X11FrameCompensated);
+    }
 }

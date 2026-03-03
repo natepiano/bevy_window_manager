@@ -1,23 +1,32 @@
-//! Interactive example for testing window restoration and fullscreen modes.
+//! Interactive example for testing window restoration, fullscreen modes, and multi-window
+//! management.
 //!
 //! Run with: `cargo run --example restore_window`
 //!
-//! This example displays the current window state and allows switching between modes:
+//! Controls (all windows):
 //! - Press `1` for exclusive fullscreen (uses selected video mode) WARNING: Exclusive fullscreen on
 //!   macOS may panic on exit due to winit bugs. See: <https://github.com/rust-windowing/winit/issues/3668>
 //! - Press `2` for borderless fullscreen (recommended on macOS)
 //! - Press `W` or `Escape` for windowed mode
 //! - Press `Up`/`Down` to cycle through available video modes
 //!
-//! Move and resize the window to test state persistence across restarts.
+//! Controls (primary window only):
+//! - Press `Space` to spawn a new managed window
+//! - Press `P` to toggle persistence mode (`RememberAll` / `ActiveOnly`)
+//! - Press `Ctrl+Shift+Backspace` to clear saved state and quit
+//! - Press `Q` to quit
+//!
+//! Move and resize windows to test state persistence across restarts.
 
 // Monitor dimensions always fit in i32
 #![allow(clippy::cast_possible_wrap)]
 
 use std::collections::HashMap;
 
+use bevy::camera::RenderTarget;
 use bevy::ecs::system::NonSendMarker;
 use bevy::prelude::*;
+use bevy::ui::UiTargetCamera;
 use bevy::window::Monitor;
 use bevy::window::MonitorSelection;
 use bevy::window::PrimaryWindow;
@@ -25,13 +34,21 @@ use bevy::window::VideoMode;
 use bevy::window::VideoModeSelection;
 use bevy::window::WindowMode;
 use bevy::window::WindowPosition;
+use bevy::window::WindowRef;
 use bevy::window::WindowScaleFactorChanged;
 use bevy::winit::WINIT_WINDOWS;
 use bevy_brp_extras::BrpExtrasPlugin;
 use bevy_window_manager::CurrentMonitor;
+use bevy_window_manager::ManagedWindow;
+use bevy_window_manager::ManagedWindowPersistence;
 use bevy_window_manager::Monitors;
+use bevy_window_manager::PRIMARY_WINDOW_KEY;
+use bevy_window_manager::RestoreWindowConfig;
+use bevy_window_manager::SavedWindowMode;
 use bevy_window_manager::WindowExt;
 use bevy_window_manager::WindowManagerPlugin;
+use bevy_window_manager::WindowPositioned;
+use bevy_window_manager::WindowState;
 use bevy_window_manager::WindowTargetLoaded;
 
 fn main() {
@@ -46,13 +63,19 @@ fn main() {
         .add_plugins(WindowManagerPlugin)
         .add_plugins(BrpExtrasPlugin::default())
         .add_observer(on_window_target_loaded)
+        .add_observer(on_window_positioned)
+        .add_observer(on_secondary_window_added)
+        .add_observer(on_secondary_window_removed)
         .init_resource::<SelectedVideoModes>()
+        .init_resource::<WindowCounter>()
         .add_systems(Startup, setup)
         .add_systems(
             Update,
             (
-                update_display,
-                handle_input,
+                update_primary_display,
+                update_secondary_displays,
+                handle_primary_input,
+                handle_window_mode_input,
                 debug_winit_monitor,
                 debug_window_changed,
                 debug_scale_factor_changed,
@@ -60,6 +83,43 @@ fn main() {
         )
         .run();
 }
+
+// --- Resources ---
+
+/// Tracks the next window number for auto-incrementing names.
+#[derive(Resource, Default)]
+struct WindowCounter {
+    next: usize,
+}
+
+/// Tracks the selected video mode index per monitor for exclusive fullscreen.
+#[derive(Resource, Default)]
+struct SelectedVideoModes {
+    /// Selected index per monitor (keyed by monitor index).
+    indices:   HashMap<usize, usize>,
+    /// Track last synced mode to avoid overriding user selection.
+    last_sync: Option<(UVec2, u32)>,
+}
+
+impl SelectedVideoModes {
+    fn get(&self, monitor_index: usize) -> usize {
+        self.indices.get(&monitor_index).copied().unwrap_or(0)
+    }
+
+    fn set(&mut self, monitor_index: usize, index: usize) {
+        self.indices.insert(monitor_index, index);
+    }
+}
+
+// --- Components ---
+
+/// Marker for the primary window's text display.
+#[derive(Component)]
+struct PrimaryDisplay;
+
+/// Marker for a secondary window's text display, storing the window entity.
+#[derive(Component)]
+struct SecondaryDisplay(Entity);
 
 // --- WindowTargetLoaded Test Support ---
 
@@ -73,77 +133,550 @@ struct WindowTargetLoadedReceived {
     mode:     WindowMode,
 }
 
-// --- Display UI ---
-
-#[derive(Component)]
-struct MainDisplay;
+// --- Constants ---
 
 const MARGIN: Val = Val::Px(20.0);
+const FONT_SIZE: f32 = 14.0;
+const SECONDARY_WINDOW_WIDTH: u32 = 600;
+const SECONDARY_WINDOW_HEIGHT: u32 = 400;
+const MISMATCH_COLOR: Color = Color::linear_rgb(1.0, 0.3, 0.3);
+const DEFAULT_COLOR: Color = Color::WHITE;
+const LABEL_WIDTH: usize = 18;
+
+// --- Setup ---
 
 fn setup(mut commands: Commands) {
     commands.spawn(Camera2d);
 
-    let text_font = TextFont {
-        font_size: 20.0,
-        ..default()
-    };
-
-    // Single text display for everything
     commands.spawn((
         Text::new(""),
-        text_font,
+        TextFont {
+            font_size: FONT_SIZE,
+            ..default()
+        },
         Node {
             position_type: PositionType::Absolute,
             top: MARGIN,
             left: MARGIN,
             ..default()
         },
-        MainDisplay,
+        PrimaryDisplay,
     ));
 }
 
-fn update_display(
-    mut main_text: Single<&mut Text, With<MainDisplay>>,
+// --- Secondary Window Lifecycle ---
+
+/// Observer: spawn `Camera2d` and text display when a `ManagedWindow` is added.
+fn on_secondary_window_added(
+    add: On<Add, ManagedWindow>,
+    mut commands: Commands,
+    primary_q: Query<(), With<PrimaryWindow>>,
+) {
+    let entity = add.entity;
+    if primary_q.get(entity).is_ok() {
+        return;
+    }
+
+    let camera = commands
+        .spawn((Camera2d, RenderTarget::Window(WindowRef::Entity(entity))))
+        .id();
+
+    commands.spawn((
+        Text::new(""),
+        TextFont {
+            font_size: FONT_SIZE,
+            ..default()
+        },
+        Node {
+            position_type: PositionType::Absolute,
+            top: MARGIN,
+            left: MARGIN,
+            ..default()
+        },
+        UiTargetCamera(camera),
+        SecondaryDisplay(entity),
+    ));
+}
+
+/// Observer: clean up display entities when a `ManagedWindow` is removed.
+fn on_secondary_window_removed(
+    remove: On<Remove, ManagedWindow>,
+    mut commands: Commands,
+    displays: Query<(Entity, &SecondaryDisplay)>,
+) {
+    let entity = remove.entity;
+    for (display_entity, display) in &displays {
+        if display.0 == entity {
+            commands.entity(display_entity).despawn();
+        }
+    }
+}
+
+// --- Comparison Display ---
+
+/// Build comparison spans (file vs current) for a window and add them as `TextSpan` children.
+fn build_comparison_spans(
+    cb: &mut ChildSpawnerCommands,
+    file_state: Option<&WindowState>,
+    window: &Window,
+    monitor: &CurrentMonitor,
+    monitors_res: &Monitors,
+    font: &TextFont,
+) {
+    let effective_mode = window.effective_mode(monitors_res);
+    let scale = window.resolution.scale_factor();
+
+    // Current values
+    let current_pos = match window.position {
+        WindowPosition::At(pos) => format!("({}, {})", pos.x, pos.y),
+        _ => "Automatic".to_string(),
+    };
+    let current_size_phys = format!("{}x{}", window.physical_width(), window.physical_height());
+    let current_size_log = format!(
+        "{}x{}",
+        window.resolution.width() as u32,
+        window.resolution.height() as u32
+    );
+    let current_scale = format!("{scale}");
+    let current_monitor = format!("{}", monitor.index);
+    let current_mode = format!("{:?}", SavedWindowMode::from(&effective_mode));
+
+    if let Some(state) = file_state {
+        // File values (width/height are saved via physical_width(), so they're physical)
+        let file_pos = state
+            .position
+            .map_or_else(|| "None".to_string(), |(x, y)| format!("({x}, {y})"));
+        let file_size_phys = format!("{}x{}", state.width, state.height);
+        let file_monitor = format!("{}", state.monitor_index);
+        let file_mode = format!("{:?}", state.mode);
+
+        // Column width: fit the longest file value + 2 padding, minimum 16
+        let col1_width = [
+            file_pos.len(),
+            file_size_phys.len(),
+            file_monitor.len(),
+            file_mode.len(),
+        ]
+        .into_iter()
+        .max()
+        .unwrap_or(0)
+            + 2;
+        let col1_width = col1_width.max(16);
+
+        let header = format!("{:LABEL_WIDTH$}{:<col1_width$}{}\n", "", "File", "Current");
+        add_span(cb, font, &header, DEFAULT_COLOR);
+
+        // Rows with mismatch highlighting
+        add_comparison_row(cb, font, "Position:", &file_pos, &current_pos, col1_width);
+        add_comparison_row(
+            cb,
+            font,
+            "Size (physical):",
+            &file_size_phys,
+            &current_size_phys,
+            col1_width,
+        );
+
+        // Logical size and scale — no file equivalent, show current only
+        add_span(
+            cb,
+            font,
+            &format!(
+                "{:<LABEL_WIDTH$}{:<col1_width$}{current_size_log}\n",
+                "Size (logical):", ""
+            ),
+            DEFAULT_COLOR,
+        );
+        add_span(
+            cb,
+            font,
+            &format!(
+                "{:<LABEL_WIDTH$}{:<col1_width$}{current_scale}\n",
+                "Scale:", ""
+            ),
+            DEFAULT_COLOR,
+        );
+
+        add_comparison_row(
+            cb,
+            font,
+            "Monitor:",
+            &file_monitor,
+            &current_monitor,
+            col1_width,
+        );
+        add_comparison_row(cb, font, "Mode:", &file_mode, &current_mode, col1_width);
+    } else {
+        add_span(cb, font, "State: Not in state file\n\n", MISMATCH_COLOR);
+        add_span(
+            cb,
+            font,
+            &format!("{:<LABEL_WIDTH$}{current_pos}\n", "Position:"),
+            DEFAULT_COLOR,
+        );
+        add_span(
+            cb,
+            font,
+            &format!("{:<LABEL_WIDTH$}{current_size_phys}\n", "Size (physical):"),
+            DEFAULT_COLOR,
+        );
+        add_span(
+            cb,
+            font,
+            &format!("{:<LABEL_WIDTH$}{current_size_log}\n", "Size (logical):"),
+            DEFAULT_COLOR,
+        );
+        add_span(
+            cb,
+            font,
+            &format!("{:<LABEL_WIDTH$}{current_scale}\n", "Scale:"),
+            DEFAULT_COLOR,
+        );
+        add_span(
+            cb,
+            font,
+            &format!("{:<LABEL_WIDTH$}{current_monitor}\n", "Monitor:"),
+            DEFAULT_COLOR,
+        );
+        add_span(
+            cb,
+            font,
+            &format!("{:<LABEL_WIDTH$}{current_mode}\n", "Mode:"),
+            DEFAULT_COLOR,
+        );
+    }
+
+    add_span(
+        cb,
+        font,
+        &format!("\nEffective Mode: {effective_mode:?}\n"),
+        DEFAULT_COLOR,
+    );
+}
+
+/// Add a comparison row: label + file value (white) + current value (white or red if mismatch).
+fn add_comparison_row(
+    cb: &mut ChildSpawnerCommands,
+    font: &TextFont,
+    label: &str,
+    file_val: &str,
+    current_val: &str,
+    col_width: usize,
+) {
+    let color = if file_val == current_val {
+        DEFAULT_COLOR
+    } else {
+        MISMATCH_COLOR
+    };
+
+    // Label + file value (always white)
+    add_span(
+        cb,
+        font,
+        &format!("{label:<LABEL_WIDTH$}{file_val:<col_width$}"),
+        DEFAULT_COLOR,
+    );
+    // Current value (colored)
+    add_span(cb, font, &format!("{current_val}\n"), color);
+}
+
+/// Add a single `TextSpan` child.
+fn add_span(cb: &mut ChildSpawnerCommands, font: &TextFont, text: &str, color: Color) {
+    cb.spawn((TextSpan(text.to_string()), font.clone(), TextColor(color)));
+}
+
+// --- Primary Window Display ---
+
+fn update_primary_display(
+    primary_display: Single<Entity, With<PrimaryDisplay>>,
     window_query: Single<(&Window, &CurrentMonitor), With<PrimaryWindow>>,
     monitors_res: Res<Monitors>,
     bevy_monitors: Query<(Entity, &Monitor)>,
     mut selected: ResMut<SelectedVideoModes>,
+    persistence: Res<ManagedWindowPersistence>,
+    managed_q: Query<(&Window, &ManagedWindow, Option<&CurrentMonitor>)>,
+    config: Res<RestoreWindowConfig>,
+    mut commands: Commands,
 ) {
+    let display_entity = *primary_display;
     let (window, monitor) = *window_query;
-    let effective_mode = window.effective_mode(&monitors_res);
+
+    let file_state = config.loaded_states.get(PRIMARY_WINDOW_KEY);
 
     let (video_modes, refresh_rate) = get_video_modes_for_monitor(&bevy_monitors, monitor);
     let refresh_display = format_refresh_rate(window, refresh_rate);
     let active_mode_idx = find_active_video_mode_index(window, &video_modes);
-
     sync_selected_to_active(window, monitor, active_mode_idx, &mut selected);
-
     let selected_idx = selected.get(monitor.index);
     let video_modes_display =
         build_video_modes_display(&video_modes, selected_idx, active_mode_idx);
 
-    let row1 = format_monitor_row(monitor, &refresh_display);
-    let (row2, row3) = format_position_rows(window, monitor);
+    let font = TextFont {
+        font_size: FONT_SIZE,
+        ..default()
+    };
 
-    main_text.0 = format!(
-        "{row1}\n\
-         {row2}\n\
-         {row3}\n\
-         \n\
-         Mode:           {:?} (set value only, not dynamically updated)\n\
-         Effective Mode: {:?}\n\
-         \n\
-         Video Modes (Up/Down to select):\n\
-         {video_modes_display}\n\
-         \n\
-         Controls:\n\
-         [1] Exclusive Fullscreen (selected mode)\n\
-         [2] Borderless Fullscreen\n\
-         [W/Esc] Windowed\n\
-         [Q] Quit",
-        window.mode, effective_mode,
-    );
+    commands.entity(display_entity).despawn_children();
+    commands.entity(display_entity).with_children(|cb| {
+        // Monitor header
+        let monitor_row = format_monitor_row(monitor, &refresh_display);
+        add_span(cb, &font, &format!("{monitor_row}\n\n"), DEFAULT_COLOR);
+
+        // Comparison table
+        build_comparison_spans(cb, file_state, window, monitor, &monitors_res, &font);
+
+        // Video modes
+        add_span(
+            cb,
+            &font,
+            &format!("\nVideo Modes (Up/Down to select):\n{video_modes_display}\n"),
+            DEFAULT_COLOR,
+        );
+
+        // Controls
+        add_span(
+            cb,
+            &font,
+            &format!(
+                "\nControls:\n\
+                 [1] Exclusive Fullscreen  [2] Borderless Fullscreen\n\
+                 [W/Esc] Windowed\n\
+                 [Space] Spawn managed window\n\
+                 [P] Toggle persistence ({persistence:?})\n\
+                 [Ctrl+Shift+Backspace] Clear state and quit\n\
+                 [Q] Quit\n"
+            ),
+            DEFAULT_COLOR,
+        );
+
+        // Managed windows list
+        let mut managed_lines = Vec::new();
+        for (mw, managed, current_monitor) in &managed_q {
+            let mon = current_monitor.map_or_else(|| *mw.monitor(&monitors_res), |cm| cm.0);
+            let pos = match mw.position {
+                WindowPosition::At(p) => format!("({}, {})", p.x, p.y),
+                _ => "Automatic".to_string(),
+            };
+            managed_lines.push(format!(
+                "  {}: pos={pos} phys={}x{} log={}x{} scale={} monitor={}\n",
+                managed.window_name,
+                mw.physical_width(),
+                mw.physical_height(),
+                mw.resolution.width() as u32,
+                mw.resolution.height() as u32,
+                mw.resolution.scale_factor(),
+                mon.index,
+            ));
+        }
+        let managed_header = "\nManaged Windows:\n";
+        add_span(cb, &font, managed_header, DEFAULT_COLOR);
+        if managed_lines.is_empty() {
+            add_span(cb, &font, "  (none)\n", DEFAULT_COLOR);
+        } else {
+            for line in &managed_lines {
+                add_span(cb, &font, line, DEFAULT_COLOR);
+            }
+        }
+    });
 }
+
+// --- Secondary Window Displays ---
+
+fn update_secondary_displays(
+    mut displays: Query<(Entity, &SecondaryDisplay)>,
+    windows: Query<(&Window, Option<&CurrentMonitor>)>,
+    managed_q: Query<&ManagedWindow>,
+    monitors_res: Res<Monitors>,
+    bevy_monitors: Query<(Entity, &Monitor)>,
+    mut selected: ResMut<SelectedVideoModes>,
+    config: Res<RestoreWindowConfig>,
+    mut commands: Commands,
+) {
+    for (display_entity, display) in &mut displays {
+        let Ok((window, current_monitor)) = windows.get(display.0) else {
+            continue;
+        };
+        let monitor_info = current_monitor
+            .map_or_else(|| CurrentMonitor(*window.monitor(&monitors_res)), |cm| *cm);
+        let name = managed_q
+            .get(display.0)
+            .map_or("unknown", |m| &m.window_name);
+
+        let file_state = config.loaded_states.get(name);
+
+        let (video_modes, refresh_rate) =
+            get_video_modes_for_monitor(&bevy_monitors, &monitor_info);
+        let refresh_display = format_refresh_rate(window, refresh_rate);
+        let active_mode_idx = find_active_video_mode_index(window, &video_modes);
+        sync_selected_to_active(window, &monitor_info, active_mode_idx, &mut selected);
+        let selected_idx = selected.get(monitor_info.index);
+        let video_modes_display =
+            build_video_modes_display(&video_modes, selected_idx, active_mode_idx);
+
+        let font = TextFont {
+            font_size: FONT_SIZE,
+            ..default()
+        };
+
+        commands.entity(display_entity).despawn_children();
+        commands.entity(display_entity).with_children(|cb| {
+            // Window name + monitor header
+            let monitor_row = format_monitor_row(&monitor_info, &refresh_display);
+            add_span(
+                cb,
+                &font,
+                &format!("Window: {name}\n{monitor_row}\n\n"),
+                DEFAULT_COLOR,
+            );
+
+            // Comparison table
+            build_comparison_spans(cb, file_state, window, &monitor_info, &monitors_res, &font);
+
+            // Video modes
+            add_span(
+                cb,
+                &font,
+                &format!("\nVideo Modes (Up/Down to select):\n{video_modes_display}\n"),
+                DEFAULT_COLOR,
+            );
+
+            // Controls (mode switching only for secondary)
+            add_span(
+                cb,
+                &font,
+                "\nControls:\n\
+                 [1] Exclusive Fullscreen  [2] Borderless Fullscreen\n\
+                 [W/Esc] Windowed\n",
+                DEFAULT_COLOR,
+            );
+        });
+    }
+}
+
+// --- Input Handling ---
+
+/// Handle primary-window-only inputs: spawn windows, toggle persistence, quit, reset.
+fn handle_primary_input(
+    keys: Res<ButtonInput<KeyCode>>,
+    primary_window: Single<&Window, With<PrimaryWindow>>,
+    mut commands: Commands,
+    mut counter: ResMut<WindowCounter>,
+    mut persistence: ResMut<ManagedWindowPersistence>,
+    config: Res<RestoreWindowConfig>,
+) {
+    if !primary_window.focused {
+        return;
+    }
+
+    if keys.just_pressed(KeyCode::Space) {
+        counter.next += 1;
+        let name = format!("window-{}", counter.next);
+        let title = format!("Managed: {name}");
+
+        commands.spawn((
+            Window {
+                title,
+                resolution: bevy::window::WindowResolution::new(
+                    SECONDARY_WINDOW_WIDTH,
+                    SECONDARY_WINDOW_HEIGHT,
+                ),
+                ..default()
+            },
+            ManagedWindow {
+                window_name: name.clone(),
+            },
+        ));
+
+        info!("[restore_window] Spawned managed window \"{name}\"");
+    }
+
+    if keys.just_pressed(KeyCode::KeyP) {
+        *persistence = match *persistence {
+            ManagedWindowPersistence::RememberAll => ManagedWindowPersistence::ActiveOnly,
+            ManagedWindowPersistence::ActiveOnly => ManagedWindowPersistence::RememberAll,
+        };
+        info!("[restore_window] Persistence mode: {:?}", *persistence);
+    }
+
+    // Ctrl+Shift+Backspace: clear saved state and exit
+    if keys.just_pressed(KeyCode::Backspace)
+        && keys.pressed(KeyCode::ShiftLeft)
+        && keys.pressed(KeyCode::ControlLeft)
+    {
+        if let Err(e) = std::fs::remove_file(&config.path) {
+            warn!("[restore_window] Failed to remove state file: {e}");
+        } else {
+            info!("[restore_window] Cleared state file: {:?}", config.path);
+        }
+        std::process::exit(0);
+    }
+
+    if keys.just_pressed(KeyCode::KeyQ) {
+        std::process::exit(0);
+    }
+}
+
+/// Handle mode-switching and video mode navigation for the focused window.
+fn handle_window_mode_input(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut windows: Query<(&mut Window, Option<&CurrentMonitor>)>,
+    monitors_res: Res<Monitors>,
+    bevy_monitors: Query<(Entity, &Monitor)>,
+    mut selected: ResMut<SelectedVideoModes>,
+) {
+    // Find the focused window
+    let Some((mut window, current_monitor)) = windows.iter_mut().find(|(w, _)| w.focused) else {
+        return;
+    };
+
+    let monitor =
+        current_monitor.map_or_else(|| CurrentMonitor(*window.monitor(&monitors_res)), |cm| *cm);
+
+    // Sync `window.mode` to the effective mode so bevy's cached state matches reality.
+    // The OS can change fullscreen state (e.g. macOS green button) without updating
+    // `window.mode`, causing bevy's `changed_windows` to skip the mode change.
+    let effective = window.effective_mode(&monitors_res);
+    if window.mode != effective {
+        window.mode = effective;
+    }
+
+    let video_modes: Vec<VideoMode> = bevy_monitors
+        .iter()
+        .find(|(_, m)| m.physical_position == monitor.position)
+        .map(|(_, m)| m.video_modes.clone())
+        .unwrap_or_default();
+
+    // Navigate video modes
+    let current_idx = selected.get(monitor.index);
+    if keys.just_pressed(KeyCode::ArrowUp) && current_idx > 0 {
+        selected.set(monitor.index, current_idx - 1);
+    }
+    if keys.just_pressed(KeyCode::ArrowDown) && current_idx < video_modes.len().saturating_sub(1) {
+        selected.set(monitor.index, current_idx + 1);
+    }
+
+    if keys.just_pressed(KeyCode::Digit1) {
+        let selected_idx = selected
+            .get(monitor.index)
+            .min(video_modes.len().saturating_sub(1));
+        let video_mode_selection = video_modes
+            .get(selected_idx)
+            .map_or(VideoModeSelection::Current, |mode| {
+                VideoModeSelection::Specific(*mode)
+            });
+
+        window.mode =
+            WindowMode::Fullscreen(MonitorSelection::Index(monitor.index), video_mode_selection);
+    }
+    if keys.just_pressed(KeyCode::Digit2) {
+        window.mode = WindowMode::BorderlessFullscreen(MonitorSelection::Index(monitor.index));
+    }
+    if keys.just_pressed(KeyCode::KeyW) || keys.just_pressed(KeyCode::Escape) {
+        window.mode = WindowMode::Windowed;
+    }
+}
+
+// --- Video Mode Helpers ---
 
 /// Get video modes and refresh rate for the monitor matching the given position.
 fn get_video_modes_for_monitor<'a>(
@@ -206,6 +739,8 @@ fn sync_selected_to_active(
     }
 }
 
+// --- Formatting Helpers ---
+
 /// Get platform suffix for Linux (Wayland or X11).
 ///
 /// Not const on Linux due to `std::env::var` check; clippy false positive on other platforms.
@@ -241,142 +776,6 @@ fn format_monitor_row(monitor: &CurrentMonitor, refresh_display: &str) -> String
         monitor.scale,
         platform_suffix()
     )
-}
-
-/// Format rows 2 and 3 with monitor and window position/size.
-fn format_position_rows(window: &Window, monitor: &CurrentMonitor) -> (String, String) {
-    let (monitor_pos, window_pos) = match window.position {
-        WindowPosition::At(pos) => format_aligned_pair(
-            (monitor.position.x, monitor.position.y),
-            (pos.x, pos.y),
-            Delimiter::Parens,
-        ),
-        WindowPosition::Automatic => {
-            let monitor_pos = format!("({}, {})", monitor.position.x, monitor.position.y);
-            (monitor_pos, "Automatic".to_string())
-        },
-        WindowPosition::Centered(mon_sel) => {
-            let monitor_pos = format!("({}, {})", monitor.position.x, monitor.position.y);
-            (monitor_pos, format!("Centered({mon_sel:?})"))
-        },
-    };
-
-    let (monitor_size, window_size) = format_aligned_pair(
-        (monitor.size.x as i32, monitor.size.y as i32),
-        (
-            window.physical_width() as i32,
-            window.physical_height() as i32,
-        ),
-        Delimiter::None,
-    );
-
-    let row2 = format!("Monitor Position: {monitor_pos} - Size: {monitor_size}");
-    let row3 = format!("Window  Position: {window_pos} - Size: {window_size}");
-    (row2, row3)
-}
-
-// --- Input Handling ---
-
-fn handle_input(
-    keys: Res<ButtonInput<KeyCode>>,
-    mut window_query: Single<(&mut Window, &CurrentMonitor), With<PrimaryWindow>>,
-    bevy_monitors: Query<(Entity, &Monitor)>,
-    mut selected: ResMut<SelectedVideoModes>,
-) {
-    let (window, monitor) = &mut *window_query;
-
-    // Get video modes for current monitor by matching position
-    let video_modes: Vec<VideoMode> = bevy_monitors
-        .iter()
-        .find(|(_, m)| m.physical_position == monitor.position)
-        .map(|(_, m)| m.video_modes.clone())
-        .unwrap_or_default();
-
-    // Navigate video modes (per monitor)
-    let current_idx = selected.get(monitor.index);
-    if keys.just_pressed(KeyCode::ArrowUp) && current_idx > 0 {
-        selected.set(monitor.index, current_idx - 1);
-    }
-    if keys.just_pressed(KeyCode::ArrowDown) && current_idx < video_modes.len().saturating_sub(1) {
-        selected.set(monitor.index, current_idx + 1);
-    }
-
-    if keys.just_pressed(KeyCode::Digit1) {
-        let selected_idx = selected
-            .get(monitor.index)
-            .min(video_modes.len().saturating_sub(1));
-        let video_mode_selection = video_modes
-            .get(selected_idx)
-            .map_or(VideoModeSelection::Current, |mode| {
-                VideoModeSelection::Specific(*mode)
-            });
-
-        window.mode =
-            WindowMode::Fullscreen(MonitorSelection::Index(monitor.index), video_mode_selection);
-    }
-    if keys.just_pressed(KeyCode::Digit2) {
-        window.mode = WindowMode::BorderlessFullscreen(MonitorSelection::Index(monitor.index));
-    }
-    if keys.just_pressed(KeyCode::KeyW) || keys.just_pressed(KeyCode::Escape) {
-        window.mode = WindowMode::Windowed;
-    }
-    if keys.just_pressed(KeyCode::KeyQ) {
-        std::process::exit(0);
-    }
-}
-
-// --- Video Mode Selection State ---
-
-/// Tracks the selected video mode index per monitor for exclusive fullscreen.
-#[derive(Resource, Default)]
-struct SelectedVideoModes {
-    /// Selected index per monitor (keyed by monitor index).
-    indices:   HashMap<usize, usize>,
-    /// Track last synced mode to avoid overriding user selection.
-    last_sync: Option<(UVec2, u32)>,
-}
-
-impl SelectedVideoModes {
-    fn get(&self, monitor_index: usize) -> usize {
-        self.indices.get(&monitor_index).copied().unwrap_or(0)
-    }
-
-    fn set(&mut self, monitor_index: usize, index: usize) {
-        self.indices.insert(monitor_index, index);
-    }
-}
-
-// --- Formatting Helpers ---
-
-enum Delimiter {
-    Parens,
-    None,
-}
-
-/// Formats two pairs of values (monitor and window) with right-aligned numbers.
-/// Returns (`monitor_str`, `window_str`) with matching widths.
-fn format_aligned_pair(
-    monitor_vals: (i32, i32),
-    window_vals: (i32, i32),
-    delimiter: Delimiter,
-) -> (String, String) {
-    let (m1, m2) = monitor_vals;
-    let (w1, w2) = window_vals;
-
-    // Find max width for each column
-    let width1 = m1.to_string().len().max(w1.to_string().len());
-    let width2 = m2.to_string().len().max(w2.to_string().len());
-
-    match delimiter {
-        Delimiter::Parens => (
-            format!("({m1:>width1$}, {m2:>width2$})"),
-            format!("({w1:>width1$}, {w2:>width2$})"),
-        ),
-        Delimiter::None => (
-            format!("{m1:>width1$}x{m2:>width2$}"),
-            format!("{w1:>width1$}x{w2:>width2$}"),
-        ),
-    }
 }
 
 /// Builds the video modes display string showing a scrollable window of modes.
@@ -441,7 +840,7 @@ fn build_video_modes_display(
         .join("\n")
 }
 
-// --- Debug: Winit Monitor Detection ---
+// --- Debug Systems ---
 
 /// Debug system that runs every frame and logs winit-detected monitor changes.
 fn debug_winit_monitor(
@@ -536,6 +935,15 @@ fn debug_scale_factor_changed(mut messages: MessageReader<WindowScaleFactorChang
             msg.scale_factor
         );
     }
+}
+
+/// Observer that logs when `WindowPositioned` event is received (restore complete).
+fn on_window_positioned(trigger: On<WindowPositioned>) {
+    let event = trigger.event();
+    info!(
+        "[on_window_positioned] Restore complete: window_id={} entity={:?} position={:?} size={} mode={:?} monitor={}",
+        event.window_id, event.entity, event.position, event.size, event.mode, event.monitor_index
+    );
 }
 
 /// Observer that logs when `WindowTargetLoaded` event is received and inserts a queryable resource.

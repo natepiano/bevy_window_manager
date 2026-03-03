@@ -8,7 +8,6 @@
 //! This module detects the drag-back and re-applies the correct size.
 
 use bevy::prelude::*;
-use bevy::window::PrimaryWindow;
 use bevy::window::WindowResized;
 use bevy::window::WindowScaleFactorChanged;
 
@@ -33,7 +32,7 @@ pub enum CorrectionState {
 /// Inserted after Phase 2 of `HigherToLower` restore completes. Removed when:
 /// - User drags back to launch monitor (scale change triggers correction)
 /// - User manually resizes the window (they've taken control)
-#[derive(Resource)]
+#[derive(Component)]
 pub struct DragBackSizeProtection {
     /// The correct physical size at the restored scale (Phase 2 size)
     pub expected_physical_size: UVec2,
@@ -47,61 +46,65 @@ pub struct DragBackSizeProtection {
     pub state:                  CorrectionState,
 }
 
+/// Run condition: returns true if any entity has a `DragBackSizeProtection` component.
+fn has_drag_back_protection(q: Query<(), With<DragBackSizeProtection>>) -> bool { !q.is_empty() }
+
 /// Initialize the W4 drag-back fix systems.
 pub fn init(app: &mut App) {
     app.add_systems(
         Update,
         (
-            detect_user_resize.run_if(resource_exists::<DragBackSizeProtection>),
-            handle_drag_back_scale_change.run_if(resource_exists::<DragBackSizeProtection>),
-            apply_pending_correction.run_if(resource_exists::<DragBackSizeProtection>),
+            detect_user_resize.run_if(has_drag_back_protection),
+            handle_drag_back_scale_change.run_if(has_drag_back_protection),
+            apply_pending_correction.run_if(has_drag_back_protection),
         )
             .chain(),
     );
 }
 
-/// Detect user manual resize and remove protection resource.
+/// Detect user manual resize and remove protection component.
 ///
 /// If the user resizes the window while on the restored monitor, they've taken control
 /// and we should not interfere with subsequent drag-backs.
 fn detect_user_resize(
     mut commands: Commands,
-    protection: Res<DragBackSizeProtection>,
-    window: Single<&Window, With<PrimaryWindow>>,
+    mut windows: Query<(Entity, &Window, &DragBackSizeProtection)>,
     mut resize_messages: MessageReader<WindowResized>,
 ) {
-    // Only check in WaitingForDragBack state
-    if protection.state != CorrectionState::WaitingForDragBack {
-        return;
-    }
-
     // Only check if we received a resize message
     if resize_messages.read().last().is_none() {
         return;
     }
 
-    let current_scale = f64::from(window.resolution.scale_factor());
+    for (entity, window, protection) in &mut windows {
+        // Only check in WaitingForDragBack state
+        if protection.state != CorrectionState::WaitingForDragBack {
+            continue;
+        }
 
-    // Only consider it a user resize if we're still on the restored monitor
-    if (current_scale - protection.restored_scale).abs() > SCALE_FACTOR_EPSILON {
-        return;
-    }
+        let current_scale = f64::from(window.resolution.scale_factor());
 
-    let current_size = UVec2::new(
-        window.resolution.physical_width(),
-        window.resolution.physical_height(),
-    );
+        // Only consider it a user resize if we're still on the restored monitor
+        if (current_scale - protection.restored_scale).abs() > SCALE_FACTOR_EPSILON {
+            continue;
+        }
 
-    // If size changed from expected while on restored scale, user resized
-    if current_size != protection.expected_physical_size {
-        debug!(
-            "[W4 fix] User resize detected: {}x{} -> {}x{}, removing protection",
-            protection.expected_physical_size.x,
-            protection.expected_physical_size.y,
-            current_size.x,
-            current_size.y
+        let current_size = UVec2::new(
+            window.resolution.physical_width(),
+            window.resolution.physical_height(),
         );
-        commands.remove_resource::<DragBackSizeProtection>();
+
+        // If size changed from expected while on restored scale, user resized
+        if current_size != protection.expected_physical_size {
+            debug!(
+                "[W4 fix] User resize detected: {}x{} -> {}x{}, removing protection",
+                protection.expected_physical_size.x,
+                protection.expected_physical_size.y,
+                current_size.x,
+                current_size.y
+            );
+            commands.entity(entity).remove::<DragBackSizeProtection>();
+        }
     }
 }
 
@@ -111,14 +114,9 @@ fn detect_user_resize(
 /// transition to `PendingCorrection` state. We don't apply immediately because `AppKit`'s
 /// live resize will overwrite our correction - we need to wait for the resize to complete.
 fn handle_drag_back_scale_change(
-    mut protection: ResMut<DragBackSizeProtection>,
+    mut windows: Query<&mut DragBackSizeProtection>,
     mut scale_changed_messages: MessageReader<WindowScaleFactorChanged>,
 ) {
-    // Only act in WaitingForDragBack state
-    if protection.state != CorrectionState::WaitingForDragBack {
-        return;
-    }
-
     // Only act on scale change events
     let Some(scale_event) = scale_changed_messages.read().last() else {
         return;
@@ -126,37 +124,44 @@ fn handle_drag_back_scale_change(
 
     let new_scale = scale_event.scale_factor;
 
-    // Check if we're transitioning to the launch monitor
-    if (new_scale - protection.launch_scale).abs() > SCALE_FACTOR_EPSILON {
+    for mut protection in &mut windows {
+        // Only act in WaitingForDragBack state
+        if protection.state != CorrectionState::WaitingForDragBack {
+            continue;
+        }
+
+        // Check if we're transitioning to the launch monitor
+        if (new_scale - protection.launch_scale).abs() > SCALE_FACTOR_EPSILON {
+            debug!(
+                "[W4 fix] Scale changed to {} (not launch_scale {}), ignoring",
+                new_scale, protection.launch_scale
+            );
+            continue;
+        }
+
+        // Calculate the correct physical size at launch scale
+        let ratio = protection.launch_scale / protection.restored_scale;
+        let corrected_width = (f64::from(protection.expected_physical_size.x) * ratio) as u32;
+        let corrected_height = (f64::from(protection.expected_physical_size.y) * ratio) as u32;
+        let corrected_size = UVec2::new(corrected_width, corrected_height);
+
         debug!(
-            "[W4 fix] Scale changed to {} (not launch_scale {}), ignoring",
-            new_scale, protection.launch_scale
+            "[W4 fix] Drag-back detected: scale {} -> {}, queueing correction {}x{} -> {}x{} (waiting for wrong size {}x{})",
+            protection.restored_scale,
+            protection.launch_scale,
+            protection.expected_physical_size.x,
+            protection.expected_physical_size.y,
+            corrected_width,
+            corrected_height,
+            protection.phase1_cached_size.x,
+            protection.phase1_cached_size.y,
         );
-        return;
+
+        protection.state = CorrectionState::PendingCorrection {
+            corrected_size,
+            wrong_cached_size: protection.phase1_cached_size,
+        };
     }
-
-    // Calculate the correct physical size at launch scale
-    let ratio = protection.launch_scale / protection.restored_scale;
-    let corrected_width = (f64::from(protection.expected_physical_size.x) * ratio) as u32;
-    let corrected_height = (f64::from(protection.expected_physical_size.y) * ratio) as u32;
-    let corrected_size = UVec2::new(corrected_width, corrected_height);
-
-    debug!(
-        "[W4 fix] Drag-back detected: scale {} -> {}, queueing correction {}x{} -> {}x{} (waiting for wrong size {}x{})",
-        protection.restored_scale,
-        protection.launch_scale,
-        protection.expected_physical_size.x,
-        protection.expected_physical_size.y,
-        corrected_width,
-        corrected_height,
-        protection.phase1_cached_size.x,
-        protection.phase1_cached_size.y,
-    );
-
-    protection.state = CorrectionState::PendingCorrection {
-        corrected_size,
-        wrong_cached_size: protection.phase1_cached_size,
-    };
 }
 
 /// Apply pending correction after `AppKit`'s live resize applies the wrong cached size.
@@ -165,49 +170,50 @@ fn handle_drag_back_scale_change(
 /// wrong cached size (W4 behavior), apply our correction.
 fn apply_pending_correction(
     mut commands: Commands,
-    protection: Res<DragBackSizeProtection>,
-    mut window: Single<&mut Window, With<PrimaryWindow>>,
+    mut windows: Query<(Entity, &DragBackSizeProtection, &mut Window)>,
     mut resize_messages: MessageReader<WindowResized>,
 ) {
-    let CorrectionState::PendingCorrection {
-        corrected_size,
-        wrong_cached_size,
-    } = protection.state
-    else {
-        return;
-    };
-
     // Wait for a resize event
     if resize_messages.read().last().is_none() {
         return;
     }
 
-    let current_size = UVec2::new(
-        window.resolution.physical_width(),
-        window.resolution.physical_height(),
-    );
+    for (entity, protection, mut window) in &mut windows {
+        let CorrectionState::PendingCorrection {
+            corrected_size,
+            wrong_cached_size,
+        } = protection.state
+        else {
+            continue;
+        };
 
-    // Only apply correction when we see the wrong cached size (W4 has triggered)
-    // Use tolerance of 2 pixels due to rounding (AppKit rounds fractional logical sizes)
-    let size_matches = current_size.x.abs_diff(wrong_cached_size.x) <= 2
-        && current_size.y.abs_diff(wrong_cached_size.y) <= 2;
-
-    if !size_matches {
-        debug!(
-            "[W4 fix] Resize to {}x{}, waiting for wrong size ~{}x{}",
-            current_size.x, current_size.y, wrong_cached_size.x, wrong_cached_size.y
+        let current_size = UVec2::new(
+            window.resolution.physical_width(),
+            window.resolution.physical_height(),
         );
-        return;
+
+        // Only apply correction when we see the wrong cached size (W4 has triggered)
+        // Use tolerance of 2 pixels due to rounding (AppKit rounds fractional logical sizes)
+        let size_matches = current_size.x.abs_diff(wrong_cached_size.x) <= 2
+            && current_size.y.abs_diff(wrong_cached_size.y) <= 2;
+
+        if !size_matches {
+            debug!(
+                "[W4 fix] Resize to {}x{}, waiting for wrong size ~{}x{}",
+                current_size.x, current_size.y, wrong_cached_size.x, wrong_cached_size.y
+            );
+            continue;
+        }
+
+        debug!(
+            "[W4 fix] W4 detected (size={}x{}), applying correction: {}x{}, removing protection",
+            current_size.x, current_size.y, corrected_size.x, corrected_size.y
+        );
+
+        window
+            .resolution
+            .set_physical_resolution(corrected_size.x, corrected_size.y);
+
+        commands.entity(entity).remove::<DragBackSizeProtection>();
     }
-
-    debug!(
-        "[W4 fix] W4 detected (size={}x{}), applying correction: {}x{}, removing protection",
-        current_size.x, current_size.y, corrected_size.x, corrected_size.y
-    );
-
-    window
-        .resolution
-        .set_physical_resolution(corrected_size.x, corrected_size.y);
-
-    commands.remove_resource::<DragBackSizeProtection>();
 }
