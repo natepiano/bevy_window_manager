@@ -29,23 +29,23 @@ impl fmt::Display for WindowIdentifier {
     }
 }
 
-/// Event fired when window target state is loaded from the save file.
+/// Event fired when a window restore completes and the window becomes visible.
 ///
-/// This is an [`EntityEvent`] triggered on the window entity during the restore process,
-/// before the window becomes visible. Dependent crates can observe this event to
-/// know the intended window size and mode.
+/// This is an [`EntityEvent`] triggered on the window entity at the end of the restore
+/// process, after position, size, and mode have been applied. Dependent crates can
+/// observe this event to know the final restored window state.
 ///
 /// Use an observer to receive this event:
 /// ```ignore
 /// // For all windows
-/// app.add_observer(|trigger: On<WindowTargetLoaded>| {
+/// app.add_observer(|trigger: On<WindowRestored>| {
 ///     let event = trigger.event();
 ///     // Use event.entity, event.size, event.mode, etc.
 /// });
 ///
 /// // For primary window only - check event.entity against PrimaryWindow query
-/// fn on_window_target_loaded(
-///     trigger: On<WindowTargetLoaded>,
+/// fn on_window_restored(
+///     trigger: On<WindowRestored>,
 ///     primary_window: Query<(), With<PrimaryWindow>>,
 /// ) {
 ///     let event = trigger.event();
@@ -55,17 +55,19 @@ impl fmt::Display for WindowIdentifier {
 /// }
 /// ```
 #[derive(EntityEvent, Debug, Clone, Reflect)]
-pub struct WindowTargetLoaded {
+pub struct WindowRestored {
     /// The window entity this event targets.
-    pub entity:    Entity,
+    pub entity:        Entity,
     /// Identifier for this window (primary or managed name).
-    pub window_id: WindowIdentifier,
-    /// Target position (None on Wayland where clients can't access window position).
-    pub position:  Option<IVec2>,
-    /// Target size (content area, excluding window decoration).
-    pub size:      UVec2,
-    /// Target window mode.
-    pub mode:      WindowMode,
+    pub window_id:     WindowIdentifier,
+    /// Target position that was applied (None on Wayland).
+    pub position:      Option<IVec2>,
+    /// Target size that was applied (content area).
+    pub size:          UVec2,
+    /// Window mode that was applied.
+    pub mode:          WindowMode,
+    /// Monitor index the window was restored to.
+    pub monitor_index: usize,
 }
 
 /// Threshold for considering two scale factors equal.
@@ -290,26 +292,35 @@ pub enum MonitorScaleStrategy {
 pub struct TargetPosition {
     /// Final clamped position (adjusted to fit within target monitor).
     /// None on Wayland where clients can't access window position.
-    pub position:                 Option<IVec2>,
+    pub position:                  Option<IVec2>,
     /// Target width (content area, excluding window decoration).
-    pub width:                    u32,
+    pub width:                     u32,
     /// Target height (content area, excluding window decoration).
-    pub height:                   u32,
+    pub height:                    u32,
     /// Scale factor of the target monitor.
-    pub target_scale:             f64,
+    pub target_scale:              f64,
     /// Scale factor of the monitor where the window starts (keyboard focus monitor).
-    pub starting_scale:           f64,
+    pub starting_scale:            f64,
     /// Strategy for handling scale factor differences between monitors.
-    pub monitor_scale_strategy:   MonitorScaleStrategy,
+    pub monitor_scale_strategy:    MonitorScaleStrategy,
     /// Window mode to restore.
-    pub mode:                     SavedWindowMode,
+    pub mode:                      SavedWindowMode,
     /// Target monitor index for fullscreen restore.
     /// On non-Wayland platforms, this could be derived from position, but Wayland
     /// doesn't provide window position, so we store it explicitly.
-    pub target_monitor_index:     usize,
+    pub target_monitor_index:      usize,
     /// Fullscreen restore state (Windows only, DX12/DXGI workaround).
     #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
-    pub fullscreen_restore_state: FullscreenRestoreState,
+    pub fullscreen_restore_state:  FullscreenRestoreState,
+    /// macOS two-phase fullscreen restore for managed windows.
+    ///
+    /// When multiple windows both go `BorderlessFullscreen`, macOS tabs them into
+    /// the same fullscreen space instead of placing them on separate monitors. To
+    /// work around this, managed fullscreen windows are first restored as Windowed
+    /// (positioned on the target monitor), then switched to fullscreen after
+    /// positioning completes. This field stashes the deferred fullscreen mode.
+    #[cfg(target_os = "macos")]
+    pub macos_deferred_fullscreen: Option<SavedWindowMode>,
 }
 
 impl TargetPosition {
@@ -354,26 +365,6 @@ impl TargetPosition {
             (f64::from(self.height) * ratio) as u32,
         )
     }
-}
-
-/// Event fired when a window restore completes and the window becomes visible.
-///
-/// Carries the target values from `TargetPosition` so consumers know what was intended.
-/// Triggered on the window entity right before `TargetPosition` is removed.
-#[derive(EntityEvent, Debug, Clone, Reflect)]
-pub struct WindowPositioned {
-    /// The window entity this event targets.
-    pub entity:        Entity,
-    /// Identifier for this window (primary or managed name).
-    pub window_id:     WindowIdentifier,
-    /// Target position that was applied (None on Wayland).
-    pub position:      Option<IVec2>,
-    /// Target size that was applied (content area).
-    pub size:          UVec2,
-    /// Window mode that was applied.
-    pub mode:          WindowMode,
-    /// Monitor index the window was restored to.
-    pub monitor_index: usize,
 }
 
 /// Configuration for the `RestoreWindowPlugin`.

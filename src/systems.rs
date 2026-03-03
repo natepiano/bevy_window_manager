@@ -37,9 +37,8 @@ use crate::types::SavedWindowMode;
 use crate::types::TargetPosition;
 use crate::types::WindowDecoration;
 use crate::types::WindowIdentifier;
-use crate::types::WindowPositioned;
 use crate::types::WindowRestoreState;
-use crate::types::WindowTargetLoaded;
+use crate::types::WindowRestored;
 use crate::types::WinitInfo;
 use crate::types::X11FrameCompensated;
 
@@ -276,7 +275,6 @@ pub fn load_target_position(
     }
 
     // Store inner dimensions - decoration is only needed for clamping above
-    let window_mode = state.mode.to_window_mode(state.monitor_index);
     let entity = *window_entity;
 
     commands.entity(entity).insert(TargetPosition {
@@ -290,19 +288,9 @@ pub fn load_target_position(
         target_monitor_index: state.monitor_index,
         #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
         fullscreen_restore_state: FullscreenRestoreState::WaitingForSurface,
+        #[cfg(target_os = "macos")]
+        macos_deferred_fullscreen: None,
     });
-
-    // Notify dependent crates of the target window state (triggered on window entity)
-    let size = UVec2::new(width, height);
-    commands
-        .entity(entity)
-        .trigger(|entity| WindowTargetLoaded {
-            entity,
-            window_id: WindowIdentifier::Primary,
-            position,
-            size,
-            mode: window_mode,
-        });
 
     // Insert X11FrameCompensated token for platforms that don't need compensation.
     // On Linux + W6 + X11, the compensation system inserts this token after adjusting position.
@@ -692,6 +680,19 @@ pub fn restore_windows(
             try_apply_restore(&target, &mut window),
             RestoreStatus::Complete
         ) {
+            // macOS two-phase fullscreen: apply the deferred fullscreen mode now that
+            // the window is positioned on the correct monitor. This prevents macOS
+            // from tabbing multiple fullscreen windows into the same space.
+            #[cfg(target_os = "macos")]
+            if let Some(ref deferred) = target.macos_deferred_fullscreen {
+                let window_mode = deferred.to_window_mode(target.target_monitor_index);
+                window.mode = window_mode;
+                debug!(
+                    "[Restore] macOS: applied deferred fullscreen {:?}",
+                    window_mode
+                );
+            }
+
             // Insert W4 drag-back protection for HigherToLower restores
             #[cfg(all(target_os = "macos", feature = "workaround-winit-4441"))]
             if was_higher_to_lower {
@@ -750,12 +751,12 @@ pub fn restore_windows(
                 }
             }
 
-            // Fire `WindowPositioned` event
+            // Fire `WindowRestored` event
             let target_mode = target.mode.to_window_mode(target.target_monitor_index);
             let target_size = target.size();
             let target_position = target.position;
             let target_monitor = target.target_monitor_index;
-            commands.entity(entity).trigger(|entity| WindowPositioned {
+            commands.entity(entity).trigger(|entity| WindowRestored {
                 entity,
                 window_id,
                 position: target_position,
@@ -794,9 +795,15 @@ pub fn is_wayland() -> bool {
 pub fn update_current_monitor(
     mut commands: Commands,
     windows: Query<
-        (Entity, &Window, Option<&CurrentMonitor>),
+        (
+            Entity,
+            &Window,
+            Option<&CurrentMonitor>,
+            Option<&crate::ManagedWindow>,
+        ),
         Or<(With<PrimaryWindow>, With<crate::ManagedWindow>)>,
     >,
+    primary_q: Query<&CurrentMonitor, With<PrimaryWindow>>,
     monitors: Res<Monitors>,
     _non_send: NonSendMarker,
 ) {
@@ -804,7 +811,7 @@ pub fn update_current_monitor(
         return;
     }
 
-    for (entity, window, existing) in &windows {
+    for (entity, window, existing, managed) in &windows {
         // Detect which monitor this window is on
         let monitor_info = if is_wayland() {
             // Wayland: poll winit's current_monitor() when focused, otherwise preserve existing
@@ -822,8 +829,26 @@ pub fn update_current_monitor(
             existing.map_or(*monitors.first(), |cm| cm.monitor)
         };
 
+        // On macOS, when a managed window is on the same monitor as a fullscreen primary,
+        // it's likely auto-tabbed into the primary's fullscreen space (not independently
+        // fullscreen). Skip the effective_mode override to avoid saving it as
+        // `BorderlessFullscreen`, which would create a separate fullscreen space on restore.
+        let is_likely_auto_tabbed = cfg!(target_os = "macos")
+            && managed.is_some()
+            && primary_q.iter().next().is_some_and(|primary_cm| {
+                primary_cm.monitor.index == monitor_info.index
+                    && matches!(
+                        primary_cm.effective_mode,
+                        WindowMode::BorderlessFullscreen(_) | WindowMode::Fullscreen(_, _)
+                    )
+            });
+
         // Compute effective mode
-        let effective_mode = compute_effective_mode(window, &monitor_info, &monitors);
+        let effective_mode = if is_likely_auto_tabbed {
+            window.mode
+        } else {
+            compute_effective_mode(window, &monitor_info, &monitors)
+        };
 
         let new_current = CurrentMonitor {
             monitor: monitor_info,

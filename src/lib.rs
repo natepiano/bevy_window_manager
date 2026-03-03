@@ -52,18 +52,14 @@ pub use monitors::MonitorInfo;
 use monitors::MonitorPlugin;
 pub use monitors::Monitors;
 use monitors::init_monitors;
-pub use state::PRIMARY_WINDOW_KEY;
-pub use state::load_all_states;
 pub use types::ManagedWindow;
 pub use types::ManagedWindowPersistence;
 use types::ManagedWindowRegistry;
-pub use types::RestoreWindowConfig;
-pub use types::SavedWindowMode;
+use types::RestoreWindowConfig;
+use types::SavedWindowMode;
 use types::TargetPosition;
 pub use types::WindowIdentifier;
-pub use types::WindowPositioned;
-pub use types::WindowState;
-pub use types::WindowTargetLoaded;
+pub use types::WindowRestored;
 /// The main plugin. See module docs for usage.
 ///
 /// Default state file locations:
@@ -404,7 +400,31 @@ fn restore_managed_window(
     // `with_position`, which converts `PhysicalPosition` using the wrong scale factor
     // (`NSScreen::mainScreen` scale instead of the target monitor's scale).
 
-    let window_mode = saved_state.mode.to_window_mode(saved_state.monitor_index);
+    // On macOS, managed windows that were fullscreen need two-phase restore:
+    // first position as Windowed on the target monitor, then apply fullscreen.
+    // This prevents macOS from tabbing multiple fullscreen windows into the same space.
+    //
+    // We also set `window.position = Centered(target_monitor)` so that `create_windows`
+    // places the OS window on the correct monitor from creation. Without this, macOS
+    // creates the window on the focused (primary) monitor and immediately pulls it
+    // into the primary's fullscreen tab group.
+    #[cfg(target_os = "macos")]
+    let (mode, macos_deferred_fullscreen) = if saved_state.mode.is_fullscreen() {
+        debug!(
+            "[restore_managed_window] macOS: deferring fullscreen {:?} for \"{window_name}\", centering on monitor {}",
+            saved_state.mode, saved_state.monitor_index
+        );
+        if let Ok(mut window) = windows.get_mut(entity) {
+            window.position =
+                WindowPosition::Centered(MonitorSelection::Index(saved_state.monitor_index));
+        }
+        (SavedWindowMode::Windowed, Some(saved_state.mode.clone()))
+    } else {
+        (saved_state.mode.clone(), None)
+    };
+    #[cfg(not(target_os = "macos"))]
+    let mode = saved_state.mode.clone();
+
     let target = TargetPosition {
         position,
         width,
@@ -412,26 +432,15 @@ fn restore_managed_window(
         target_scale,
         starting_scale,
         monitor_scale_strategy: strategy,
-        mode: saved_state.mode.clone(),
+        mode,
         target_monitor_index: saved_state.monitor_index,
         #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
         fullscreen_restore_state: types::FullscreenRestoreState::WaitingForSurface,
+        #[cfg(target_os = "macos")]
+        macos_deferred_fullscreen,
     };
 
     commands.entity(entity).insert(target);
-
-    // Trigger `WindowTargetLoaded`
-    let size = UVec2::new(width, height);
-    let window_id = types::WindowIdentifier::Managed((*window_name).to_string());
-    commands
-        .entity(entity)
-        .trigger(|entity| WindowTargetLoaded {
-            entity,
-            window_id,
-            position,
-            size,
-            mode: window_mode,
-        });
 
     // Insert `X11FrameCompensated` for platforms that don't need compensation
     #[cfg(not(all(target_os = "linux", feature = "workaround-winit-4445")))]

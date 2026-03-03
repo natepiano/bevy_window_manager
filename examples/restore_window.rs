@@ -42,13 +42,8 @@ use bevy_window_manager::CurrentMonitor;
 use bevy_window_manager::ManagedWindow;
 use bevy_window_manager::ManagedWindowPersistence;
 use bevy_window_manager::Monitors;
-use bevy_window_manager::PRIMARY_WINDOW_KEY;
-use bevy_window_manager::RestoreWindowConfig;
-use bevy_window_manager::SavedWindowMode;
 use bevy_window_manager::WindowManagerPlugin;
-use bevy_window_manager::WindowPositioned;
-use bevy_window_manager::WindowState;
-use bevy_window_manager::WindowTargetLoaded;
+use bevy_window_manager::WindowRestored;
 
 fn main() {
     App::new()
@@ -61,12 +56,12 @@ fn main() {
         }))
         .add_plugins(WindowManagerPlugin)
         .add_plugins(BrpExtrasPlugin::default())
-        .add_observer(on_window_target_loaded)
-        .add_observer(on_window_positioned)
+        .add_observer(on_window_restored)
         .add_observer(on_secondary_window_added)
         .add_observer(on_secondary_window_removed)
         .init_resource::<SelectedVideoModes>()
         .init_resource::<WindowCounter>()
+        .init_resource::<RestoredStates>()
         .add_systems(Startup, setup)
         .add_systems(
             Update,
@@ -120,16 +115,33 @@ struct PrimaryDisplay;
 #[derive(Component)]
 struct SecondaryDisplay(Entity);
 
-// --- WindowTargetLoaded Test Support ---
+// --- WindowRestored Test Support ---
 
-/// Resource inserted when `WindowTargetLoaded` event is received.
+/// Resource inserted when `WindowRestored` event is received.
 /// Queryable via BRP to verify the event fired with expected values.
 #[derive(Resource, Debug, Clone, Reflect)]
 #[reflect(Resource)]
-struct WindowTargetLoadedReceived {
-    position: Option<IVec2>,
-    size:     UVec2,
-    mode:     WindowMode,
+struct WindowRestoredReceived {
+    position:      Option<IVec2>,
+    size:          UVec2,
+    mode:          WindowMode,
+    monitor_index: usize,
+}
+
+/// Cached restored state per window, populated from `WindowRestored` events.
+/// Used for the "File" column comparison display.
+#[derive(Resource, Default)]
+struct RestoredStates {
+    states: HashMap<Entity, CachedRestoredState>,
+}
+
+/// State cached from a `WindowRestored` event for display comparison.
+struct CachedRestoredState {
+    position:      Option<IVec2>,
+    width:         u32,
+    height:        u32,
+    monitor_index: usize,
+    mode:          WindowMode,
 }
 
 // --- Constants ---
@@ -213,10 +225,10 @@ fn on_secondary_window_removed(
 
 // --- Comparison Display ---
 
-/// Build comparison spans (file vs current) for a window and add them as `TextSpan` children.
+/// Build comparison spans (restored vs current) for a window and add them as `TextSpan` children.
 fn build_comparison_spans(
     cb: &mut ChildSpawnerCommands,
-    file_state: Option<&WindowState>,
+    restored_state: Option<&CachedRestoredState>,
     window: &Window,
     monitor: &CurrentMonitor,
     font: &TextFont,
@@ -237,13 +249,13 @@ fn build_comparison_spans(
     );
     let current_scale = format!("{scale}");
     let current_monitor = format!("{}", monitor.index);
-    let current_mode = format!("{:?}", SavedWindowMode::from(&effective_mode));
+    let current_mode = format!("{effective_mode:?}");
 
-    if let Some(state) = file_state {
-        // File values (width/height are saved via physical_width(), so they're physical)
+    if let Some(state) = restored_state {
+        // Restored values from `WindowRestored` event
         let file_pos = state
             .position
-            .map_or_else(|| "None".to_string(), |(x, y)| format!("({x}, {y})"));
+            .map_or_else(|| "None".to_string(), |p| format!("({}, {})", p.x, p.y));
         let file_size_phys = format!("{}x{}", state.width, state.height);
         let file_monitor = format!("{}", state.monitor_index);
         let file_mode = format!("{:?}", state.mode);
@@ -261,7 +273,10 @@ fn build_comparison_spans(
             + 2;
         let col1_width = col1_width.max(16);
 
-        let header = format!("{:LABEL_WIDTH$}{:<col1_width$}{}\n", "", "File", "Current");
+        let header = format!(
+            "{:LABEL_WIDTH$}{:<col1_width$}{}\n",
+            "", "Restored", "Current"
+        );
         add_span(cb, font, &header, DEFAULT_COLOR);
 
         // Rows with mismatch highlighting
@@ -305,7 +320,7 @@ fn build_comparison_spans(
         );
         add_comparison_row(cb, font, "Mode:", &file_mode, &current_mode, col1_width);
     } else {
-        add_span(cb, font, "State: Not in state file\n\n", MISMATCH_COLOR);
+        add_span(cb, font, "State: No restore data\n\n", MISMATCH_COLOR);
         add_span(
             cb,
             font,
@@ -387,19 +402,19 @@ fn add_span(cb: &mut ChildSpawnerCommands, font: &TextFont, text: &str, color: C
 
 fn update_primary_display(
     primary_display: Single<Entity, With<PrimaryDisplay>>,
-    window_query: Single<(&Window, &CurrentMonitor), With<PrimaryWindow>>,
+    window_query: Single<(Entity, &Window, &CurrentMonitor), With<PrimaryWindow>>,
     monitors_res: Res<Monitors>,
     bevy_monitors: Query<(Entity, &Monitor)>,
     mut selected: ResMut<SelectedVideoModes>,
     persistence: Res<ManagedWindowPersistence>,
     managed_q: Query<(&Window, &ManagedWindow, Option<&CurrentMonitor>)>,
-    config: Res<RestoreWindowConfig>,
+    restored_states: Res<RestoredStates>,
     mut commands: Commands,
 ) {
     let display_entity = *primary_display;
-    let (window, monitor) = *window_query;
+    let (window_entity, window, monitor) = *window_query;
 
-    let file_state = config.loaded_states.get(PRIMARY_WINDOW_KEY);
+    let restored_state = restored_states.states.get(&window_entity);
 
     let (video_modes, refresh_rate) = get_video_modes_for_monitor(&bevy_monitors, monitor);
     let refresh_display = format_refresh_rate(window, refresh_rate);
@@ -421,7 +436,7 @@ fn update_primary_display(
         add_span(cb, &font, &format!("{monitor_row}\n\n"), DEFAULT_COLOR);
 
         // Comparison table
-        build_comparison_spans(cb, file_state, window, monitor, &font);
+        build_comparison_spans(cb, restored_state, window, monitor, &font);
 
         // Video modes
         add_span(
@@ -487,7 +502,7 @@ fn update_secondary_displays(
     monitors_res: Res<Monitors>,
     bevy_monitors: Query<(Entity, &Monitor)>,
     mut selected: ResMut<SelectedVideoModes>,
-    config: Res<RestoreWindowConfig>,
+    restored_states: Res<RestoredStates>,
     mut commands: Commands,
 ) {
     for (display_entity, display) in &mut displays {
@@ -498,11 +513,11 @@ fn update_secondary_displays(
             monitor:        *monitors_res.first(),
             effective_mode: window.mode,
         });
+
         let name = managed_q
             .get(display.0)
             .map_or("unknown", |m| &m.window_name);
-
-        let file_state = config.loaded_states.get(name);
+        let restored_state = restored_states.states.get(&display.0);
 
         let (video_modes, refresh_rate) =
             get_video_modes_for_monitor(&bevy_monitors, &monitor_info);
@@ -530,7 +545,7 @@ fn update_secondary_displays(
             );
 
             // Comparison table
-            build_comparison_spans(cb, file_state, window, &monitor_info, &font);
+            build_comparison_spans(cb, restored_state, window, &monitor_info, &font);
 
             // Video modes
             add_span(
@@ -562,7 +577,6 @@ fn handle_primary_input(
     mut commands: Commands,
     mut counter: ResMut<WindowCounter>,
     mut persistence: ResMut<ManagedWindowPersistence>,
-    config: Res<RestoreWindowConfig>,
 ) {
     if !primary_window.focused {
         return;
@@ -603,10 +617,12 @@ fn handle_primary_input(
         && keys.pressed(KeyCode::ShiftLeft)
         && keys.pressed(KeyCode::ControlLeft)
     {
-        if let Err(e) = std::fs::remove_file(&config.path) {
-            warn!("[restore_window] Failed to remove state file: {e}");
-        } else {
-            info!("[restore_window] Cleared state file: {:?}", config.path);
+        if let Some(state_path) = get_state_file_path() {
+            if let Err(e) = std::fs::remove_file(&state_path) {
+                warn!("[restore_window] Failed to remove state file: {e}");
+            } else {
+                info!("[restore_window] Cleared state file: {state_path:?}");
+            }
         }
         std::process::exit(0);
     }
@@ -614,6 +630,16 @@ fn handle_primary_input(
     if keys.just_pressed(KeyCode::KeyQ) {
         std::process::exit(0);
     }
+}
+
+/// Compute the state file path using the same logic as the plugin.
+fn get_state_file_path() -> Option<std::path::PathBuf> {
+    let exe_name = std::env::current_exe()
+        .ok()?
+        .file_stem()?
+        .to_str()?
+        .to_string();
+    dirs::config_dir().map(|d| d.join(exe_name).join("windows.ron"))
 }
 
 /// Handle mode-switching and video mode navigation for the focused window.
@@ -938,25 +964,33 @@ fn debug_scale_factor_changed(mut messages: MessageReader<WindowScaleFactorChang
     }
 }
 
-/// Observer that logs when `WindowPositioned` event is received (restore complete).
-fn on_window_positioned(trigger: On<WindowPositioned>) {
+/// Observer that logs when `WindowRestored` event is received and caches the restored state.
+fn on_window_restored(
+    trigger: On<WindowRestored>,
+    mut commands: Commands,
+    mut restored_states: ResMut<RestoredStates>,
+) {
     let event = trigger.event();
     info!(
-        "[on_window_positioned] Restore complete: window_id={} entity={:?} position={:?} size={} mode={:?} monitor={}",
+        "[on_window_restored] Restore complete: window_id={} entity={:?} position={:?} size={} mode={:?} monitor={}",
         event.window_id, event.entity, event.position, event.size, event.mode, event.monitor_index
     );
-}
 
-/// Observer that logs when `WindowTargetLoaded` event is received and inserts a queryable resource.
-fn on_window_target_loaded(trigger: On<WindowTargetLoaded>, mut commands: Commands) {
-    let event = trigger.event();
-    info!(
-        "[on_window_target_loaded] WindowTargetLoaded received: entity={:?} position={:?} size={} mode={:?}",
-        event.entity, event.position, event.size, event.mode
+    restored_states.states.insert(
+        event.entity,
+        CachedRestoredState {
+            position:      event.position,
+            width:         event.size.x,
+            height:        event.size.y,
+            monitor_index: event.monitor_index,
+            mode:          event.mode,
+        },
     );
-    commands.insert_resource(WindowTargetLoadedReceived {
-        position: event.position,
-        size:     event.size,
-        mode:     event.mode,
+
+    commands.insert_resource(WindowRestoredReceived {
+        position:      event.position,
+        size:          event.size,
+        mode:          event.mode,
+        monitor_index: event.monitor_index,
     });
 }
