@@ -148,12 +148,14 @@ if ($monitors.Count -eq 0) {
 }
 
 # Convert target Bevy monitor position to Windows logical coordinates
+# Windows uses the PRIMARY monitor's scale for the entire virtual screen coordinate system
+$primaryScale = $Mon0Scale
 if ($TargetIndex -eq 0) {
-    $targetBevyLogicalX = [int]($Mon0X / $Mon0Scale)
-    $targetBevyLogicalY = [int]($Mon0Y / $Mon0Scale)
+    $targetBevyLogicalX = [int]($Mon0X / $primaryScale)
+    $targetBevyLogicalY = [int]($Mon0Y / $primaryScale)
 } else {
-    $targetBevyLogicalX = [int]($Mon1X / $Mon1Scale)
-    $targetBevyLogicalY = [int]($Mon1Y / $Mon1Scale)
+    $targetBevyLogicalX = [int]($Mon1X / $primaryScale)
+    $targetBevyLogicalY = [int]($Mon1Y / $primaryScale)
 }
 
 # Find the Windows monitor that matches the target Bevy monitor by position
