@@ -9,8 +9,8 @@
     ),
     "window-1": (
         position: Some((-716, -1340)),
-        width: 600,
-        height: 400,
+        width: 1200,
+        height: 800,
         monitor_index: 1,
         mode: Windowed,
         app_name: "restore_window",

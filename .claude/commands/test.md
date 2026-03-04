@@ -369,6 +369,10 @@ Check which fields exist:
 - Has `ron_file` + `mutation`? → This is a mutation test
 - Has `ron_file` only? → This is a simple restore test
 
+Determine the `validate` array for legacy compatibility:
+- If test has `windows` object: use `test.windows.primary.validate` as the primary validate array
+- If test has top-level `validate` array (legacy): use that directly
+
 ## Step 2: Write RON File
 
 1. Read the RON template from `${test_ron_dir}/${test.ron_file}`
@@ -445,6 +449,18 @@ For `backend: "wayland"`:
 
 ## Step 4: Validate Restore
 
+Iterate over all entries in `test.windows` (or fall back to legacy top-level `validate`).
+
+For each window key in `test.windows`:
+
+### Determine the validate array and expected values
+
+- **validate array**: `test.windows[key].validate`
+- **Expected values**: Parse from the substituted RON content (already read in Step 2). The RON is a `HashMap<String, WindowState>` — look up the key to get position, width, height, monitor_index, mode.
+- **expected_mode override**: If window entry has `expected_mode`, use that instead of RON mode.
+
+### Handle exit_code validation
+
 **If `validate` contains `"exit_code"`** (e.g., fullscreen panic tests):
 - Skip window query - validation happens after shutdown in Step 7
 - Proceed directly to Step 7 (Shutdown)
@@ -453,49 +469,12 @@ For `backend: "wayland"`:
   - Exit code 134 (SIGABRT) = FAIL (panic)
   - Other non-zero = FAIL with details
 
-**Otherwise** (normal window validation):
+### Handle spawn_event (managed windows)
 
-Run exactly these queries based on `validate` array contents:
+**If window entry has `spawn_event`** (managed window that needs spawning):
 
-### For `"position"` and/or `"size"` and/or `"mode"` validation:
-
-Query Window: `mcp__brp__world_query`
-- data: `{"components": ["bevy_window::window::Window"]}`
-- filter: `{"with": ["bevy_window::window::PrimaryWindow"]}`
-
-Fields to check:
-- `"position"`: `window.position` matches `{"At": [POS_X, POS_Y]}`
-  - **Note**: On Wayland (`backend: "wayland"`), position is always `Automatic` - skip position validation
-  - **Note**: On X11 (`backend: "x11"`), Window.position reflects the client area position (below title bar),
-    not the frame position, due to winit bug #4445. After a mutation, Window.position will immediately show
-    the client area position (mutation value + frame_top). The RON saves this client area position.
-- `"size"`: `window.resolution.physical_width` and `window.resolution.physical_height` match expected
-- `"mode"`: `window.mode` matches expected
-  - **If test has `expected_mode``: verify `window.mode` matches `expected_mode` instead of RON file
-    (used when actual mode differs from requested, e.g., exclusive→borderless fallback)
-
-### For `"monitor_index"` validation:
-
-Query CurrentMonitor: `mcp__brp__world_query`
-- data: `{"components": ["bevy_window_manager::monitors::CurrentMonitor"]}`
-- filter: `{"with": ["bevy_window::window::PrimaryWindow"]}`
-
-Fields to check:
-- `current_monitor.monitor_index` matches expected target monitor index
-
-**IMPORTANT**: Do NOT use `Window.resolution.scale_factor` for monitor validation.
-On Windows, `scale_factor` does not update when windows are programmatically moved between monitors.
-Always use `CurrentMonitor.monitor_index` as the source of truth.
-
-**If test has `expected_log_warning`**:
-- Check captured log output contains the expected warning string
-- PASS if warning found, FAIL if not
-
-Record validation result (PASS or FAIL with details).
-
-## Step 4.5: Multi-Window Handling (if `multi_window` field exists)
-
-1. **Trigger spawn**: Use `mcp__brp__world_trigger_event` with event type `test.multi_window.trigger_event` (e.g., `restore_window::SpawnManagedWindow`)
+1. **Trigger spawn**: Use `mcp__brp__world_trigger_event` with event type from `spawn_event` (e.g., `restore_window::SpawnManagedWindow`)
+   - Only trigger once even if multiple windows share the same `spawn_event`
 
 2. **Poll for restore completion**: Query for entities with `ManagedWindow` (without `PrimaryWindow`) until the secondary window's `Window.position` is `At` (not `Automatic`), indicating restore finished. Use:
    ```
@@ -506,15 +485,45 @@ Record validation result (PASS or FAIL with details).
    ```
    Poll with short delays (0.5-1s) until `Window.position` shows `At(...)` rather than `Automatic`. Max 10 attempts before failing.
 
-3. **Validate each secondary window**: For each window name in `test.multi_window.windows`:
-   - Match the query result by `ManagedWindow.window_name`
-   - Check `CurrentMonitor.monitor_index` matches `expected_monitor`
-   - Check `Window.position` matches `{"At": expected_position}`
-   - Check `Window.resolution.physical_width` and `physical_height` match `expected_size`
+3. **Validate**: Match the query result by `ManagedWindow.window_name` matching the window key, then validate using the window's `validate` array against RON values (see field checks below).
 
-Record multi-window validation result (PASS or FAIL with details per window).
+### Query and validate window fields
 
-## Step 4.6: Persistence Validation Setup (if `persistence_validation` field exists)
+**For `"primary"` key**: Query with PrimaryWindow filter:
+
+Query Window: `mcp__brp__world_query`
+- data: `{"components": ["bevy_window::window::Window"]}`
+- filter: `{"with": ["bevy_window::window::PrimaryWindow"]}`
+
+**For managed window keys**: Use the ManagedWindow query result from the spawn polling above. Match by `ManagedWindow.window_name`.
+
+### Field checks (same for primary and managed windows):
+
+- `"position"`: `window.position` matches `{"At": [POS_X, POS_Y]}` from RON
+  - **Note**: On Wayland (`backend: "wayland"`), position is always `Automatic` - skip position validation
+  - **Note**: On X11 (`backend: "x11"`), Window.position reflects the client area position (below title bar),
+    not the frame position, due to winit bug #4445. After a mutation, Window.position will immediately show
+    the client area position (mutation value + frame_top). The RON saves this client area position.
+- `"size"`: `window.resolution.physical_width` and `window.resolution.physical_height` match RON width/height
+- `"mode"`: `window.mode` matches expected
+  - **If window entry has `expected_mode`**: verify `window.mode` matches `expected_mode` instead of RON mode
+    (used when actual mode differs from requested, e.g., exclusive→borderless fallback)
+- `"monitor_index"`: Query CurrentMonitor for this window:
+  - For primary: `filter: {"with": ["bevy_window::window::PrimaryWindow"]}`
+  - For managed: use `CurrentMonitor` from the ManagedWindow query result
+  - Check `current_monitor.monitor_index` matches RON `monitor_index`
+
+**IMPORTANT**: Do NOT use `Window.resolution.scale_factor` for monitor validation.
+On Windows, `scale_factor` does not update when windows are programmatically moved between monitors.
+Always use `CurrentMonitor.monitor_index` as the source of truth.
+
+**If test has `expected_log_warning`**:
+- Check captured log output contains the expected warning string
+- PASS if warning found, FAIL if not
+
+Record validation result (PASS or FAIL with details per window).
+
+## Step 4.5: Persistence Validation Setup (if `persistence_validation` field exists)
 
 This step sets up the persistence mode before shutdown. The actual validation happens after shutdown in Step 7.5.
 

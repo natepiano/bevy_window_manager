@@ -15,7 +15,11 @@
         "target_monitor": 0,
         "size": [1200, 1000]
       },
-      "validate": ["size", "mode", "monitor_index"]
+      "windows": {
+        "primary": {
+          "validate": ["size", "mode", "monitor_index"]
+        }
+      }
     },
     {
       "id": "wayland_borderless_0_0",
@@ -24,7 +28,11 @@
       "backend": "wayland",
       "launch_monitor": 0,
       "ron_file": "fullscreen_borderless_to_mon0.ron",
-      "validate": ["mode", "monitor_index"]
+      "windows": {
+        "primary": {
+          "validate": ["mode", "monitor_index"]
+        }
+      }
     },
     {
       "id": "wayland_borderless_0_1",
@@ -33,7 +41,11 @@
       "backend": "wayland",
       "launch_monitor": 0,
       "ron_file": "fullscreen_borderless_to_mon1.ron",
-      "validate": ["mode", "monitor_index"]
+      "windows": {
+        "primary": {
+          "validate": ["mode", "monitor_index"]
+        }
+      }
     },
     {
       "id": "wayland_exclusive_fallback_0_0",
@@ -44,8 +56,12 @@
       "launch_monitor": 0,
       "ron_file": "fullscreen_exclusive_to_mon0.ron",
       "expected_log_warning": "Exclusive fullscreen is not supported on Wayland, restoring as BorderlessFullscreen",
-      "validate": ["mode", "monitor_index"],
-      "expected_mode": "BorderlessFullscreen"
+      "windows": {
+        "primary": {
+          "validate": ["mode", "monitor_index"],
+          "expected_mode": "BorderlessFullscreen"
+        }
+      }
     },
 
     {
@@ -55,14 +71,13 @@
       "backend": "wayland",
       "launch_monitor": 0,
       "ron_file": "multi_window_0_0.ron",
-      "validate": ["size", "monitor_index", "mode"],
-      "multi_window": {
-        "trigger_event": "restore_window::SpawnManagedWindow",
-        "windows": {
-          "window-1": {
-            "expected_monitor": 0,
-            "expected_size": [600, 400]
-          }
+      "windows": {
+        "primary": {
+          "validate": ["size", "monitor_index", "mode"]
+        },
+        "window-1": {
+          "spawn_event": "restore_window::SpawnManagedWindow",
+          "validate": ["size", "monitor_index", "mode"]
         }
       }
     },
@@ -74,7 +89,11 @@
       "backend": "wayland",
       "launch_monitor": 0,
       "ron_file": "multi_window_0_0.ron",
-      "validate": ["size", "monitor_index", "mode"],
+      "windows": {
+        "primary": {
+          "validate": ["size", "monitor_index", "mode"]
+        }
+      },
       "persistence_validation": {
         "mode": "RememberAll",
         "expected_ron_keys": ["primary", "window-1"]
@@ -88,7 +107,11 @@
       "backend": "wayland",
       "launch_monitor": 0,
       "ron_file": "multi_window_0_0.ron",
-      "validate": ["size", "monitor_index", "mode"],
+      "windows": {
+        "primary": {
+          "validate": ["size", "monitor_index", "mode"]
+        }
+      },
       "persistence_validation": {
         "mode": "ActiveOnly",
         "expected_ron_keys": ["primary"],
@@ -106,7 +129,11 @@
         "target_monitor": 1,
         "size": [1000, 700]
       },
-      "validate": ["size", "mode", "monitor_index"]
+      "windows": {
+        "primary": {
+          "validate": ["size", "mode", "monitor_index"]
+        }
+      }
     },
     {
       "id": "wayland_borderless_1_0",
@@ -115,7 +142,11 @@
       "backend": "wayland",
       "launch_monitor": 1,
       "ron_file": "fullscreen_borderless_to_mon0.ron",
-      "validate": ["mode", "monitor_index"]
+      "windows": {
+        "primary": {
+          "validate": ["mode", "monitor_index"]
+        }
+      }
     },
     {
       "id": "wayland_borderless_1_1",
@@ -124,7 +155,11 @@
       "backend": "wayland",
       "launch_monitor": 1,
       "ron_file": "fullscreen_borderless_to_mon1.ron",
-      "validate": ["mode", "monitor_index"]
+      "windows": {
+        "primary": {
+          "validate": ["mode", "monitor_index"]
+        }
+      }
     },
     {
       "id": "wayland_exclusive_fallback_1_1",
@@ -135,8 +170,12 @@
       "launch_monitor": 1,
       "ron_file": "fullscreen_exclusive_to_mon1.ron",
       "expected_log_warning": "Exclusive fullscreen is not supported on Wayland, restoring as BorderlessFullscreen",
-      "validate": ["mode", "monitor_index"],
-      "expected_mode": "BorderlessFullscreen"
+      "windows": {
+        "primary": {
+          "validate": ["mode", "monitor_index"],
+          "expected_mode": "BorderlessFullscreen"
+        }
+      }
     },
 
     {
@@ -147,14 +186,13 @@
       "launch_monitor": 0,
       "requires": {"min_monitors": 2},
       "ron_file": "multi_window_0_1.ron",
-      "validate": ["size", "monitor_index", "mode"],
-      "multi_window": {
-        "trigger_event": "restore_window::SpawnManagedWindow",
-        "windows": {
-          "window-1": {
-            "expected_monitor": 1,
-            "expected_size": [600, 400]
-          }
+      "windows": {
+        "primary": {
+          "validate": ["size", "monitor_index", "mode"]
+        },
+        "window-1": {
+          "spawn_event": "restore_window::SpawnManagedWindow",
+          "validate": ["size", "monitor_index", "mode"]
         }
       }
     },
@@ -167,14 +205,13 @@
       "launch_monitor": 1,
       "requires": {"min_monitors": 2},
       "ron_file": "multi_window_1_0.ron",
-      "validate": ["size", "monitor_index", "mode"],
-      "multi_window": {
-        "trigger_event": "restore_window::SpawnManagedWindow",
-        "windows": {
-          "window-1": {
-            "expected_monitor": 0,
-            "expected_size": [600, 400]
-          }
+      "windows": {
+        "primary": {
+          "validate": ["size", "monitor_index", "mode"]
+        },
+        "window-1": {
+          "spawn_event": "restore_window::SpawnManagedWindow",
+          "validate": ["size", "monitor_index", "mode"]
         }
       }
     },
@@ -187,14 +224,13 @@
       "launch_monitor": 1,
       "requires": {"min_monitors": 2},
       "ron_file": "multi_window_1_1.ron",
-      "validate": ["size", "monitor_index", "mode"],
-      "multi_window": {
-        "trigger_event": "restore_window::SpawnManagedWindow",
-        "windows": {
-          "window-1": {
-            "expected_monitor": 1,
-            "expected_size": [600, 400]
-          }
+      "windows": {
+        "primary": {
+          "validate": ["size", "monitor_index", "mode"]
+        },
+        "window-1": {
+          "spawn_event": "restore_window::SpawnManagedWindow",
+          "validate": ["size", "monitor_index", "mode"]
         }
       }
     },
@@ -211,7 +247,11 @@
         "position_offset": [300, 250],
         "size": [1200, 800]
       },
-      "validate": ["position", "size", "mode", "monitor_index"],
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "mode", "monitor_index"]
+        }
+      },
       "workaround_validation": {
         "feature_flag": "workaround-winit-4445",
         "build_without": "--no-default-features --features workaround-winit-4440,workaround-winit-4443",
@@ -238,7 +278,11 @@
       },
 
       "ron_file": "cross_monitor_high_to_low.ron",
-      "validate": ["position", "size", "monitor_index", "mode"]
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        }
+      }
     },
     {
       "id": "x11_borderless_0_0",
@@ -247,7 +291,11 @@
       "backend": "x11",
       "launch_monitor": 0,
       "ron_file": "fullscreen_borderless_to_mon0.ron",
-      "validate": ["mode", "monitor_index"]
+      "windows": {
+        "primary": {
+          "validate": ["mode", "monitor_index"]
+        }
+      }
     },
     {
       "id": "x11_borderless_0_1",
@@ -256,7 +304,11 @@
       "backend": "x11",
       "launch_monitor": 0,
       "ron_file": "fullscreen_borderless_to_mon1.ron",
-      "validate": ["mode", "monitor_index"]
+      "windows": {
+        "primary": {
+          "validate": ["mode", "monitor_index"]
+        }
+      }
     },
     {
       "id": "x11_exclusive_0_0",
@@ -265,7 +317,11 @@
       "backend": "x11",
       "launch_monitor": 0,
       "ron_file": "fullscreen_exclusive_to_mon0.ron",
-      "validate": ["mode", "monitor_index"]
+      "windows": {
+        "primary": {
+          "validate": ["mode", "monitor_index"]
+        }
+      }
     },
     {
       "id": "x11_exclusive_0_1",
@@ -274,7 +330,11 @@
       "backend": "x11",
       "launch_monitor": 0,
       "ron_file": "fullscreen_exclusive_to_mon1.ron",
-      "validate": ["mode", "monitor_index"]
+      "windows": {
+        "primary": {
+          "validate": ["mode", "monitor_index"]
+        }
+      }
     },
 
     {
@@ -284,15 +344,13 @@
       "backend": "x11",
       "launch_monitor": 0,
       "ron_file": "multi_window_0_0.ron",
-      "validate": ["position", "size", "monitor_index", "mode"],
-      "multi_window": {
-        "trigger_event": "restore_window::SpawnManagedWindow",
-        "windows": {
-          "window-1": {
-            "expected_monitor": 0,
-            "expected_position": [2012, 3280],
-            "expected_size": [600, 400]
-          }
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        },
+        "window-1": {
+          "spawn_event": "restore_window::SpawnManagedWindow",
+          "validate": ["position", "size", "monitor_index", "mode"]
         }
       }
     },
@@ -304,7 +362,11 @@
       "backend": "x11",
       "launch_monitor": 0,
       "ron_file": "multi_window_0_0.ron",
-      "validate": ["position", "size", "monitor_index", "mode"],
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        }
+      },
       "persistence_validation": {
         "mode": "RememberAll",
         "expected_ron_keys": ["primary", "window-1"]
@@ -318,7 +380,11 @@
       "backend": "x11",
       "launch_monitor": 0,
       "ron_file": "multi_window_0_0.ron",
-      "validate": ["position", "size", "monitor_index", "mode"],
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        }
+      },
       "persistence_validation": {
         "mode": "ActiveOnly",
         "expected_ron_keys": ["primary"],
@@ -338,7 +404,11 @@
         "position_offset": [200, 150],
         "size": [1000, 700]
       },
-      "validate": ["position", "size", "mode", "monitor_index"],
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "mode", "monitor_index"]
+        }
+      },
       "workaround_validation": {
         "feature_flag": "workaround-winit-4445",
         "build_without": "--no-default-features --features workaround-winit-4440,workaround-winit-4443",
@@ -365,7 +435,11 @@
       },
 
       "ron_file": "cross_monitor_low_to_high.ron",
-      "validate": ["position", "size", "monitor_index", "mode"]
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        }
+      }
     },
     {
       "id": "x11_borderless_1_0",
@@ -374,7 +448,11 @@
       "backend": "x11",
       "launch_monitor": 1,
       "ron_file": "fullscreen_borderless_to_mon0.ron",
-      "validate": ["mode", "monitor_index"]
+      "windows": {
+        "primary": {
+          "validate": ["mode", "monitor_index"]
+        }
+      }
     },
     {
       "id": "x11_borderless_1_1",
@@ -383,7 +461,11 @@
       "backend": "x11",
       "launch_monitor": 1,
       "ron_file": "fullscreen_borderless_to_mon1.ron",
-      "validate": ["mode", "monitor_index"]
+      "windows": {
+        "primary": {
+          "validate": ["mode", "monitor_index"]
+        }
+      }
     },
     {
       "id": "x11_exclusive_1_0",
@@ -392,7 +474,11 @@
       "backend": "x11",
       "launch_monitor": 1,
       "ron_file": "fullscreen_exclusive_to_mon0.ron",
-      "validate": ["mode", "monitor_index"]
+      "windows": {
+        "primary": {
+          "validate": ["mode", "monitor_index"]
+        }
+      }
     },
     {
       "id": "x11_exclusive_1_1",
@@ -401,7 +487,11 @@
       "backend": "x11",
       "launch_monitor": 1,
       "ron_file": "fullscreen_exclusive_to_mon1.ron",
-      "validate": ["mode", "monitor_index"]
+      "windows": {
+        "primary": {
+          "validate": ["mode", "monitor_index"]
+        }
+      }
     },
 
     {
@@ -412,15 +502,13 @@
       "launch_monitor": 0,
       "requires": {"min_monitors": 2},
       "ron_file": "multi_window_0_1.ron",
-      "validate": ["position", "size", "monitor_index", "mode"],
-      "multi_window": {
-        "trigger_event": "restore_window::SpawnManagedWindow",
-        "windows": {
-          "window-1": {
-            "expected_monitor": 1,
-            "expected_position": [200, 200],
-            "expected_size": [600, 400]
-          }
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        },
+        "window-1": {
+          "spawn_event": "restore_window::SpawnManagedWindow",
+          "validate": ["position", "size", "monitor_index", "mode"]
         }
       }
     },
@@ -433,15 +521,13 @@
       "launch_monitor": 1,
       "requires": {"min_monitors": 2},
       "ron_file": "multi_window_1_0.ron",
-      "validate": ["position", "size", "monitor_index", "mode"],
-      "multi_window": {
-        "trigger_event": "restore_window::SpawnManagedWindow",
-        "windows": {
-          "window-1": {
-            "expected_monitor": 0,
-            "expected_position": [1712, 3080],
-            "expected_size": [600, 400]
-          }
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        },
+        "window-1": {
+          "spawn_event": "restore_window::SpawnManagedWindow",
+          "validate": ["position", "size", "monitor_index", "mode"]
         }
       }
     },
@@ -454,15 +540,13 @@
       "launch_monitor": 1,
       "requires": {"min_monitors": 2},
       "ron_file": "multi_window_1_1.ron",
-      "validate": ["position", "size", "monitor_index", "mode"],
-      "multi_window": {
-        "trigger_event": "restore_window::SpawnManagedWindow",
-        "windows": {
-          "window-1": {
-            "expected_monitor": 1,
-            "expected_position": [400, 400],
-            "expected_size": [600, 400]
-          }
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        },
+        "window-1": {
+          "spawn_event": "restore_window::SpawnManagedWindow",
+          "validate": ["position", "size", "monitor_index", "mode"]
         }
       }
     },

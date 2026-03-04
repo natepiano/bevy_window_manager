@@ -11,8 +11,8 @@
     "window-1": (
         // Secondary window on Monitor 0 (eDP)
         position: Some((1712, 3080)),
-        width: 600,
-        height: 400,
+        width: 1200,
+        height: 800,
         monitor_index: 0,
         mode: Windowed,
         app_name: "restore_window",

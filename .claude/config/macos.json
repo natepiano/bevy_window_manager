@@ -18,7 +18,11 @@
         "size": [1000, 700]
       },
 
-      "validate": ["position", "size", "monitor_index", "mode"]
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        }
+      }
     },
 
     {
@@ -39,7 +43,11 @@
 
       "ron_file": "cross_monitor_high_to_low.ron",
 
-      "validate": ["position", "size", "monitor_index", "mode"]
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        }
+      }
     },
 
     {
@@ -50,7 +58,11 @@
 
       "ron_file": "fullscreen_borderless_mon0.ron",
 
-      "validate": ["monitor_index", "mode"]
+      "windows": {
+        "primary": {
+          "validate": ["monitor_index", "mode"]
+        }
+      }
     },
 
     {
@@ -62,8 +74,12 @@
       "ron_file": "fullscreen_borderless_green_button.ron",
 
       "click_fullscreen_button": true,
-      "expected_mode": "BorderlessFullscreen",
-      "validate": ["mode"]
+      "windows": {
+        "primary": {
+          "validate": ["mode"],
+          "expected_mode": "BorderlessFullscreen"
+        }
+      }
     },
 
     {
@@ -74,16 +90,13 @@
 
       "ron_file": "multi_window_0_0.ron",
 
-      "validate": ["position", "size", "monitor_index", "mode"],
-
-      "multi_window": {
-        "trigger_event": "restore_window::SpawnManagedWindow",
-        "windows": {
-          "window-1": {
-            "expected_monitor": 0,
-            "expected_position": [800, 600],
-            "expected_size": [600, 400]
-          }
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        },
+        "window-1": {
+          "spawn_event": "restore_window::SpawnManagedWindow",
+          "validate": ["position", "size", "monitor_index", "mode"]
         }
       }
     },
@@ -96,7 +109,11 @@
 
       "ron_file": "multi_window_0_0.ron",
 
-      "validate": ["position", "size", "monitor_index", "mode"],
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        }
+      },
 
       "persistence_validation": {
         "mode": "RememberAll",
@@ -112,7 +129,11 @@
 
       "ron_file": "multi_window_0_0.ron",
 
-      "validate": ["position", "size", "monitor_index", "mode"],
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        }
+      },
 
       "persistence_validation": {
         "mode": "ActiveOnly",
@@ -130,16 +151,13 @@
 
       "ron_file": "multi_window_0_1.ron",
 
-      "validate": ["position", "size", "monitor_index", "mode"],
-
-      "multi_window": {
-        "trigger_event": "restore_window::SpawnManagedWindow",
-        "windows": {
-          "window-1": {
-            "expected_monitor": 1,
-            "expected_position": [-716, -1340],
-            "expected_size": [600, 400]
-          }
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        },
+        "window-1": {
+          "spawn_event": "restore_window::SpawnManagedWindow",
+          "validate": ["position", "size", "monitor_index", "mode"]
         }
       }
     },
@@ -158,7 +176,11 @@
         "size": [1100, 600]
       },
 
-      "validate": ["position", "size", "monitor_index", "mode"]
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        }
+      }
     },
 
     {
@@ -179,7 +201,11 @@
 
       "ron_file": "cross_monitor_low_to_high.ron",
 
-      "validate": ["position", "size", "monitor_index", "mode"]
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        }
+      }
     },
 
     {
@@ -191,16 +217,13 @@
 
       "ron_file": "multi_window_1_0.ron",
 
-      "validate": ["position", "size", "monitor_index", "mode"],
-
-      "multi_window": {
-        "trigger_event": "restore_window::SpawnManagedWindow",
-        "windows": {
-          "window-1": {
-            "expected_monitor": 0,
-            "expected_position": [200, 200],
-            "expected_size": [600, 400]
-          }
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        },
+        "window-1": {
+          "spawn_event": "restore_window::SpawnManagedWindow",
+          "validate": ["position", "size", "monitor_index", "mode"]
         }
       }
     },
@@ -214,16 +237,13 @@
 
       "ron_file": "multi_window_1_1.ron",
 
-      "validate": ["position", "size", "monitor_index", "mode"],
-
-      "multi_window": {
-        "trigger_event": "restore_window::SpawnManagedWindow",
-        "windows": {
-          "window-1": {
-            "expected_monitor": 1,
-            "expected_position": [-516, -1240],
-            "expected_size": [600, 400]
-          }
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        },
+        "window-1": {
+          "spawn_event": "restore_window::SpawnManagedWindow",
+          "validate": ["position", "size", "monitor_index", "mode"]
         }
       }
     },
