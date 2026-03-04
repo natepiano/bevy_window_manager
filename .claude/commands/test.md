@@ -106,17 +106,17 @@ Store as ${PLATFORM}, ${FORCED_SINGLE_MONITOR}.
 
 <LoadTestConfig>
 **Windows**:
-Load single unified config: `.claude/config/windows.json`
+Load single unified config: `tests/config/windows.json`
 - Tests are ordered by launch_monitor (Monitor 0 first, then Monitor 1, then human tests)
 - Each test has a `launch_monitor` field specifying which monitor Zed must be on
 
 **macOS**:
-Load single unified config: `.claude/config/macos.json`
+Load single unified config: `tests/config/macos.json`
 - Tests are ordered by launch_monitor (Monitor 0 first, then Monitor 1, then human tests)
 - Each test has a `launch_monitor` field specifying which monitor Zed must be on
 
 **Linux**:
-Load single unified config: `.claude/config/linux.json`
+Load single unified config: `tests/config/linux.json`
 - Tests are ordered by backend (Wayland first, then X11) and by launch_monitor within each backend
 - Each test has a `launch_monitor` field specifying which monitor the terminal must be on
 
@@ -456,7 +456,7 @@ For each window key in `test.windows`:
 ### Determine the validate array and expected values
 
 - **validate array**: `test.windows[key].validate`
-- **Expected values**: Parse from the substituted RON content (already read in Step 2). The RON is a `HashMap<String, WindowState>` — look up the key to get position, width, height, monitor_index, mode.
+- **Expected values**: Parse from the substituted RON content (already read in Step 2). The RON is a `PersistedState` struct with a `version` field and an `entries` array of `(key, state)` pairs. To find the expected values for a window key: iterate `entries` and match on `key: Primary` (for "primary") or `key: Managed("window-1")` (for managed windows). Extract position, width, height, monitor_index, mode from the matched entry's `state`.
 - **expected_mode override**: If window entry has `expected_mode`, use that instead of RON mode.
 
 ### Handle exit_code validation

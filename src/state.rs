@@ -88,7 +88,7 @@ mod tests {
     }
 
     #[test]
-    fn save_then_load_roundtrip_v2() {
+    fn save_then_load_roundtrip_v1() {
         let file = match NamedTempFile::new() {
             Ok(file) => file,
             Err(error) => panic!("failed to create temp file: {error}"),
@@ -102,35 +102,21 @@ mod tests {
         save_all_states(path, &states);
 
         let loaded = load_all_states(path);
-        assert!(loaded.is_some(), "expected saved v2 state to load");
+        assert!(loaded.is_some(), "expected saved v1 state to load");
         let loaded = loaded.unwrap_or_default();
         assert!(loaded.contains_key(&WindowKey::Primary));
         assert!(loaded.contains_key(&WindowKey::Managed("primary".to_string())));
     }
 
     #[test]
-    fn legacy_read_then_save_rewrites_v2() {
+    fn legacy_single_window_read_then_save_rewrites_v1() {
         let file = match NamedTempFile::new() {
             Ok(file) => file,
             Err(error) => panic!("failed to create temp file: {error}"),
         };
         let path = file.path();
-        let legacy = std::collections::HashMap::from([
-            ("primary".to_string(), sample_state()),
-            (
-                "inspector".to_string(),
-                WindowState {
-                    position:      None,
-                    width:         1024,
-                    height:        768,
-                    monitor_index: 1,
-                    mode:          SavedWindowMode::Windowed,
-                    app_name:      String::new(),
-                },
-            ),
-        ]);
         let legacy_contents =
-            match ron::ser::to_string_pretty(&legacy, ron::ser::PrettyConfig::default()) {
+            match ron::ser::to_string_pretty(&sample_state(), ron::ser::PrettyConfig::default()) {
                 Ok(contents) => contents,
                 Err(error) => panic!("failed to serialize legacy state: {error}"),
             };
@@ -148,8 +134,8 @@ mod tests {
         assert!(contents.is_ok(), "expected rewritten file to be readable");
         let contents = contents.unwrap_or_default();
         assert!(
-            contents.contains("version: 2"),
-            "expected rewritten file to contain v2 version marker"
+            contents.contains("version: 1"),
+            "expected rewritten file to contain v1 version marker"
         );
     }
 }

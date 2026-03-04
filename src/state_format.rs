@@ -11,25 +11,13 @@ use crate::state::PRIMARY_WINDOW_KEY;
 use crate::types::WindowState;
 
 /// Current persisted state format version.
-pub const CURRENT_STATE_VERSION: u8 = 2;
+pub const CURRENT_STATE_VERSION: u8 = 1;
 
 /// Typed identifier for persisted window state.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, Reflect)]
 pub enum WindowKey {
     Primary,
     Managed(String),
-}
-
-impl WindowKey {
-    /// Convert a legacy string key into a typed key.
-    #[must_use]
-    pub fn from_legacy_key(key: String) -> Self {
-        if key == PRIMARY_WINDOW_KEY {
-            Self::Primary
-        } else {
-            Self::Managed(key)
-        }
-    }
 }
 
 impl fmt::Display for WindowKey {
@@ -41,7 +29,7 @@ impl fmt::Display for WindowKey {
     }
 }
 
-/// One persisted key/state pair in v2.
+/// One persisted key/state pair in v1.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersistedEntry {
     pub key:   WindowKey,
@@ -50,7 +38,7 @@ pub struct PersistedEntry {
 
 /// Versioned persisted state format.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PersistedStateV2 {
+pub struct PersistedState {
     pub version: u8,
     pub entries: Vec<PersistedEntry>,
 }
@@ -58,33 +46,22 @@ pub struct PersistedStateV2 {
 /// Decode persisted state text into typed runtime state.
 ///
 /// Supports:
-/// - v2 format (`PersistedStateV2`)
-/// - legacy v1 map format (`HashMap<String, WindowState>`)
+/// - v1 format (`PersistedState`)
 /// - legacy single-window format (`WindowState`)
 pub fn decode(contents: &str) -> Option<HashMap<WindowKey, WindowState>> {
-    if let Ok(persisted) = ron::from_str::<PersistedStateV2>(contents) {
-        return decode_v2(persisted);
-    }
-
-    if let Ok(legacy) = ron::from_str::<HashMap<String, WindowState>>(contents) {
-        debug!("[decode] Migrated legacy HashMap<String, WindowState> format to v2");
-        return Some(
-            legacy
-                .into_iter()
-                .map(|(key, state)| (WindowKey::from_legacy_key(key), state))
-                .collect(),
-        );
+    if let Ok(persisted) = ron::from_str::<PersistedState>(contents) {
+        return decode_v1(persisted);
     }
 
     if let Ok(state) = ron::from_str::<WindowState>(contents) {
-        debug!("[decode] Migrated legacy single-window format to v2");
+        debug!("[decode] Migrated legacy single-window format to v1");
         return Some(HashMap::from([(WindowKey::Primary, state)]));
     }
 
     None
 }
 
-fn decode_v2(persisted: PersistedStateV2) -> Option<HashMap<WindowKey, WindowState>> {
+fn decode_v1(persisted: PersistedState) -> Option<HashMap<WindowKey, WindowState>> {
     if persisted.version != CURRENT_STATE_VERSION {
         warn!(
             "[decode] Unsupported persisted state version {} (expected {})",
@@ -115,7 +92,7 @@ const RON_HEADER: &str = "\
 // Monitor scale factor is NOT stored — it is looked up at runtime.
 ";
 
-/// Encode typed runtime state into persisted v2 text.
+/// Encode typed runtime state into persisted v1 text.
 pub fn encode(states: &HashMap<WindowKey, WindowState>) -> Result<String, ron::Error> {
     let mut entries: Vec<PersistedEntry> = states
         .iter()
@@ -126,7 +103,7 @@ pub fn encode(states: &HashMap<WindowKey, WindowState>) -> Result<String, ron::E
         .collect();
     entries.sort_by(|a, b| a.key.cmp(&b.key));
 
-    let persisted = PersistedStateV2 {
+    let persisted = PersistedState {
         version: CURRENT_STATE_VERSION,
         entries,
     };
@@ -142,7 +119,7 @@ mod tests {
 
     use super::CURRENT_STATE_VERSION;
     use super::PersistedEntry;
-    use super::PersistedStateV2;
+    use super::PersistedState;
     use super::WindowKey;
     use crate::state_format::decode;
     use crate::state_format::encode;
@@ -161,8 +138,8 @@ mod tests {
     }
 
     #[test]
-    fn decode_v2_distinguishes_primary_and_managed_primary() {
-        let persisted = PersistedStateV2 {
+    fn decode_v1_distinguishes_primary_and_managed_primary() {
+        let persisted = PersistedState {
             version: CURRENT_STATE_VERSION,
             entries: vec![
                 PersistedEntry {
@@ -185,7 +162,7 @@ mod tests {
             };
 
         let decoded = decode(&contents);
-        assert!(decoded.is_some(), "expected v2 decode to succeed");
+        assert!(decoded.is_some(), "expected v1 decode to succeed");
         let decoded = decoded.unwrap_or_default();
         assert!(decoded.contains_key(&WindowKey::Primary));
         assert!(decoded.contains_key(&WindowKey::Managed("primary".to_string())));
@@ -193,28 +170,27 @@ mod tests {
     }
 
     #[test]
-    fn decode_legacy_v1_converts_primary_and_managed() {
-        let legacy = HashMap::from([
-            ("primary".to_string(), sample_state()),
-            ("inspector".to_string(), sample_state()),
-        ]);
-        let contents = match ron::ser::to_string_pretty(&legacy, ron::ser::PrettyConfig::default())
-        {
-            Ok(contents) => contents,
-            Err(error) => panic!("failed to serialize legacy test state: {error}"),
-        };
+    fn decode_legacy_single_window_migrates_to_v1() {
+        let contents =
+            match ron::ser::to_string_pretty(&sample_state(), ron::ser::PrettyConfig::default()) {
+                Ok(contents) => contents,
+                Err(error) => panic!("failed to serialize legacy single-window state: {error}"),
+            };
 
         let decoded = decode(&contents);
-        assert!(decoded.is_some(), "expected legacy decode to succeed");
+        assert!(
+            decoded.is_some(),
+            "expected legacy single-window decode to succeed"
+        );
         let decoded = decoded.unwrap_or_default();
         assert!(decoded.contains_key(&WindowKey::Primary));
-        assert!(decoded.contains_key(&WindowKey::Managed("inspector".to_string())));
-        assert_eq!(decoded.len(), 2);
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(decoded[&WindowKey::Primary].position, Some((10, 20)));
     }
 
     #[test]
-    fn decode_v2_rejects_duplicate_keys() {
-        let persisted = PersistedStateV2 {
+    fn decode_v1_rejects_duplicate_keys() {
+        let persisted = PersistedState {
             version: CURRENT_STATE_VERSION,
             entries: vec![
                 PersistedEntry {
@@ -240,7 +216,7 @@ mod tests {
     }
 
     #[test]
-    fn encode_sets_version_2() {
+    fn encode_sets_version_1() {
         let states = HashMap::from([
             (WindowKey::Primary, sample_state()),
             (WindowKey::Managed("inspector".to_string()), sample_state()),
@@ -250,9 +226,9 @@ mod tests {
             Ok(encoded) => encoded,
             Err(error) => panic!("failed to encode state: {error}"),
         };
-        let decoded = ron::from_str::<PersistedStateV2>(&encoded);
-        assert!(decoded.is_ok(), "encoded text should parse as v2");
-        let decoded = decoded.unwrap_or(PersistedStateV2 {
+        let decoded = ron::from_str::<PersistedState>(&encoded);
+        assert!(decoded.is_ok(), "encoded text should parse as v1");
+        let decoded = decoded.unwrap_or(PersistedState {
             version: 0,
             entries: Vec::new(),
         });

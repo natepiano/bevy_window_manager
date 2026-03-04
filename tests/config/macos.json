@@ -1,0 +1,272 @@
+{
+  "platform": "macos",
+  "example_ron_path": "~/Library/Application Support/restore_window/windows.ron",
+  "test_ron_dir": "tests/config/ron/macos",
+
+  "tests": [
+    {
+      "id": "same_monitor_restore_mon0",
+      "description": "Basic position/size persistence on Monitor 0",
+      "automation": "full",
+      "launch_monitor": 0,
+
+      "ron_file": "same_monitor_restore_mon0.ron",
+
+      "mutation": {
+        "target_monitor": "launch",
+        "position_offset": [400, 300],
+        "size": [1000, 700]
+      },
+
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        }
+      }
+    },
+
+    {
+      "id": "cross_high_to_low_W1",
+      "description": "Window on low-DPI monitor restores correctly when launched from high-DPI monitor",
+      "automation": "full",
+      "launch_monitor": 0,
+      "requires": {"min_monitors": 2, "different_scales": true},
+      "workaround_keys": ["W1"],
+
+      "workaround_validation": {
+        "feature_flag": "workaround-winit-4440",
+        "build_without": "--no-default-features",
+        "build_with": "",
+        "without_behavior": "Window restores to wrong position/size on Monitor 1 due to scale factor mismatch",
+        "with_behavior": "Window restores to correct position/size on Monitor 1"
+      },
+
+      "ron_file": "cross_monitor_high_to_low.ron",
+
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        }
+      }
+    },
+
+    {
+      "id": "borderless_programmatic_mon0",
+      "description": "Borderless fullscreen restore - starts in borderless mode via RON",
+      "automation": "full",
+      "launch_monitor": 0,
+
+      "ron_file": "fullscreen_borderless_mon0.ron",
+
+      "windows": {
+        "primary": {
+          "validate": ["monitor_index", "mode"]
+        }
+      }
+    },
+
+    {
+      "id": "borderless_green_button",
+      "description": "Tests macOS native fullscreen via green button (automated via AppleScript)",
+      "automation": "full",
+      "launch_monitor": 0,
+
+      "ron_file": "fullscreen_borderless_green_button.ron",
+
+      "click_fullscreen_button": true,
+      "windows": {
+        "primary": {
+          "validate": ["mode"],
+          "expected_mode": "BorderlessFullscreen"
+        }
+      }
+    },
+
+    {
+      "id": "multi_window_0_0",
+      "description": "Primary on Monitor 0, secondary on Monitor 0",
+      "automation": "full",
+      "launch_monitor": 0,
+
+      "ron_file": "multi_window_0_0.ron",
+
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        },
+        "window-1": {
+          "spawn_event": "restore_window::SpawnManagedWindow",
+          "validate": ["position", "size", "monitor_index", "mode"]
+        }
+      }
+    },
+
+    {
+      "id": "persistence_remember_all",
+      "description": "RememberAll mode preserves unspawned window entries in RON after shutdown",
+      "automation": "full",
+      "launch_monitor": 0,
+
+      "ron_file": "multi_window_0_0.ron",
+
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        }
+      },
+
+      "persistence_validation": {
+        "mode": "RememberAll",
+        "expected_ron_keys": ["primary", "window-1"]
+      }
+    },
+
+    {
+      "id": "persistence_active_only",
+      "description": "ActiveOnly mode prunes unspawned window entries from RON after shutdown",
+      "automation": "full",
+      "launch_monitor": 0,
+
+      "ron_file": "multi_window_0_0.ron",
+
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        }
+      },
+
+      "persistence_validation": {
+        "mode": "ActiveOnly",
+        "expected_ron_keys": ["primary"],
+        "unexpected_ron_keys": ["window-1"]
+      }
+    },
+
+    {
+      "id": "multi_window_0_1",
+      "description": "Primary on Monitor 0, secondary on Monitor 1",
+      "automation": "full",
+      "launch_monitor": 0,
+      "requires": {"min_monitors": 2},
+
+      "ron_file": "multi_window_0_1.ron",
+
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        },
+        "window-1": {
+          "spawn_event": "restore_window::SpawnManagedWindow",
+          "validate": ["position", "size", "monitor_index", "mode"]
+        }
+      }
+    },
+
+    {
+      "id": "same_monitor_restore_mon1",
+      "description": "Basic position/size persistence on Monitor 1",
+      "automation": "full",
+      "launch_monitor": 1,
+
+      "ron_file": "same_monitor_restore_mon1.ron",
+
+      "mutation": {
+        "target_monitor": "launch",
+        "position_offset": [300, 200],
+        "size": [1100, 600]
+      },
+
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        }
+      }
+    },
+
+    {
+      "id": "cross_low_to_high_W1",
+      "description": "Window on high-DPI monitor restores correctly when launched from low-DPI monitor",
+      "automation": "full",
+      "launch_monitor": 1,
+      "requires": {"min_monitors": 2, "different_scales": true},
+      "workaround_keys": ["W1"],
+
+      "workaround_validation": {
+        "feature_flag": "workaround-winit-4440",
+        "build_without": "--no-default-features",
+        "build_with": "",
+        "without_behavior": "Window restores to wrong position/size on Monitor 0 due to scale factor mismatch",
+        "with_behavior": "Window restores to correct position/size on Monitor 0"
+      },
+
+      "ron_file": "cross_monitor_low_to_high.ron",
+
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        }
+      }
+    },
+
+    {
+      "id": "multi_window_1_0",
+      "description": "Primary on Monitor 1, secondary on Monitor 0",
+      "automation": "full",
+      "launch_monitor": 1,
+      "requires": {"min_monitors": 2},
+
+      "ron_file": "multi_window_1_0.ron",
+
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        },
+        "window-1": {
+          "spawn_event": "restore_window::SpawnManagedWindow",
+          "validate": ["position", "size", "monitor_index", "mode"]
+        }
+      }
+    },
+
+    {
+      "id": "multi_window_1_1",
+      "description": "Primary on Monitor 1, secondary on Monitor 1",
+      "automation": "full",
+      "launch_monitor": 1,
+      "requires": {"min_monitors": 2},
+
+      "ron_file": "multi_window_1_1.ron",
+
+      "windows": {
+        "primary": {
+          "validate": ["position", "size", "monitor_index", "mode"]
+        },
+        "window-1": {
+          "spawn_event": "restore_window::SpawnManagedWindow",
+          "validate": ["position", "size", "monitor_index", "mode"]
+        }
+      }
+    },
+
+    {
+      "id": "borderless_green_button_exit",
+      "description": "Exit borderless fullscreen via green button - validates effective_mode detects exit",
+      "automation": "human_assisted",
+      "launch_monitor": 0,
+
+      "ron_file": "fullscreen_borderless_mon0.ron",
+
+      "instructions": [
+        "Window starts in borderless fullscreen mode",
+        "Hover at the top of the screen to reveal the title bar",
+        "Click the green fullscreen button to exit fullscreen",
+        "Verify the Effective Mode shows Windowed (not BorderlessFullscreen)"
+      ],
+
+      "success_criteria": {
+        "pass": "Effective Mode shows Windowed after exiting fullscreen",
+        "fail": "Effective Mode still shows BorderlessFullscreen after exiting"
+      }
+    }
+  ]
+}
