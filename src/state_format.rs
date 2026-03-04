@@ -1,4 +1,31 @@
 //! On-disk persistence format and version handling.
+//!
+//! # Versioning strategy
+//!
+//! Every RON state file carries a `version` field inside [`PersistedState`].
+//! [`decode`] parses the file once, then dispatches to a version-specific
+//! decoder based on that field. All previously shipped versions remain
+//! supported so that users never lose their saved window positions.
+//!
+//! ## Adding a new version
+//!
+//! 1. Bump [`CURRENT_STATE_VERSION`].
+//! 2. If the new version changes the shape of an entry, add new structs (e.g. `PersistedEntryV2`)
+//!    and a conversion from the old entry type. If only semantics change, the existing structs can
+//!    be reused.
+//! 3. Add a `decode_v<N>` function that accepts a [`PersistedState`] and returns
+//!    `Option<HashMap<WindowKey, WindowState>>`.
+//! 4. Add an arm to the `match persisted.version` block inside [`decode`].
+//! 5. Update [`encode`] to write the new format (only the latest version is ever written).
+//! 6. Add a test that round-trips through the new version **and** a test that an older version file
+//!    still decodes correctly.
+//!
+//! ## Supported formats (oldest first)
+//!
+//! | Format | Description |
+//! |--------|-------------|
+//! | Legacy single-window | Bare `WindowState` (no version field, pre-multi-window) |
+//! | v1 | `PersistedState { version: 1, entries }` with [`WindowKey`] enum |
 
 use std::collections::HashMap;
 use std::fmt;
@@ -45,31 +72,38 @@ pub struct PersistedState {
 
 /// Decode persisted state text into typed runtime state.
 ///
-/// Supports:
-/// - v1 format (`PersistedState`)
-/// - legacy single-window format (`WindowState`)
+/// Tries versioned formats first (dispatching by the `version` field),
+/// then falls back to legacy unversioned formats. See the module-level
+/// docs for the full list of supported formats.
 pub fn decode(contents: &str) -> Option<HashMap<WindowKey, WindowState>> {
+    // Versioned format — dispatch by version number.
     if let Ok(persisted) = ron::from_str::<PersistedState>(contents) {
-        return decode_v1(persisted);
+        return match persisted.version {
+            1 => decode_v1(persisted),
+            // Future versions: add arms here, e.g. `2 => decode_v2(persisted),`
+            unsupported => {
+                warn!(
+                    "[decode] Unsupported persisted state version {unsupported} \
+                     (latest supported: {CURRENT_STATE_VERSION})"
+                );
+                None
+            },
+        };
     }
 
-    if let Ok(state) = ron::from_str::<WindowState>(contents) {
-        debug!("[decode] Migrated legacy single-window format to v1");
-        return Some(HashMap::from([(WindowKey::Primary, state)]));
-    }
+    // Legacy unversioned format — bare `WindowState` from before multi-window
+    // support. Cannot participate in the version match above because it has no
+    // `version` field.
+    decode_legacy_single_window(contents)
+}
 
-    None
+fn decode_legacy_single_window(contents: &str) -> Option<HashMap<WindowKey, WindowState>> {
+    let state = ron::from_str::<WindowState>(contents).ok()?;
+    debug!("[decode] Migrated legacy single-window format to v1");
+    Some(HashMap::from([(WindowKey::Primary, state)]))
 }
 
 fn decode_v1(persisted: PersistedState) -> Option<HashMap<WindowKey, WindowState>> {
-    if persisted.version != CURRENT_STATE_VERSION {
-        warn!(
-            "[decode] Unsupported persisted state version {} (expected {})",
-            persisted.version, CURRENT_STATE_VERSION
-        );
-        return None;
-    }
-
     let mut states = HashMap::with_capacity(persisted.entries.len());
     for entry in persisted.entries {
         if states.insert(entry.key.clone(), entry.state).is_some() {
