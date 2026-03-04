@@ -607,6 +607,12 @@ pub fn save_window_state(
 
 /// Apply pending window restore. Runs only when entities with `TargetPosition` exist.
 /// Processes all windows with both `TargetPosition` and `X11FrameCompensated` components.
+///
+/// Requires `NonSendMarker` because we access `WINIT_WINDOWS` thread-local to gate
+/// restore on the winit window existing. Without this gate, managed windows spawned
+/// at runtime would have their physical size set by `set_physical_resolution()` and
+/// then doubled by `create_windows` → `set_scale_factor_and_apply_to_physical_size()`
+/// which runs between frames.
 #[allow(clippy::too_many_arguments)]
 pub fn restore_windows(
     mut commands: Commands,
@@ -615,10 +621,26 @@ pub fn restore_windows(
     primary_q: Query<(), With<PrimaryWindow>>,
     managed_q: Query<&crate::ManagedWindow>,
     config: Res<RestoreWindowConfig>,
+    _non_send: NonSendMarker,
 ) {
     let scale_changed = scale_changed_messages.read().last().is_some();
 
     for (entity, mut target, mut window) in &mut windows {
+        // Wait for the winit window to be created before applying restore.
+        //
+        // Primary window: `create_windows` runs during winit `init()` before any Bevy
+        // schedules, so the winit window always exists when we get here.
+        //
+        // Managed windows: spawned at runtime, `create_windows` runs between frames via
+        // `WinitUserEvent::WindowAdded`. If we apply `set_physical_resolution()` before
+        // `create_windows` runs, `create_windows` will call
+        // `set_scale_factor_and_apply_to_physical_size(scale)` which multiplies our
+        // already-correct physical size by the scale factor (doubling it on 2x displays).
+        let winit_window_exists = WINIT_WINDOWS.with(|ww| ww.borrow().get_window(entity).is_some());
+        if !winit_window_exists {
+            debug!("[restore_windows] Skipping entity {entity:?}: winit window not yet created");
+            continue;
+        }
         // Unified initial move for HigherToLower: both primary and managed windows
         // enter here via `NeedInitialMove`. We call `apply_initial_move` to set the
         // compensated position (triggering a monitor scale change), then transition

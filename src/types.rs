@@ -276,9 +276,11 @@ pub struct TargetPosition {
     /// Final clamped position (adjusted to fit within target monitor).
     /// None on Wayland where clients can't access window position.
     pub position:                 Option<IVec2>,
-    /// Target width (content area, excluding window decoration).
+    /// Target width in physical pixels (content area, excluding window decoration).
+    /// Copied directly from `WindowState.width`. Applied via `set_physical_resolution()`.
     pub width:                    u32,
-    /// Target height (content area, excluding window decoration).
+    /// Target height in physical pixels (content area, excluding window decoration).
+    /// Copied directly from `WindowState.height`. Applied via `set_physical_resolution()`.
     pub height:                   u32,
     /// Scale factor of the target monitor.
     pub target_scale:             f64,
@@ -352,11 +354,22 @@ pub struct RestoreWindowConfig {
     pub loaded_states: std::collections::HashMap<WindowKey, WindowState>,
 }
 
-/// Saved window state.
+/// Saved window state persisted to the RON file.
+///
+/// All spatial values are in **physical pixels** (not logical). The monitor's scale factor
+/// is not stored — it is looked up at runtime from the `Monitors` resource.
+///
+/// On save, `width`/`height` come from `Window::physical_width()`/`physical_height()`.
+/// On restore, they are applied via `WindowResolution::set_physical_resolution()`.
+/// Position is applied via `Window.position = WindowPosition::At(pos)` (physical).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WindowState {
+    /// Top-left corner of the window content area in physical monitor coordinates.
+    /// `None` on Wayland where clients cannot access window position.
     pub position:      Option<(i32, i32)>,
+    /// Content area width in physical pixels (excludes window decoration).
     pub width:         u32,
+    /// Content area height in physical pixels (excludes window decoration).
     pub height:        u32,
     pub monitor_index: usize,
     pub mode:          SavedWindowMode,

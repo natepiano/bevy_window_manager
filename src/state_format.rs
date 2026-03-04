@@ -107,6 +107,14 @@ fn decode_v2(persisted: PersistedStateV2) -> Option<HashMap<WindowKey, WindowSta
     Some(states)
 }
 
+/// Header comment prepended to the RON file to document the coordinate contract.
+const RON_HEADER: &str = "\
+// All spatial values are in physical pixels (not logical).
+// Position: window content area top-left in physical monitor coordinates.
+// Width/Height: content area size in physical pixels (excludes decoration).
+// Monitor scale factor is NOT stored — it is looked up at runtime.
+";
+
 /// Encode typed runtime state into persisted v2 text.
 pub fn encode(states: &HashMap<WindowKey, WindowState>) -> Result<String, ron::Error> {
     let mut entries: Vec<PersistedEntry> = states
@@ -122,7 +130,8 @@ pub fn encode(states: &HashMap<WindowKey, WindowState>) -> Result<String, ron::E
         version: CURRENT_STATE_VERSION,
         entries,
     };
-    ron::ser::to_string_pretty(&persisted, ron::ser::PrettyConfig::default())
+    let ron_body = ron::ser::to_string_pretty(&persisted, ron::ser::PrettyConfig::default())?;
+    Ok(format!("{RON_HEADER}{ron_body}"))
 }
 
 #[cfg(test)]

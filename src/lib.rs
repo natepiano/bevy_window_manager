@@ -377,18 +377,11 @@ fn on_managed_window_load(
 
 /// Compute the target position for a managed window from saved state.
 ///
-/// Unlike the primary window (where `create_windows` runs before our PreStartup systems),
-/// managed windows are spawned at runtime: our observer fires first, then `create_windows`
-/// creates the winit window. We must NOT set `window.position` or physical size here:
-///
-/// - **Size**: Bevy's `create_windows` calls `set_scale_factor_and_apply_to_physical_size` which
-///   multiplies stored physical size by the monitor's scale factor, doubling it on 2x.
-/// - **Position**: `create_windows` converts `PhysicalPosition` to logical using
-///   `NSScreen::mainScreen` scale factor (the focused window's screen), not the target monitor's
-///   scale. This produces the wrong position when scales differ.
-///
-/// Both are applied later by `restore_windows` → `try_apply_restore` → `changed_windows`,
-/// which uses `set_outer_position` with the window's actual backing scale factor.
+/// Inserts a `TargetPosition` component but does NOT modify `Window.position` or
+/// `Window.resolution`. The actual restore is deferred to `restore_windows`, which
+/// gates on the winit window existing (via `WINIT_WINDOWS`). This ensures
+/// `create_windows` → `set_scale_factor_and_apply_to_physical_size()` runs first,
+/// preventing the physical size from being doubled on high-DPI displays.
 fn restore_managed_window(
     entity: Entity,
     _window_name: &str,
@@ -441,11 +434,6 @@ fn restore_managed_window(
         target_info.size.x,
         target_info.size.y,
     );
-
-    // Don't set position or size here. Both are applied by `try_apply_restore` after
-    // `create_windows` runs. Setting position here would cause `create_windows` to use
-    // `with_position`, which converts `PhysicalPosition` using the wrong scale factor
-    // (`NSScreen::mainScreen` scale instead of the target monitor's scale).
 
     commands.entity(entity).insert(target);
 
