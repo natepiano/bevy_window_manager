@@ -1,6 +1,5 @@
 //! Type definitions for window restoration.
 
-use std::fmt;
 use std::path::PathBuf;
 
 use bevy::prelude::*;
@@ -11,23 +10,7 @@ use bevy::window::WindowMode;
 use serde::Deserialize;
 use serde::Serialize;
 
-/// Identifies a managed window by its role: primary or named secondary.
-#[derive(Debug, Clone, PartialEq, Eq, Reflect)]
-pub enum WindowIdentifier {
-    /// The primary window (key `"primary"` in the state file).
-    Primary,
-    /// A secondary managed window with a unique name.
-    Managed(String),
-}
-
-impl fmt::Display for WindowIdentifier {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Primary => write!(f, "primary"),
-            Self::Managed(name) => write!(f, "{name}"),
-        }
-    }
-}
+use crate::WindowKey;
 
 /// Event fired when a window restore completes and the window becomes visible.
 ///
@@ -59,7 +42,7 @@ pub struct WindowRestored {
     /// The window entity this event targets.
     pub entity:        Entity,
     /// Identifier for this window (primary or managed name).
-    pub window_id:     WindowIdentifier,
+    pub window_id:     WindowKey,
     /// Target position that was applied (None on Wayland).
     pub position:      Option<IVec2>,
     /// Target size that was applied (content area).
@@ -366,7 +349,7 @@ pub struct RestoreWindowConfig {
     /// Snapshot of window states as loaded from the file at startup.
     /// Populated during restore so downstream code can compare intended vs actual state.
     /// Entries persist as a read-only snapshot for the example's File column.
-    pub loaded_states: std::collections::HashMap<String, WindowState>,
+    pub loaded_states: std::collections::HashMap<WindowKey, WindowState>,
 }
 
 /// Saved window state.

@@ -20,6 +20,7 @@ serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
 bevy_brp_extras = "0.18.7"
+tempfile = "3"
 
 [target.'cfg(windows)'.dependencies]
 raw-window-handle = "0.6"

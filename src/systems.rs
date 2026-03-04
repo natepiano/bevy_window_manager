@@ -21,6 +21,7 @@ use bevy::winit::WINIT_WINDOWS;
 use super::state;
 use super::types::RestoreWindowConfig;
 use super::types::WindowState;
+use crate::WindowKey;
 use crate::monitors::CurrentMonitor;
 use crate::monitors::MonitorInfo;
 use crate::monitors::Monitors;
@@ -31,7 +32,6 @@ use crate::types::MonitorScaleStrategy;
 use crate::types::SavedWindowMode;
 use crate::types::TargetPosition;
 use crate::types::WindowDecoration;
-use crate::types::WindowIdentifier;
 use crate::types::WindowRestoreState;
 use crate::types::WindowRestored;
 use crate::types::WinitInfo;
@@ -137,7 +137,7 @@ pub fn load_target_position(
         config.loaded_states = all_states;
     }
 
-    let Some(state) = config.loaded_states.get(state::PRIMARY_WINDOW_KEY).cloned() else {
+    let Some(state) = config.loaded_states.get(&WindowKey::Primary).cloned() else {
         debug!("[load_target_position] No saved bevy_window_manager state, showing window");
         // No saved state - show window at default position (user may have started hidden)
         commands.queue(|world: &mut World| {
@@ -338,7 +338,7 @@ pub struct CachedWindowState {
 /// Build state from all currently-active windows and write it to the state file.
 ///
 /// Iterates every primary and managed window, captures position/size/monitor/mode,
-/// and writes the full `HashMap<String, WindowState>` in one shot. Used by the
+/// and writes the full persisted state map in one shot. Used by the
 /// `ActiveOnly` persistence mode so that the file always reflects exactly which
 /// windows are open right now.
 ///
@@ -377,9 +377,9 @@ pub fn save_active_window_state(
         }
 
         let key = if primary_q.get(entity).is_ok() {
-            (*state::PRIMARY_WINDOW_KEY).to_string()
+            WindowKey::Primary
         } else if let Some(m) = managed {
-            m.window_name.clone()
+            WindowKey::Managed(m.window_name.clone())
         } else {
             continue;
         };
@@ -473,9 +473,9 @@ pub fn save_window_state(
     for (window_entity, window, existing_monitor, managed) in &windows {
         // Determine the key for this window in the state file
         let key = if primary_q.get(window_entity).is_ok() {
-            (*state::PRIMARY_WINDOW_KEY).to_string()
+            WindowKey::Primary
         } else if let Some(m) = managed {
-            m.window_name.clone()
+            WindowKey::Managed(m.window_name.clone())
         } else {
             continue;
         };
@@ -577,39 +577,17 @@ pub fn save_window_state(
             // Update with current window states from cache
             for (entity, entry) in &*cached {
                 let key = if primary_q.get(*entity).is_ok() {
-                    (*state::PRIMARY_WINDOW_KEY).to_string()
+                    WindowKey::Primary
+                } else if let Ok((_, _, _, Some(managed))) = all_windows.get(*entity) {
+                    WindowKey::Managed(managed.window_name.clone())
                 } else {
-                    // Look up managed window name - entity may have been despawned already
-                    // if so, skip it (the cached entry is stale)
+                    // Entity may have been despawned - skip stale cached entry
                     continue;
                 };
 
                 if let Some(mode) = &entry.mode {
                     states.insert(
                         key,
-                        WindowState {
-                            position:      entry.position.map(|p| (p.x, p.y)),
-                            width:         entry.width,
-                            height:        entry.height,
-                            monitor_index: entry.monitor_index.unwrap_or(0),
-                            mode:          mode.clone(),
-                            app_name:      app_name.clone(),
-                        },
-                    );
-                }
-            }
-
-            // For managed windows, iterate cached and look up names from the query
-            for (entity, entry) in &*cached {
-                if primary_q.get(*entity).is_ok() {
-                    continue; // Already handled above
-                }
-                // Find managed window component
-                if let Ok((_, _, _, Some(managed))) = windows.get(*entity)
-                    && let Some(mode) = &entry.mode
-                {
-                    states.insert(
-                        managed.window_name.clone(),
                         WindowState {
                             position:      entry.position.map(|p| (p.x, p.y)),
                             width:         entry.width,
@@ -682,14 +660,13 @@ pub fn restore_windows(
             RestoreStatus::Complete
         ) {
             // Determine window identity
-            let window_id = if primary_q.get(entity).is_ok() {
-                WindowIdentifier::Primary
+            let key = if primary_q.get(entity).is_ok() {
+                WindowKey::Primary
             } else if let Ok(managed) = managed_q.get(entity) {
-                WindowIdentifier::Managed(managed.window_name.clone())
+                WindowKey::Managed(managed.window_name.clone())
             } else {
-                WindowIdentifier::Primary // fallback, shouldn't happen
+                WindowKey::Primary // fallback, shouldn't happen
             };
-            let key = window_id.to_string();
 
             // Compare intended vs actual and warn on mismatch
             if let Some(loaded) = config.loaded_states.get(&key) {
@@ -727,7 +704,7 @@ pub fn restore_windows(
             let target_monitor = target.target_monitor_index;
             commands.entity(entity).trigger(|entity| WindowRestored {
                 entity,
-                window_id,
+                window_id: key.clone(),
                 position: target_position,
                 size: target_size,
                 mode: target_mode,

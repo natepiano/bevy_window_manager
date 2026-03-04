@@ -112,6 +112,18 @@ app.add_plugins(WindowManagerPlugin::with_persistence(ManagedWindowPersistence::
 
 See `examples/multi_window.rs` for a complete interactive example.
 
+### State File Format
+
+The state file now uses a versioned v2 schema:
+
+- `version: 2`
+- `entries: [{ key, state }, ...]`
+
+`key` is typed (`Primary` or `Managed("<name>")`), so the primary window and a managed
+window named `"primary"` are distinct and unambiguous.
+
+Legacy state files are still accepted on read and rewritten as v2 on save.
+
 ## Version Compatibility
 
 | bevy_window_manager | Bevy |

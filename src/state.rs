@@ -7,6 +7,8 @@ use std::path::PathBuf;
 
 use bevy::prelude::*;
 
+use super::WindowKey;
+use super::state_format;
 use super::types::WindowState;
 
 const STATE_FILE: &str = "windows.ron";
@@ -37,34 +39,20 @@ pub fn get_state_path_for_app(app_name: &str) -> Option<PathBuf> {
 ///
 /// Supports migration from the old single-window format: if the file contains
 /// a single `WindowState`, it is wrapped as `{"primary": state}`.
-pub fn load_all_states(path: &Path) -> Option<HashMap<String, WindowState>> {
+pub fn load_all_states(path: &Path) -> Option<HashMap<WindowKey, WindowState>> {
     let contents = fs::read_to_string(path).ok()?;
-
-    // Try new HashMap format first
-    if let Ok(states) = ron::from_str::<HashMap<String, WindowState>>(&contents) {
-        return Some(states);
-    }
-
-    // Fall back to old single-window format (migration)
-    if let Ok(state) = ron::from_str::<WindowState>(&contents) {
-        debug!("[load_all_states] Migrated old single-window state file to multi-window format");
-        let mut map = HashMap::new();
-        map.insert((*PRIMARY_WINDOW_KEY).to_string(), state);
-        return Some(map);
-    }
-
-    None
+    state_format::decode(&contents)
 }
 
 /// Save all window states to the given path.
-pub fn save_all_states(path: &Path, states: &HashMap<String, WindowState>) {
+pub fn save_all_states(path: &Path, states: &HashMap<WindowKey, WindowState>) {
     if let Some(parent) = path.parent()
         && let Err(e) = fs::create_dir_all(parent)
     {
         warn!("[save_all_states] Failed to create directory {parent:?}: {e}");
         return;
     }
-    match ron::ser::to_string_pretty(states, ron::ser::PrettyConfig::default()) {
+    match state_format::encode(states) {
         Ok(contents) => {
             if let Err(e) = fs::write(path, &contents) {
                 warn!("[save_all_states] Failed to write state file {path:?}: {e}");
@@ -73,5 +61,95 @@ pub fn save_all_states(path: &Path, states: &HashMap<String, WindowState>) {
         Err(e) => {
             warn!("[save_all_states] Failed to serialize state: {e}");
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use tempfile::NamedTempFile;
+
+    use super::load_all_states;
+    use super::save_all_states;
+    use crate::state_format::WindowKey;
+    use crate::types::SavedWindowMode;
+    use crate::types::WindowState;
+
+    fn sample_state() -> WindowState {
+        WindowState {
+            position:      Some((10, 20)),
+            width:         800,
+            height:        600,
+            monitor_index: 0,
+            mode:          SavedWindowMode::Windowed,
+            app_name:      "test-app".to_string(),
+        }
+    }
+
+    #[test]
+    fn save_then_load_roundtrip_v2() {
+        let file = match NamedTempFile::new() {
+            Ok(file) => file,
+            Err(error) => panic!("failed to create temp file: {error}"),
+        };
+        let path = file.path();
+
+        let states = std::collections::HashMap::from([
+            (WindowKey::Primary, sample_state()),
+            (WindowKey::Managed("primary".to_string()), sample_state()),
+        ]);
+        save_all_states(path, &states);
+
+        let loaded = load_all_states(path);
+        assert!(loaded.is_some(), "expected saved v2 state to load");
+        let loaded = loaded.unwrap_or_default();
+        assert!(loaded.contains_key(&WindowKey::Primary));
+        assert!(loaded.contains_key(&WindowKey::Managed("primary".to_string())));
+    }
+
+    #[test]
+    fn legacy_read_then_save_rewrites_v2() {
+        let file = match NamedTempFile::new() {
+            Ok(file) => file,
+            Err(error) => panic!("failed to create temp file: {error}"),
+        };
+        let path = file.path();
+        let legacy = std::collections::HashMap::from([
+            ("primary".to_string(), sample_state()),
+            (
+                "inspector".to_string(),
+                WindowState {
+                    position:      None,
+                    width:         1024,
+                    height:        768,
+                    monitor_index: 1,
+                    mode:          SavedWindowMode::Windowed,
+                    app_name:      String::new(),
+                },
+            ),
+        ]);
+        let legacy_contents =
+            match ron::ser::to_string_pretty(&legacy, ron::ser::PrettyConfig::default()) {
+                Ok(contents) => contents,
+                Err(error) => panic!("failed to serialize legacy state: {error}"),
+            };
+
+        if let Err(error) = fs::write(path, legacy_contents) {
+            panic!("failed to write legacy content: {error}");
+        }
+
+        let states = load_all_states(path);
+        assert!(states.is_some(), "expected legacy content to decode");
+        let states = states.unwrap_or_default();
+        save_all_states(path, &states);
+
+        let contents = fs::read_to_string(path);
+        assert!(contents.is_ok(), "expected rewritten file to be readable");
+        let contents = contents.unwrap_or_default();
+        assert!(
+            contents.contains("version: 2"),
+            "expected rewritten file to contain v2 version marker"
+        );
     }
 }

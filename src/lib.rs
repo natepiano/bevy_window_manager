@@ -37,6 +37,7 @@ mod macos_tabbing_fix;
 mod monitors;
 mod restore_plan;
 mod state;
+mod state_format;
 mod systems;
 mod types;
 #[cfg(all(target_os = "windows", feature = "workaround-winit-4341"))]
@@ -53,13 +54,13 @@ pub use monitors::MonitorInfo;
 use monitors::MonitorPlugin;
 pub use monitors::Monitors;
 use monitors::init_monitors;
+pub use state_format::WindowKey;
 pub use types::ManagedWindow;
 pub use types::ManagedWindowPersistence;
 use types::ManagedWindowRegistry;
 use types::RestoreWindowConfig;
 use types::SavedWindowMode;
 use types::TargetPosition;
-pub use types::WindowIdentifier;
 pub use types::WindowRestored;
 /// The main plugin. See module docs for usage.
 ///
@@ -189,7 +190,9 @@ fn on_managed_window_added(
 
     // If no saved state exists for this window, save its current position/size immediately
     let existing = state::load_all_states(&config.path);
-    let already_saved = existing.as_ref().is_some_and(|s| s.contains_key(name));
+    let already_saved = existing
+        .as_ref()
+        .is_some_and(|s| s.contains_key(&WindowKey::Managed((*name).clone())));
 
     if !already_saved {
         if let Ok(window) = windows.get(entity) {
@@ -215,7 +218,7 @@ fn on_managed_window_added(
             };
 
             let mut states = existing.unwrap_or_default();
-            states.insert((*name).clone(), window_state);
+            states.insert(WindowKey::Managed((*name).clone()), window_state);
             state::save_all_states(&config.path, &states);
             debug!("[on_managed_window_added] Saved initial state for \"{name}\"");
         }
@@ -323,7 +326,8 @@ fn on_managed_window_load(
 
     // Check the startup snapshot — not the file, which may have been modified by
     // `on_managed_window_added` saving initial state for brand-new windows.
-    let Some(saved_state) = config.loaded_states.get(name).cloned() else {
+    let key = WindowKey::Managed((*name).clone());
+    let Some(saved_state) = config.loaded_states.get(&key).cloned() else {
         debug!("[on_managed_window_load] No saved state for \"{name}\", showing window");
         if let Ok(mut window) = windows.get_mut(entity) {
             window.visible = true;
