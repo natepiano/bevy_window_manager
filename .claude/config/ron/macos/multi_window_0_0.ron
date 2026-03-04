@@ -1,0 +1,18 @@
+{
+    "primary": (
+        position: Some((200, 200)),
+        width: 1200,
+        height: 800,
+        monitor_index: 0,
+        mode: Windowed,
+        app_name: "restore_window",
+    ),
+    "window-1": (
+        position: Some((800, 600)),
+        width: 600,
+        height: 400,
+        monitor_index: 0,
+        mode: Windowed,
+        app_name: "restore_window",
+    ),
+}

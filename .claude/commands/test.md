@@ -493,6 +493,54 @@ Always use `CurrentMonitor.monitor_index` as the source of truth.
 
 Record validation result (PASS or FAIL with details).
 
+## Step 4.5: Multi-Window Handling (if `multi_window` field exists)
+
+1. **Trigger spawn**: Use `mcp__brp__world_trigger_event` with event type `test.multi_window.trigger_event` (e.g., `restore_window::SpawnManagedWindow`)
+
+2. **Poll for restore completion**: Query for entities with `ManagedWindow` (without `PrimaryWindow`) until the secondary window's `Window.position` is `At` (not `Automatic`), indicating restore finished. Use:
+   ```
+   mcp__brp__world_query(
+     data: {"components": ["bevy_window::window::Window", "bevy_window_manager::types::ManagedWindow", "bevy_window_manager::monitors::CurrentMonitor"]},
+     filter: {"with": ["bevy_window_manager::types::ManagedWindow"], "without": ["bevy_window::window::PrimaryWindow"]}
+   )
+   ```
+   Poll with short delays (0.5-1s) until `Window.position` shows `At(...)` rather than `Automatic`. Max 10 attempts before failing.
+
+3. **Validate each secondary window**: For each window name in `test.multi_window.windows`:
+   - Match the query result by `ManagedWindow.window_name`
+   - Check `CurrentMonitor.monitor_index` matches `expected_monitor`
+   - Check `Window.position` matches `{"At": expected_position}`
+   - Check `Window.resolution.physical_width` and `physical_height` match `expected_size`
+
+Record multi-window validation result (PASS or FAIL with details per window).
+
+## Step 4.6: Persistence Validation Setup (if `persistence_validation` field exists)
+
+This step sets up the persistence mode before shutdown. The actual validation happens after shutdown in Step 7.5.
+
+The `on_persistence_changed` system detects the resource mutation and immediately rebuilds the state file from active windows — no position nudge or extra save trigger needed.
+
+1. **If `persistence_validation.mode` is `"ActiveOnly"`**: Mutate the `ManagedWindowPersistence` resource to `ActiveOnly` via BRP:
+   ```
+   mcp__brp__world_insert_resources(
+     components: {"bevy_window_manager::types::ManagedWindowPersistence": "ActiveOnly"}
+   )
+   ```
+   (If mode is `"RememberAll"`, no mutation needed — it's the default.)
+
+2. **Do NOT spawn the secondary window** — the test verifies what happens to unspawned window entries in the RON file. The secondary window entry exists in the RON but was never opened.
+
+3. Proceed to Step 7 (Shutdown). After shutdown, Step 7.5 validates the RON file contents.
+
+## Step 7.5: Validate Persistence (if `persistence_validation` field exists)
+
+After shutdown, read the RON file from `${example_ron_path}` and check:
+
+1. **Expected keys**: Every key in `persistence_validation.expected_ron_keys` must be present in the RON file
+2. **Unexpected keys**: Every key in `persistence_validation.unexpected_ron_keys` (if present) must NOT be in the RON file
+
+Record persistence validation result (PASS or FAIL with details).
+
 ## Step 5: Apply Mutations (if `mutation` field exists)
 
 For position: mutate `.position` → `{"At": [X, Y]}`

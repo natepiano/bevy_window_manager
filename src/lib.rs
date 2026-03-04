@@ -223,30 +223,71 @@ fn on_managed_window_added(
 }
 
 /// Observer: unregister a `ManagedWindow` name when removed, and update state file if `ActiveOnly`.
+#[allow(clippy::type_complexity)]
 fn on_managed_window_removed(
     remove: On<Remove, ManagedWindow>,
     mut registry: ResMut<ManagedWindowRegistry>,
     config: Res<RestoreWindowConfig>,
     persistence: Res<ManagedWindowPersistence>,
+    monitors: Res<Monitors>,
+    all_windows: Query<
+        (
+            Entity,
+            &Window,
+            Option<&CurrentMonitor>,
+            Option<&ManagedWindow>,
+        ),
+        Or<(With<PrimaryWindow>, With<ManagedWindow>)>,
+    >,
+    primary_q: Query<(), With<PrimaryWindow>>,
 ) {
     let entity = remove.entity;
     if let Some(name) = registry.entities.remove(&entity) {
-        // If `ActiveOnly`, remove this window's entry from the state file
+        // If `ActiveOnly`, rebuild state from all remaining active windows.
+        // The removed entity's `ManagedWindow` is being removed, so the query
+        // naturally excludes it — but guard against it just in case.
         if *persistence == ManagedWindowPersistence::ActiveOnly {
-            if let Some(mut states) = state::load_all_states(&config.path) {
-                if states.remove(&name).is_some() {
-                    state::save_all_states(&config.path, &states);
-                    debug!(
-                        "[on_managed_window_removed] Removed \"{name}\" from state file (ActiveOnly)"
-                    );
-                }
-            }
+            systems::save_active_window_state(
+                &config,
+                &monitors,
+                &all_windows,
+                &primary_q,
+                Some(entity),
+            );
+            debug!(
+                "[on_managed_window_removed] Rebuilt state file without \"{name}\" (ActiveOnly)"
+            );
         }
 
         registry.names.remove(&name);
         debug!(
             "[on_managed_window_removed] Unregistered managed window \"{name}\" from entity {entity:?}"
         );
+    }
+}
+
+/// When `ManagedWindowPersistence` switches to `ActiveOnly`, immediately rebuild the state
+/// file from the currently-active windows so that any previously-remembered-but-closed
+/// window entries are pruned.
+#[allow(clippy::type_complexity)]
+fn on_persistence_changed(
+    persistence: Res<ManagedWindowPersistence>,
+    config: Res<RestoreWindowConfig>,
+    monitors: Res<Monitors>,
+    all_windows: Query<
+        (
+            Entity,
+            &Window,
+            Option<&CurrentMonitor>,
+            Option<&ManagedWindow>,
+        ),
+        Or<(With<PrimaryWindow>, With<ManagedWindow>)>,
+    >,
+    primary_q: Query<(), With<PrimaryWindow>>,
+) {
+    if *persistence == ManagedWindowPersistence::ActiveOnly {
+        systems::save_active_window_state(&config, &monitors, &all_windows, &primary_q, None);
+        debug!("[on_persistence_changed] Rebuilt state file for ActiveOnly mode");
     }
 }
 
@@ -497,6 +538,10 @@ fn build_plugin(app: &mut App, path: PathBuf, persistence: ManagedWindowPersiste
         (
             systems::update_current_monitor,
             systems::save_window_state
+                .run_if(no_restoring_windows)
+                .after(systems::update_current_monitor),
+            on_persistence_changed
+                .run_if(resource_changed::<ManagedWindowPersistence>)
                 .run_if(no_restoring_windows)
                 .after(systems::update_current_monitor),
         ),

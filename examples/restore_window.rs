@@ -44,6 +44,11 @@ use bevy_window_manager::Monitors;
 use bevy_window_manager::WindowManagerPlugin;
 use bevy_window_manager::WindowRestored;
 
+/// BRP-triggerable event to spawn a managed secondary window.
+#[derive(Event, Reflect)]
+#[reflect(Event)]
+struct SpawnManagedWindow;
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -55,6 +60,7 @@ fn main() {
         }))
         .add_plugins(WindowManagerPlugin)
         .add_plugins(BrpExtrasPlugin::default())
+        .add_observer(on_spawn_managed_window)
         .add_observer(on_window_restored)
         .add_observer(on_secondary_window_added)
         .add_observer(on_secondary_window_removed)
@@ -172,6 +178,35 @@ fn setup(mut commands: Commands) {
         },
         PrimaryDisplay,
     ));
+}
+
+// --- SpawnManagedWindow Observer ---
+
+/// Observer: spawn a new managed secondary window.
+fn on_spawn_managed_window(
+    _trigger: On<SpawnManagedWindow>,
+    mut commands: Commands,
+    mut counter: ResMut<WindowCounter>,
+) {
+    counter.next += 1;
+    let name = format!("window-{}", counter.next);
+    let title = format!("Managed: {name}");
+
+    commands.spawn((
+        Window {
+            title,
+            resolution: bevy::window::WindowResolution::new(
+                SECONDARY_WINDOW_WIDTH,
+                SECONDARY_WINDOW_HEIGHT,
+            ),
+            ..default()
+        },
+        ManagedWindow {
+            window_name: name.clone(),
+        },
+    ));
+
+    info!("[restore_window] Spawned managed window \"{name}\"");
 }
 
 // --- Secondary Window Lifecycle ---
@@ -581,7 +616,6 @@ fn handle_global_input(
     windows: Query<&Window>,
     managed_entities: Query<Entity, With<ManagedWindow>>,
     mut commands: Commands,
-    mut counter: ResMut<WindowCounter>,
     mut persistence: ResMut<ManagedWindowPersistence>,
     mut app_exit: MessageWriter<AppExit>,
 ) {
@@ -591,25 +625,7 @@ fn handle_global_input(
     }
 
     if keys.just_pressed(KeyCode::Space) {
-        counter.next += 1;
-        let name = format!("window-{}", counter.next);
-        let title = format!("Managed: {name}");
-
-        commands.spawn((
-            Window {
-                title,
-                resolution: bevy::window::WindowResolution::new(
-                    SECONDARY_WINDOW_WIDTH,
-                    SECONDARY_WINDOW_HEIGHT,
-                ),
-                ..default()
-            },
-            ManagedWindow {
-                window_name: name.clone(),
-            },
-        ));
-
-        info!("[restore_window] Spawned managed window \"{name}\"");
+        commands.trigger(SpawnManagedWindow);
     }
 
     if keys.just_pressed(KeyCode::KeyP) {

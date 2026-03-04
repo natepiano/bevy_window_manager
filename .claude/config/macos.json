@@ -67,6 +67,84 @@
     },
 
     {
+      "id": "multi_window_0_0",
+      "description": "Primary on Monitor 0, secondary on Monitor 0",
+      "automation": "full",
+      "launch_monitor": 0,
+
+      "ron_file": "multi_window_0_0.ron",
+
+      "validate": ["position", "size", "monitor_index", "mode"],
+
+      "multi_window": {
+        "trigger_event": "restore_window::SpawnManagedWindow",
+        "windows": {
+          "window-1": {
+            "expected_monitor": 0,
+            "expected_position": [800, 600],
+            "expected_size": [600, 400]
+          }
+        }
+      }
+    },
+
+    {
+      "id": "persistence_remember_all",
+      "description": "RememberAll mode preserves unspawned window entries in RON after shutdown",
+      "automation": "full",
+      "launch_monitor": 0,
+
+      "ron_file": "multi_window_0_0.ron",
+
+      "validate": ["position", "size", "monitor_index", "mode"],
+
+      "persistence_validation": {
+        "mode": "RememberAll",
+        "expected_ron_keys": ["primary", "window-1"]
+      }
+    },
+
+    {
+      "id": "persistence_active_only",
+      "description": "ActiveOnly mode prunes unspawned window entries from RON after shutdown",
+      "automation": "full",
+      "launch_monitor": 0,
+
+      "ron_file": "multi_window_0_0.ron",
+
+      "validate": ["position", "size", "monitor_index", "mode"],
+
+      "persistence_validation": {
+        "mode": "ActiveOnly",
+        "expected_ron_keys": ["primary"],
+        "unexpected_ron_keys": ["window-1"]
+      }
+    },
+
+    {
+      "id": "multi_window_0_1",
+      "description": "Primary on Monitor 0, secondary on Monitor 1",
+      "automation": "full",
+      "launch_monitor": 0,
+      "requires": {"min_monitors": 2},
+
+      "ron_file": "multi_window_0_1.ron",
+
+      "validate": ["position", "size", "monitor_index", "mode"],
+
+      "multi_window": {
+        "trigger_event": "restore_window::SpawnManagedWindow",
+        "windows": {
+          "window-1": {
+            "expected_monitor": 1,
+            "expected_position": [-716, -1340],
+            "expected_size": [600, 400]
+          }
+        }
+      }
+    },
+
+    {
       "id": "same_monitor_restore_mon1",
       "description": "Basic position/size persistence on Monitor 1",
       "automation": "full",
@@ -102,6 +180,52 @@
       "ron_file": "cross_monitor_low_to_high.ron",
 
       "validate": ["position", "size", "monitor_index", "mode"]
+    },
+
+    {
+      "id": "multi_window_1_0",
+      "description": "Primary on Monitor 1, secondary on Monitor 0",
+      "automation": "full",
+      "launch_monitor": 1,
+      "requires": {"min_monitors": 2},
+
+      "ron_file": "multi_window_1_0.ron",
+
+      "validate": ["position", "size", "monitor_index", "mode"],
+
+      "multi_window": {
+        "trigger_event": "restore_window::SpawnManagedWindow",
+        "windows": {
+          "window-1": {
+            "expected_monitor": 0,
+            "expected_position": [200, 200],
+            "expected_size": [600, 400]
+          }
+        }
+      }
+    },
+
+    {
+      "id": "multi_window_1_1",
+      "description": "Primary on Monitor 1, secondary on Monitor 1",
+      "automation": "full",
+      "launch_monitor": 1,
+      "requires": {"min_monitors": 2},
+
+      "ron_file": "multi_window_1_1.ron",
+
+      "validate": ["position", "size", "monitor_index", "mode"],
+
+      "multi_window": {
+        "trigger_event": "restore_window::SpawnManagedWindow",
+        "windows": {
+          "window-1": {
+            "expected_monitor": 1,
+            "expected_position": [-516, -1240],
+            "expected_size": [600, 400]
+          }
+        }
+      }
     },
 
     {

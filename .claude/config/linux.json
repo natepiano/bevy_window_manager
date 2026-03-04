@@ -47,6 +47,54 @@
       "validate": ["mode", "monitor_index"],
       "expected_mode": "BorderlessFullscreen"
     },
+
+    {
+      "id": "wayland_multi_window_0_0",
+      "description": "Primary on Monitor 0, secondary on Monitor 0 (Wayland)",
+      "automation": "full",
+      "backend": "wayland",
+      "launch_monitor": 0,
+      "ron_file": "multi_window_0_0.ron",
+      "validate": ["size", "monitor_index", "mode"],
+      "multi_window": {
+        "trigger_event": "restore_window::SpawnManagedWindow",
+        "windows": {
+          "window-1": {
+            "expected_monitor": 0,
+            "expected_size": [600, 400]
+          }
+        }
+      }
+    },
+
+    {
+      "id": "wayland_persistence_remember_all",
+      "description": "RememberAll mode preserves unspawned window entries in RON after shutdown (Wayland)",
+      "automation": "full",
+      "backend": "wayland",
+      "launch_monitor": 0,
+      "ron_file": "multi_window_0_0.ron",
+      "validate": ["size", "monitor_index", "mode"],
+      "persistence_validation": {
+        "mode": "RememberAll",
+        "expected_ron_keys": ["primary", "window-1"]
+      }
+    },
+
+    {
+      "id": "wayland_persistence_active_only",
+      "description": "ActiveOnly mode prunes unspawned window entries from RON after shutdown (Wayland)",
+      "automation": "full",
+      "backend": "wayland",
+      "launch_monitor": 0,
+      "ron_file": "multi_window_0_0.ron",
+      "validate": ["size", "monitor_index", "mode"],
+      "persistence_validation": {
+        "mode": "ActiveOnly",
+        "expected_ron_keys": ["primary"],
+        "unexpected_ron_keys": ["window-1"]
+      }
+    },
     {
       "id": "wayland_size_restore_mon1",
       "description": "Size persistence on Monitor 1 (position not available on Wayland)",
@@ -89,6 +137,66 @@
       "expected_log_warning": "Exclusive fullscreen is not supported on Wayland, restoring as BorderlessFullscreen",
       "validate": ["mode", "monitor_index"],
       "expected_mode": "BorderlessFullscreen"
+    },
+
+    {
+      "id": "wayland_multi_window_0_1",
+      "description": "Primary on Monitor 0, secondary on Monitor 1 (Wayland)",
+      "automation": "full",
+      "backend": "wayland",
+      "launch_monitor": 0,
+      "requires": {"min_monitors": 2},
+      "ron_file": "multi_window_0_1.ron",
+      "validate": ["size", "monitor_index", "mode"],
+      "multi_window": {
+        "trigger_event": "restore_window::SpawnManagedWindow",
+        "windows": {
+          "window-1": {
+            "expected_monitor": 1,
+            "expected_size": [600, 400]
+          }
+        }
+      }
+    },
+
+    {
+      "id": "wayland_multi_window_1_0",
+      "description": "Primary on Monitor 1, secondary on Monitor 0 (Wayland)",
+      "automation": "full",
+      "backend": "wayland",
+      "launch_monitor": 1,
+      "requires": {"min_monitors": 2},
+      "ron_file": "multi_window_1_0.ron",
+      "validate": ["size", "monitor_index", "mode"],
+      "multi_window": {
+        "trigger_event": "restore_window::SpawnManagedWindow",
+        "windows": {
+          "window-1": {
+            "expected_monitor": 0,
+            "expected_size": [600, 400]
+          }
+        }
+      }
+    },
+
+    {
+      "id": "wayland_multi_window_1_1",
+      "description": "Primary on Monitor 1, secondary on Monitor 1 (Wayland)",
+      "automation": "full",
+      "backend": "wayland",
+      "launch_monitor": 1,
+      "requires": {"min_monitors": 2},
+      "ron_file": "multi_window_1_1.ron",
+      "validate": ["size", "monitor_index", "mode"],
+      "multi_window": {
+        "trigger_event": "restore_window::SpawnManagedWindow",
+        "windows": {
+          "window-1": {
+            "expected_monitor": 1,
+            "expected_size": [600, 400]
+          }
+        }
+      }
     },
     {
       "id": "x11_pos_size_restore_mon0",
@@ -168,6 +276,55 @@
       "ron_file": "fullscreen_exclusive_to_mon1.ron",
       "validate": ["mode", "monitor_index"]
     },
+
+    {
+      "id": "x11_multi_window_0_0",
+      "description": "Primary on Monitor 0, secondary on Monitor 0 (X11)",
+      "automation": "full",
+      "backend": "x11",
+      "launch_monitor": 0,
+      "ron_file": "multi_window_0_0.ron",
+      "validate": ["position", "size", "monitor_index", "mode"],
+      "multi_window": {
+        "trigger_event": "restore_window::SpawnManagedWindow",
+        "windows": {
+          "window-1": {
+            "expected_monitor": 0,
+            "expected_position": [2012, 3280],
+            "expected_size": [600, 400]
+          }
+        }
+      }
+    },
+
+    {
+      "id": "x11_persistence_remember_all",
+      "description": "RememberAll mode preserves unspawned window entries in RON after shutdown (X11)",
+      "automation": "full",
+      "backend": "x11",
+      "launch_monitor": 0,
+      "ron_file": "multi_window_0_0.ron",
+      "validate": ["position", "size", "monitor_index", "mode"],
+      "persistence_validation": {
+        "mode": "RememberAll",
+        "expected_ron_keys": ["primary", "window-1"]
+      }
+    },
+
+    {
+      "id": "x11_persistence_active_only",
+      "description": "ActiveOnly mode prunes unspawned window entries from RON after shutdown (X11)",
+      "automation": "full",
+      "backend": "x11",
+      "launch_monitor": 0,
+      "ron_file": "multi_window_0_0.ron",
+      "validate": ["position", "size", "monitor_index", "mode"],
+      "persistence_validation": {
+        "mode": "ActiveOnly",
+        "expected_ron_keys": ["primary"],
+        "unexpected_ron_keys": ["window-1"]
+      }
+    },
     {
       "id": "x11_pos_size_restore_mon1",
       "description": "Basic position/size persistence on Monitor 1 (HDMI)",
@@ -245,6 +402,69 @@
       "launch_monitor": 1,
       "ron_file": "fullscreen_exclusive_to_mon1.ron",
       "validate": ["mode", "monitor_index"]
+    },
+
+    {
+      "id": "x11_multi_window_0_1",
+      "description": "Primary on Monitor 0, secondary on Monitor 1 (X11)",
+      "automation": "full",
+      "backend": "x11",
+      "launch_monitor": 0,
+      "requires": {"min_monitors": 2},
+      "ron_file": "multi_window_0_1.ron",
+      "validate": ["position", "size", "monitor_index", "mode"],
+      "multi_window": {
+        "trigger_event": "restore_window::SpawnManagedWindow",
+        "windows": {
+          "window-1": {
+            "expected_monitor": 1,
+            "expected_position": [200, 200],
+            "expected_size": [600, 400]
+          }
+        }
+      }
+    },
+
+    {
+      "id": "x11_multi_window_1_0",
+      "description": "Primary on Monitor 1, secondary on Monitor 0 (X11)",
+      "automation": "full",
+      "backend": "x11",
+      "launch_monitor": 1,
+      "requires": {"min_monitors": 2},
+      "ron_file": "multi_window_1_0.ron",
+      "validate": ["position", "size", "monitor_index", "mode"],
+      "multi_window": {
+        "trigger_event": "restore_window::SpawnManagedWindow",
+        "windows": {
+          "window-1": {
+            "expected_monitor": 0,
+            "expected_position": [1712, 3080],
+            "expected_size": [600, 400]
+          }
+        }
+      }
+    },
+
+    {
+      "id": "x11_multi_window_1_1",
+      "description": "Primary on Monitor 1, secondary on Monitor 1 (X11)",
+      "automation": "full",
+      "backend": "x11",
+      "launch_monitor": 1,
+      "requires": {"min_monitors": 2},
+      "ron_file": "multi_window_1_1.ron",
+      "validate": ["position", "size", "monitor_index", "mode"],
+      "multi_window": {
+        "trigger_event": "restore_window::SpawnManagedWindow",
+        "windows": {
+          "window-1": {
+            "expected_monitor": 1,
+            "expected_position": [400, 400],
+            "expected_size": [600, 400]
+          }
+        }
+      }
     },
     {
       "id": "x11_keyboard_snap_W5",

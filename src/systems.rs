@@ -335,6 +335,95 @@ pub struct CachedWindowState {
     monitor_index: Option<usize>,
 }
 
+/// Build state from all currently-active windows and write it to the state file.
+///
+/// Iterates every primary and managed window, captures position/size/monitor/mode,
+/// and writes the full `HashMap<String, WindowState>` in one shot. Used by the
+/// `ActiveOnly` persistence mode so that the file always reflects exactly which
+/// windows are open right now.
+///
+/// `exclude_entity` allows callers (e.g., `On<Remove>` observers) to skip an entity
+/// whose component is still visible in the query but is being removed.
+#[allow(clippy::type_complexity)]
+pub fn save_active_window_state(
+    config: &RestoreWindowConfig,
+    monitors: &Monitors,
+    all_windows: &Query<
+        (
+            Entity,
+            &Window,
+            Option<&CurrentMonitor>,
+            Option<&crate::ManagedWindow>,
+        ),
+        Or<(With<PrimaryWindow>, With<crate::ManagedWindow>)>,
+    >,
+    primary_q: &Query<(), With<PrimaryWindow>>,
+    exclude_entity: Option<Entity>,
+) {
+    if monitors.is_empty() {
+        return;
+    }
+
+    let app_name = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.file_stem().and_then(|s| s.to_str()).map(String::from))
+        .unwrap_or_default();
+
+    let mut states = std::collections::HashMap::new();
+
+    for (entity, window, existing_monitor, managed) in all_windows {
+        if exclude_entity == Some(entity) {
+            continue;
+        }
+
+        let key = if primary_q.get(entity).is_ok() {
+            (*state::PRIMARY_WINDOW_KEY).to_string()
+        } else if let Some(m) = managed {
+            m.window_name.clone()
+        } else {
+            continue;
+        };
+
+        #[cfg(all(target_os = "linux", feature = "workaround-winit-4443"))]
+        let pos = WINIT_WINDOWS.with(|ww| {
+            let ww = ww.borrow();
+            let winit_win = ww.get_window(entity)?;
+            let outer_pos = winit_win.outer_position().ok()?;
+            Some(IVec2::new(outer_pos.x, outer_pos.y))
+        });
+
+        #[cfg(not(all(target_os = "linux", feature = "workaround-winit-4443")))]
+        let pos = match window.position {
+            bevy::window::WindowPosition::At(p) => Some(p),
+            _ => None,
+        };
+
+        let (monitor_index, _monitor_scale) = existing_monitor.map_or_else(
+            || {
+                let p = monitors.first();
+                (p.index, p.scale)
+            },
+            |m| (m.index, m.scale),
+        );
+        let mode: SavedWindowMode =
+            existing_monitor.map_or_else(|| (&window.mode).into(), |m| (&m.effective_mode).into());
+
+        states.insert(
+            key,
+            WindowState {
+                position: pos.map(|p| (p.x, p.y)),
+                width: window.resolution.physical_width(),
+                height: window.resolution.physical_height(),
+                monitor_index,
+                mode,
+                app_name: app_name.clone(),
+            },
+        );
+    }
+
+    state::save_all_states(&config.path, &states);
+}
+
 /// Save window state when position, size, or mode changes. Runs only when not restoring.
 ///
 /// Handles both the primary window and any `ManagedWindow` entities. Uses
@@ -360,6 +449,15 @@ pub fn save_window_state(
             Or<(With<PrimaryWindow>, With<crate::ManagedWindow>)>,
             Changed<Window>,
         ),
+    >,
+    all_windows: Query<
+        (
+            Entity,
+            &Window,
+            Option<&CurrentMonitor>,
+            Option<&crate::ManagedWindow>,
+        ),
+        Or<(With<PrimaryWindow>, With<crate::ManagedWindow>)>,
     >,
     primary_q: Query<(), With<PrimaryWindow>>,
     mut cached: Local<std::collections::HashMap<Entity, CachedWindowState>>,
@@ -462,79 +560,71 @@ pub fn save_window_state(
         return;
     }
 
-    // Build the complete state map from all cached entries
-    let app_name = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.file_stem().and_then(|s| s.to_str()).map(String::from))
-        .unwrap_or_default();
-
-    // Determine what to save based on persistence mode
-    let mut states = match *persistence {
-        crate::ManagedWindowPersistence::RememberAll => {
-            // Load existing file first to preserve closed windows
-            state::load_all_states(&config.path).unwrap_or_default()
-        },
+    match *persistence {
         crate::ManagedWindowPersistence::ActiveOnly => {
-            // Start fresh - only save currently open windows
-            std::collections::HashMap::new()
+            // Build state from all active windows and write in one shot
+            save_active_window_state(&config, &monitors, &all_windows, &primary_q, None);
         },
-    };
+        crate::ManagedWindowPersistence::RememberAll => {
+            // Load existing file first to preserve closed windows, then merge cache
+            let app_name = std::env::current_exe()
+                .ok()
+                .and_then(|p| p.file_stem().and_then(|s| s.to_str()).map(String::from))
+                .unwrap_or_default();
 
-    // Update with current window states from cache
-    for (entity, entry) in &*cached {
-        let key = if primary_q.get(*entity).is_ok() {
-            (*state::PRIMARY_WINDOW_KEY).to_string()
-        } else {
-            // Look up managed window name - entity may have been despawned already
-            // if so, skip it (the cached entry is stale)
-            continue;
-        };
+            let mut states = state::load_all_states(&config.path).unwrap_or_default();
 
-        if let Some(mode) = &entry.mode {
-            states.insert(
-                key,
-                WindowState {
-                    position:      entry.position.map(|p| (p.x, p.y)),
-                    width:         entry.width,
-                    height:        entry.height,
-                    monitor_index: entry.monitor_index.unwrap_or(0),
-                    mode:          mode.clone(),
-                    app_name:      app_name.clone(),
-                },
-            );
-        }
+            // Update with current window states from cache
+            for (entity, entry) in &*cached {
+                let key = if primary_q.get(*entity).is_ok() {
+                    (*state::PRIMARY_WINDOW_KEY).to_string()
+                } else {
+                    // Look up managed window name - entity may have been despawned already
+                    // if so, skip it (the cached entry is stale)
+                    continue;
+                };
+
+                if let Some(mode) = &entry.mode {
+                    states.insert(
+                        key,
+                        WindowState {
+                            position:      entry.position.map(|p| (p.x, p.y)),
+                            width:         entry.width,
+                            height:        entry.height,
+                            monitor_index: entry.monitor_index.unwrap_or(0),
+                            mode:          mode.clone(),
+                            app_name:      app_name.clone(),
+                        },
+                    );
+                }
+            }
+
+            // For managed windows, iterate cached and look up names from the query
+            for (entity, entry) in &*cached {
+                if primary_q.get(*entity).is_ok() {
+                    continue; // Already handled above
+                }
+                // Find managed window component
+                if let Ok((_, _, _, Some(managed))) = windows.get(*entity)
+                    && let Some(mode) = &entry.mode
+                {
+                    states.insert(
+                        managed.window_name.clone(),
+                        WindowState {
+                            position:      entry.position.map(|p| (p.x, p.y)),
+                            width:         entry.width,
+                            height:        entry.height,
+                            monitor_index: entry.monitor_index.unwrap_or(0),
+                            mode:          mode.clone(),
+                            app_name:      app_name.clone(),
+                        },
+                    );
+                }
+            }
+
+            state::save_all_states(&config.path, &states);
+        },
     }
-
-    // Also save managed windows from the query (since they might not have changed
-    // in this frame but we need their latest state for RememberAll)
-    // We do this by re-querying all managed windows
-    // Actually, the cached HashMap already has all the latest data, but for managed windows
-    // we need their names. Let's handle this differently.
-
-    // For managed windows, iterate cached and look up names from the query
-    for (entity, entry) in &*cached {
-        if primary_q.get(*entity).is_ok() {
-            continue; // Already handled above
-        }
-        // Find managed window component
-        if let Ok((_, _, _, Some(managed))) = windows.get(*entity)
-            && let Some(mode) = &entry.mode
-        {
-            states.insert(
-                managed.window_name.clone(),
-                WindowState {
-                    position:      entry.position.map(|p| (p.x, p.y)),
-                    width:         entry.width,
-                    height:        entry.height,
-                    monitor_index: entry.monitor_index.unwrap_or(0),
-                    mode:          mode.clone(),
-                    app_name:      app_name.clone(),
-                },
-            );
-        }
-    }
-
-    state::save_all_states(&config.path, &states);
 }
 
 /// Apply pending window restore. Runs only when entities with `TargetPosition` exist.
