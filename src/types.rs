@@ -178,6 +178,7 @@ pub struct X11FrameCompensated;
 /// at the correct location when we later apply size in `ApplySize`.
 #[cfg(feature = "workaround-winit-4440")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(target_os = "windows", allow(dead_code))]
 pub enum WindowRestoreState {
     /// Initial state: window needs to be moved to the target monitor to trigger a scale change.
     /// Handled by `restore_windows` which calls `apply_initial_move` and transitions to
