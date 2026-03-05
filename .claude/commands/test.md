@@ -60,8 +60,9 @@ Do NOT continue running more tests after a failure. Stop, explain what happened,
 2. <LinuxEnvironmentCheck/>
 3. <LoadTestConfig/>
 4. <DiscoverMonitors/>
-5. <RunTests/>
-6. <FormatResults/>
+5. <WindowsMonitorValidation/> (Windows only)
+6. <RunTests/>
+7. <FormatResults/>
 </ExecutionSteps>
 
 <ParseArguments>
@@ -176,6 +177,43 @@ Extract: platform, example_ron_path, test_ron_dir, tests array.
     - Display: "Single-monitor mode: filtering to single-monitor tests only"
     - Display count of tests that will be skipped
 </DiscoverMonitors>
+
+<WindowsMonitorValidation>
+**Windows only** (skip on other platforms). Run after `<DiscoverMonitors/>`.
+
+Tests assume the same monitor layout as macOS:
+- **Monitor 0** = higher scale factor (high-DPI, e.g. built-in display)
+- **Monitor 1** = lower scale factor (low-DPI, e.g. external display)
+
+After discovery, validate this holds. If `${NUM_MONITORS} >= 2`:
+
+1. Check: `${MONITOR_0_SCALE} > ${MONITOR_1_SCALE}`
+2. **If true**: proceed normally.
+3. **If false** (Monitor 0 has equal or lower scale than Monitor 1): **STOP** and display:
+
+```
+⚠ Windows monitor layout mismatch
+
+Tests require Monitor 0 (Bevy) to be high-DPI and Monitor 1 to be low-DPI.
+Currently: Monitor 0 scale=${MONITOR_0_SCALE}, Monitor 1 scale=${MONITOR_1_SCALE}
+
+Bevy/winit index assignment comes from Windows display settings, but the
+Bevy index may not match the Windows "Display N" number (e.g. Bevy Monitor 0
+may be Windows Display 2).
+
+To fix, open Windows Settings → System → Display and adjust:
+1. Turn OFF any custom scaling (Settings → Display → Scale → ensure no
+   "custom scaling" banner is shown; if so, click "Turn off custom scaling
+   and sign out", then sign back in).
+2. Set the built-in/higher-res display to a HIGHER scale % than the external.
+   (e.g. built-in at 200%, external at 100%)
+3. You may need to change which display is "primary" or rearrange them.
+
+After changing settings, re-run /test to verify the new layout.
+```
+
+Then STOP execution — do not continue to RunTests.
+</WindowsMonitorValidation>
 
 <SingleMonitorFiltering>
 When `${SINGLE_MONITOR_MODE}` is true (either detected or forced), skip tests that require multiple monitors.
