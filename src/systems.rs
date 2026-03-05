@@ -32,6 +32,7 @@ use crate::types::MonitorScaleStrategy;
 use crate::types::SavedWindowMode;
 use crate::types::TargetPosition;
 use crate::types::WindowDecoration;
+#[cfg(feature = "workaround-winit-4440")]
 use crate::types::WindowRestoreState;
 use crate::types::WindowRestored;
 use crate::types::WinitInfo;
@@ -234,6 +235,7 @@ pub fn load_target_position(
 ///
 /// For fullscreen modes, we still move to the target monitor so the fullscreen mode
 /// is applied on the correct monitor when `try_apply_restore` runs.
+#[cfg(feature = "workaround-winit-4440")]
 pub fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
     /// Computed parameters for the initial window move to target monitor.
     #[derive(Debug)]
@@ -291,6 +293,7 @@ pub fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
 
     // Compute move parameters based on scale strategy
     let params = match target.monitor_scale_strategy {
+        #[cfg(feature = "workaround-winit-4440")]
         MonitorScaleStrategy::HigherToLower(_) => {
             // Compensate position because winit divides by launch scale
             let ratio = target.starting_scale / target.target_scale;
@@ -623,8 +626,12 @@ pub fn restore_windows(
     config: Res<RestoreWindowConfig>,
     _non_send: NonSendMarker,
 ) {
+    #[cfg(feature = "workaround-winit-4440")]
     let scale_changed = scale_changed_messages.read().last().is_some();
+    #[cfg(not(feature = "workaround-winit-4440"))]
+    let _scale_changed = scale_changed_messages.read().last().is_some();
 
+    #[allow(unused_mut)]
     for (entity, mut target, mut window) in &mut windows {
         // Wait for the winit window to be created before applying restore.
         //
@@ -645,6 +652,7 @@ pub fn restore_windows(
         // enter here via `NeedInitialMove`. We call `apply_initial_move` to set the
         // compensated position (triggering a monitor scale change), then transition
         // to `WaitingForScaleChange` to wait for the scale event before applying size.
+        #[cfg(feature = "workaround-winit-4440")]
         if matches!(
             target.monitor_scale_strategy,
             MonitorScaleStrategy::HigherToLower(WindowRestoreState::NeedInitialMove)
@@ -656,6 +664,7 @@ pub fn restore_windows(
         }
 
         // Handle HigherToLower state transition on scale change
+        #[cfg(feature = "workaround-winit-4440")]
         if target.monitor_scale_strategy
             == MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange)
             && scale_changed
@@ -744,6 +753,7 @@ enum RestoreStatus {
     /// Restore completed successfully.
     Complete,
     /// Waiting for conditions to be met (scale change, window position, etc.).
+    #[cfg(feature = "workaround-winit-4440")]
     Waiting,
 }
 
@@ -969,6 +979,7 @@ fn try_apply_restore(target: &TargetPosition, window: &mut Window) -> RestoreSta
                 Some(target.ratio()),
             );
         },
+        #[cfg(feature = "workaround-winit-4440")]
         MonitorScaleStrategy::HigherToLower(WindowRestoreState::ApplySize) => {
             let size = target.size();
             debug!(
@@ -977,6 +988,7 @@ fn try_apply_restore(target: &TargetPosition, window: &mut Window) -> RestoreSta
             );
             window.resolution.set_physical_resolution(size.x, size.y);
         },
+        #[cfg(feature = "workaround-winit-4440")]
         MonitorScaleStrategy::HigherToLower(WindowRestoreState::NeedInitialMove)
         | MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange) => {
             debug!("[Restore] HigherToLower: waiting for initial move or ScaleChanged message");

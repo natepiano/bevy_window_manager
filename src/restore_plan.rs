@@ -7,8 +7,10 @@ use crate::monitors::Monitors;
 #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
 use crate::types::FullscreenRestoreState;
 use crate::types::MonitorScaleStrategy;
+#[cfg(feature = "workaround-winit-4440")]
 use crate::types::SCALE_FACTOR_EPSILON;
 use crate::types::TargetPosition;
+#[cfg(feature = "workaround-winit-4440")]
 use crate::types::WindowRestoreState;
 use crate::types::WindowState;
 
@@ -52,6 +54,7 @@ pub(crate) fn compute_target_position(
         width,
         height,
         target_scale,
+        #[cfg(feature = "workaround-winit-4440")]
         starting_scale,
         monitor_scale_strategy: determine_scale_strategy(starting_scale, target_scale),
         mode: saved_state.mode.clone(),
@@ -154,6 +157,7 @@ fn determine_scale_strategy(_starting_scale: f64, _target_scale: f64) -> Monitor
 }
 
 /// True if running on Wayland.
+#[cfg(feature = "workaround-winit-4440")]
 fn is_wayland() -> bool {
     cfg!(target_os = "linux")
         && std::env::var("WAYLAND_DISPLAY")

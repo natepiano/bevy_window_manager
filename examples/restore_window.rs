@@ -694,13 +694,16 @@ fn get_state_file_path() -> Option<std::path::PathBuf> {
 /// Handle mode-switching and video mode navigation for the focused window.
 fn handle_window_mode_input(
     keys: Res<ButtonInput<KeyCode>>,
-    mut windows: Query<(&mut Window, Option<&CurrentMonitor>)>,
+    mut windows: Query<(Entity, &mut Window, Option<&CurrentMonitor>)>,
     monitors_res: Res<Monitors>,
     bevy_monitors: Query<(Entity, &Monitor)>,
     mut selected: ResMut<SelectedVideoModes>,
+    restored_states: Res<RestoredStates>,
 ) {
     // Find the focused window
-    let Some((mut window, current_monitor)) = windows.iter_mut().find(|(w, _)| w.focused) else {
+    let Some((entity, mut window, current_monitor)) =
+        windows.iter_mut().find(|(_, w, _)| w.focused)
+    else {
         return;
     };
 
@@ -713,11 +716,15 @@ fn handle_window_mode_input(
     // The OS can change fullscreen state (e.g. macOS green button) without updating
     // `window.mode`, causing bevy's `changed_windows` to skip the mode change.
     //
-    // Skip sync when the user has explicitly set an exclusive fullscreen mode — macOS
-    // may reject it and briefly oscillate between Fullscreen and Windowed. Syncing
-    // during that transition creates a feedback loop.
+    // Skip sync in two cases:
+    // 1. Explicit exclusive fullscreen — macOS may reject it and oscillate between Fullscreen and
+    //    Windowed, creating a feedback loop.
+    // 2. Restore not yet complete — the plugin sets `window.mode` to the target fullscreen mode,
+    //    but macOS hasn't completed the transition yet so `effective_mode` still reads `Windowed`.
+    //    Without this guard we'd overwrite the intended mode back to `Windowed`.
     let is_explicit_fullscreen = matches!(window.mode, WindowMode::Fullscreen(_, _));
-    if !is_explicit_fullscreen && window.mode != monitor.effective_mode {
+    let restore_complete = restored_states.states.contains_key(&entity);
+    if !is_explicit_fullscreen && restore_complete && window.mode != monitor.effective_mode {
         window.mode = monitor.effective_mode;
     }
 

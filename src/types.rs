@@ -57,6 +57,7 @@ pub struct WindowRestored {
 ///
 /// Accounts for floating-point imprecision when comparing scale factors.
 /// A difference less than this epsilon is considered negligible.
+#[cfg(feature = "workaround-winit-4440")]
 pub const SCALE_FACTOR_EPSILON: f64 = 0.01;
 
 /// Saved video mode for exclusive fullscreen.
@@ -175,6 +176,7 @@ pub struct X11FrameCompensated;
 ///
 /// By moving a 1x1 window to the final position first, we ensure the window is already
 /// at the correct location when we later apply size in `ApplySize`.
+#[cfg(feature = "workaround-winit-4440")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowRestoreState {
     /// Initial state: window needs to be moved to the target monitor to trigger a scale change.
@@ -259,6 +261,7 @@ pub enum MonitorScaleStrategy {
     #[cfg(all(not(target_os = "windows"), feature = "workaround-winit-4440"))]
     LowerToHigher,
     /// High→Low DPI (2x→1x) - requires two phases (see enum docs). macOS only.
+    #[cfg(feature = "workaround-winit-4440")]
     HigherToLower(WindowRestoreState),
 }
 
@@ -285,6 +288,7 @@ pub struct TargetPosition {
     /// Scale factor of the target monitor.
     pub target_scale:             f64,
     /// Scale factor of the monitor where the window starts (keyboard focus monitor).
+    #[cfg(feature = "workaround-winit-4440")]
     pub starting_scale:           f64,
     /// Strategy for handling scale factor differences between monitors.
     pub monitor_scale_strategy:   MonitorScaleStrategy,
