@@ -137,5 +137,22 @@ panic = "deny"
 pedantic = { level = "deny", priority = -1 }
 unwrap_used = "deny"
 
+[patch.crates-io]
+winit = { path = "/Users/natemccoy/rust/winit" }
+bevy = { path = "/Users/natemccoy/rust/bevy" }
+bevy_internal = { path = "/Users/natemccoy/rust/bevy/crates/bevy_internal" }
+bevy_app = { path = "/Users/natemccoy/rust/bevy/crates/bevy_app" }
+bevy_ecs = { path = "/Users/natemccoy/rust/bevy/crates/bevy_ecs" }
+bevy_reflect = { path = "/Users/natemccoy/rust/bevy/crates/bevy_reflect" }
+bevy_utils = { path = "/Users/natemccoy/rust/bevy/crates/bevy_utils" }
+bevy_log = { path = "/Users/natemccoy/rust/bevy/crates/bevy_log" }
+bevy_math = { path = "/Users/natemccoy/rust/bevy/crates/bevy_math" }
+bevy_input = { path = "/Users/natemccoy/rust/bevy/crates/bevy_input" }
+bevy_window = { path = "/Users/natemccoy/rust/bevy/crates/bevy_window" }
+bevy_platform = { path = "/Users/natemccoy/rust/bevy/crates/bevy_platform" }
+bevy_tasks = { path = "/Users/natemccoy/rust/bevy/crates/bevy_tasks" }
+bevy_winit = { path = "/Users/natemccoy/rust/bevy/crates/bevy_winit" }
+bevy_remote = { path = "/Users/natemccoy/rust/bevy/crates/bevy_remote" }
+
 [profile.dev.package."*"]
 opt-level = 3
