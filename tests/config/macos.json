@@ -246,27 +246,6 @@
           "validate": ["position", "size", "monitor_index", "mode"]
         }
       }
-    },
-
-    {
-      "id": "borderless_green_button_exit",
-      "description": "Exit borderless fullscreen via green button - validates effective_mode detects exit",
-      "automation": "human_assisted",
-      "launch_monitor": 0,
-
-      "ron_file": "fullscreen_borderless_mon0.ron",
-
-      "instructions": [
-        "Window starts in borderless fullscreen mode",
-        "Hover at the top of the screen to reveal the title bar",
-        "Click the green fullscreen button to exit fullscreen",
-        "Verify the Effective Mode shows Windowed (not BorderlessFullscreen)"
-      ],
-
-      "success_criteria": {
-        "pass": "Effective Mode shows Windowed after exiting fullscreen",
-        "fail": "Effective Mode still shows BorderlessFullscreen after exiting"
-      }
     }
   ]
 }

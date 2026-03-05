@@ -57,7 +57,6 @@ pub struct WindowRestored {
 ///
 /// Accounts for floating-point imprecision when comparing scale factors.
 /// A difference less than this epsilon is considered negligible.
-#[cfg(feature = "workaround-winit-4440")]
 pub const SCALE_FACTOR_EPSILON: f64 = 0.01;
 
 /// Saved video mode for exclusive fullscreen.
@@ -176,9 +175,7 @@ pub struct X11FrameCompensated;
 ///
 /// By moving a 1x1 window to the final position first, we ensure the window is already
 /// at the correct location when we later apply size in `ApplySize`.
-#[cfg(feature = "workaround-winit-4440")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(target_os = "windows", allow(dead_code))]
 pub enum WindowRestoreState {
     /// Initial state: window needs to be moved to the target monitor to trigger a scale change.
     /// Handled by `restore_windows` which calls `apply_initial_move` and transitions to
@@ -197,7 +194,6 @@ pub enum WindowRestoreState {
 /// limitations (see <https://github.com/rust-windowing/winit/issues/3124>).
 /// We wait one frame for `create_surfaces` to create a windowed surface first,
 /// then switch to fullscreen.
-#[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FullscreenRestoreState {
     /// Waiting for first frame to render (surface creation).
@@ -255,14 +251,11 @@ pub enum FullscreenRestoreState {
 pub enum MonitorScaleStrategy {
     /// Same scale - apply position and size directly.
     ApplyUnchanged,
-    /// Windows only: apply position directly, compensate size only.
-    #[cfg(all(target_os = "windows", feature = "workaround-winit-4440"))]
+    /// Apply position directly, compensate size only.
     CompensateSizeOnly,
-    /// Low→High DPI (1x→2x) - apply with compensation (ratio < 1). macOS only.
-    #[cfg(all(not(target_os = "windows"), feature = "workaround-winit-4440"))]
+    /// Low→High DPI (1x→2x) - apply with compensation (ratio < 1).
     LowerToHigher,
-    /// High→Low DPI (2x→1x) - requires two phases (see enum docs). macOS only.
-    #[cfg(feature = "workaround-winit-4440")]
+    /// High→Low DPI (2x→1x) - requires two phases (see enum docs).
     HigherToLower(WindowRestoreState),
 }
 
@@ -289,7 +282,6 @@ pub struct TargetPosition {
     /// Scale factor of the target monitor.
     pub target_scale:             f64,
     /// Scale factor of the monitor where the window starts (keyboard focus monitor).
-    #[cfg(feature = "workaround-winit-4440")]
     pub starting_scale:           f64,
     /// Strategy for handling scale factor differences between monitors.
     pub monitor_scale_strategy:   MonitorScaleStrategy,
@@ -299,9 +291,8 @@ pub struct TargetPosition {
     /// On non-Wayland platforms, this could be derived from position, but Wayland
     /// doesn't provide window position, so we store it explicitly.
     pub target_monitor_index:     usize,
-    /// Fullscreen restore state (Windows only, DX12/DXGI workaround).
-    #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
-    pub fullscreen_restore_state: FullscreenRestoreState,
+    /// Fullscreen restore state (DX12/DXGI workaround).
+    pub fullscreen_restore_state: Option<FullscreenRestoreState>,
 }
 
 impl TargetPosition {
@@ -314,7 +305,6 @@ impl TargetPosition {
     pub const fn size(&self) -> UVec2 { UVec2::new(self.width, self.height) }
 
     /// Scale ratio between starting and target monitors.
-    #[cfg(feature = "workaround-winit-4440")]
     #[must_use]
     pub fn ratio(&self) -> f64 { self.starting_scale / self.target_scale }
 
@@ -322,7 +312,6 @@ impl TargetPosition {
     ///
     /// Multiplies position by the ratio to account for winit dividing by launch scale.
     /// Returns None if position is not available (Wayland).
-    #[cfg(all(not(target_os = "windows"), feature = "workaround-winit-4440"))]
     #[must_use]
     pub fn compensated_position(&self) -> Option<IVec2> {
         let ratio = self.ratio();
@@ -337,7 +326,6 @@ impl TargetPosition {
     /// Size compensated for scale factor differences.
     ///
     /// Multiplies size by the ratio to account for winit dividing by launch scale.
-    #[cfg(feature = "workaround-winit-4440")]
     #[must_use]
     pub fn compensated_size(&self) -> UVec2 {
         let ratio = self.ratio();

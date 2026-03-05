@@ -26,13 +26,11 @@ use crate::monitors::CurrentMonitor;
 use crate::monitors::MonitorInfo;
 use crate::monitors::Monitors;
 use crate::restore_plan;
-#[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
 use crate::types::FullscreenRestoreState;
 use crate::types::MonitorScaleStrategy;
 use crate::types::SavedWindowMode;
 use crate::types::TargetPosition;
 use crate::types::WindowDecoration;
-#[cfg(feature = "workaround-winit-4440")]
 use crate::types::WindowRestoreState;
 use crate::types::WindowRestored;
 use crate::types::WinitInfo;
@@ -213,13 +211,7 @@ pub fn load_target_position(
 
     // Insert X11FrameCompensated token for platforms that don't need compensation.
     // On Linux + W6 + X11, the compensation system inserts this token after adjusting position.
-    #[cfg(not(all(target_os = "linux", feature = "workaround-winit-4445")))]
-    commands.entity(entity).insert(X11FrameCompensated);
-
-    #[cfg(all(target_os = "linux", feature = "workaround-winit-4445"))]
-    if is_wayland() {
-        commands.entity(entity).insert(X11FrameCompensated);
-    }
+    insert_x11_frame_token(&mut commands, entity);
 }
 
 /// Apply the initial window move to the target monitor.
@@ -235,7 +227,6 @@ pub fn load_target_position(
 ///
 /// For fullscreen modes, we still move to the target monitor so the fullscreen mode
 /// is applied on the correct monitor when `try_apply_restore` runs.
-#[cfg(feature = "workaround-winit-4440")]
 pub fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
     /// Computed parameters for the initial window move to target monitor.
     #[derive(Debug)]
@@ -293,7 +284,6 @@ pub fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
 
     // Compute move parameters based on scale strategy
     let params = match target.monitor_scale_strategy {
-        #[cfg(feature = "workaround-winit-4440")]
         MonitorScaleStrategy::HigherToLower(_) => {
             // Compensate position because winit divides by launch scale
             let ratio = target.starting_scale / target.target_scale;
@@ -387,19 +377,7 @@ pub fn save_active_window_state(
             continue;
         };
 
-        #[cfg(all(target_os = "linux", feature = "workaround-winit-4443"))]
-        let pos = WINIT_WINDOWS.with(|ww| {
-            let ww = ww.borrow();
-            let winit_win = ww.get_window(entity)?;
-            let outer_pos = winit_win.outer_position().ok()?;
-            Some(IVec2::new(outer_pos.x, outer_pos.y))
-        });
-
-        #[cfg(not(all(target_os = "linux", feature = "workaround-winit-4443")))]
-        let pos = match window.position {
-            bevy::window::WindowPosition::At(p) => Some(p),
-            _ => None,
-        };
+        let pos = get_window_position(entity, window);
 
         let (monitor_index, _monitor_scale) = existing_monitor.map_or_else(
             || {
@@ -484,19 +462,7 @@ pub fn save_window_state(
         };
 
         // Get window position for saving state.
-        #[cfg(all(target_os = "linux", feature = "workaround-winit-4443"))]
-        let pos = WINIT_WINDOWS.with(|ww| {
-            let ww = ww.borrow();
-            let winit_win = ww.get_window(window_entity)?;
-            let outer_pos = winit_win.outer_position().ok()?;
-            Some(IVec2::new(outer_pos.x, outer_pos.y))
-        });
-
-        #[cfg(not(all(target_os = "linux", feature = "workaround-winit-4443")))]
-        let pos = match window.position {
-            bevy::window::WindowPosition::At(p) => Some(p),
-            _ => None,
-        };
+        let pos = get_window_position(window_entity, window);
 
         let width = window.resolution.physical_width();
         let height = window.resolution.physical_height();
@@ -626,12 +592,8 @@ pub fn restore_windows(
     config: Res<RestoreWindowConfig>,
     _non_send: NonSendMarker,
 ) {
-    #[cfg(feature = "workaround-winit-4440")]
     let scale_changed = scale_changed_messages.read().last().is_some();
-    #[cfg(not(feature = "workaround-winit-4440"))]
-    let _scale_changed = scale_changed_messages.read().last().is_some();
 
-    #[allow(unused_mut)]
     for (entity, mut target, mut window) in &mut windows {
         // Wait for the winit window to be created before applying restore.
         //
@@ -652,7 +614,6 @@ pub fn restore_windows(
         // enter here via `NeedInitialMove`. We call `apply_initial_move` to set the
         // compensated position (triggering a monitor scale change), then transition
         // to `WaitingForScaleChange` to wait for the scale event before applying size.
-        #[cfg(feature = "workaround-winit-4440")]
         if matches!(
             target.monitor_scale_strategy,
             MonitorScaleStrategy::HigherToLower(WindowRestoreState::NeedInitialMove)
@@ -664,7 +625,6 @@ pub fn restore_windows(
         }
 
         // Handle HigherToLower state transition on scale change
-        #[cfg(feature = "workaround-winit-4440")]
         if target.monitor_scale_strategy
             == MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange)
             && scale_changed
@@ -676,14 +636,13 @@ pub fn restore_windows(
                 MonitorScaleStrategy::HigherToLower(WindowRestoreState::ApplySize);
         }
 
-        // Windows: transition fullscreen state after first frame (DX12/DXGI workaround)
-        #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
-        if target.mode.is_fullscreen()
-            && target.fullscreen_restore_state == FullscreenRestoreState::WaitingForSurface
-        {
-            debug!("[Restore] First frame passed, transitioning to ApplyFullscreen");
-            target.fullscreen_restore_state = FullscreenRestoreState::ApplyFullscreen;
-            continue; // Wait one more frame for the state change to take effect
+        // Transition fullscreen state after first frame (DX12/DXGI workaround)
+        if let Some(FullscreenRestoreState::WaitingForSurface) = target.fullscreen_restore_state {
+            if target.mode.is_fullscreen() {
+                debug!("[Restore] First frame passed, transitioning to ApplyFullscreen");
+                target.fullscreen_restore_state = Some(FullscreenRestoreState::ApplyFullscreen);
+                continue;
+            }
         }
 
         if matches!(
@@ -753,7 +712,6 @@ enum RestoreStatus {
     /// Restore completed successfully.
     Complete,
     /// Waiting for conditions to be met (scale change, window position, etc.).
-    #[cfg(feature = "workaround-winit-4440")]
     Waiting,
 }
 
@@ -763,6 +721,55 @@ pub fn is_wayland() -> bool {
         && std::env::var("WAYLAND_DISPLAY")
             .map(|v| !v.is_empty())
             .unwrap_or(false)
+}
+
+/// Get window position, using winit's `outer_position` on Linux with W5 workaround.
+fn get_window_position(entity: Entity, window: &Window) -> Option<IVec2> {
+    #[cfg(all(target_os = "linux", feature = "workaround-winit-4443"))]
+    {
+        return WINIT_WINDOWS.with(|ww| {
+            let ww = ww.borrow();
+            let winit_win = ww.get_window(entity)?;
+            let outer_pos = winit_win.outer_position().ok()?;
+            Some(IVec2::new(outer_pos.x, outer_pos.y))
+        });
+    }
+    #[cfg(not(all(target_os = "linux", feature = "workaround-winit-4443")))]
+    {
+        let _ = entity;
+        match window.position {
+            bevy::window::WindowPosition::At(p) => Some(p),
+            _ => None,
+        }
+    }
+}
+
+/// Whether the primary window should be hidden on startup.
+///
+/// On Linux X11 with frame extent compensation, the window must stay visible
+/// so `_NET_FRAME_EXTENTS` can be queried. On all other platforms, hide it
+/// to prevent the flash at the default position.
+pub fn should_hide_on_startup() -> bool {
+    #[cfg(all(target_os = "linux", feature = "workaround-winit-4445"))]
+    {
+        is_wayland()
+    }
+    #[cfg(not(all(target_os = "linux", feature = "workaround-winit-4445")))]
+    {
+        true
+    }
+}
+
+/// Whether X11 frame compensation is needed on this platform.
+pub fn needs_x11_frame_compensation() -> bool {
+    cfg!(all(target_os = "linux", feature = "workaround-winit-4445")) && !is_wayland()
+}
+
+/// Insert `X11FrameCompensated` token for platforms that don't need compensation.
+pub fn insert_x11_frame_token(commands: &mut Commands, entity: Entity) {
+    if !needs_x11_frame_compensation() {
+        commands.entity(entity).insert(X11FrameCompensated);
+    }
 }
 
 /// Unified monitor detection system. Maintains `CurrentMonitor` on all managed windows.
@@ -959,7 +966,6 @@ fn try_apply_restore(target: &TargetPosition, window: &mut Window) -> RestoreSta
                 None,
             );
         },
-        #[cfg(all(target_os = "windows", feature = "workaround-winit-4440"))]
         MonitorScaleStrategy::CompensateSizeOnly => {
             apply_window_geometry(
                 window,
@@ -969,7 +975,6 @@ fn try_apply_restore(target: &TargetPosition, window: &mut Window) -> RestoreSta
                 Some(target.ratio()),
             );
         },
-        #[cfg(all(not(target_os = "windows"), feature = "workaround-winit-4440"))]
         MonitorScaleStrategy::LowerToHigher => {
             apply_window_geometry(
                 window,
@@ -979,7 +984,6 @@ fn try_apply_restore(target: &TargetPosition, window: &mut Window) -> RestoreSta
                 Some(target.ratio()),
             );
         },
-        #[cfg(feature = "workaround-winit-4440")]
         MonitorScaleStrategy::HigherToLower(WindowRestoreState::ApplySize) => {
             let size = target.size();
             debug!(
@@ -988,9 +992,9 @@ fn try_apply_restore(target: &TargetPosition, window: &mut Window) -> RestoreSta
             );
             window.resolution.set_physical_resolution(size.x, size.y);
         },
-        #[cfg(feature = "workaround-winit-4440")]
-        MonitorScaleStrategy::HigherToLower(WindowRestoreState::NeedInitialMove)
-        | MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange) => {
+        MonitorScaleStrategy::HigherToLower(
+            WindowRestoreState::NeedInitialMove | WindowRestoreState::WaitingForScaleChange,
+        ) => {
             debug!("[Restore] HigherToLower: waiting for initial move or ScaleChanged message");
             return RestoreStatus::Waiting;
         },
@@ -999,4 +1003,105 @@ fn try_apply_restore(target: &TargetPosition, window: &mut Window) -> RestoreSta
     // Show window now that restore is complete
     window.visible = true;
     RestoreStatus::Complete
+}
+
+#[cfg(test)]
+mod tests {
+    use bevy::window::MonitorSelection;
+    use bevy::window::VideoModeSelection;
+    use bevy::window::WindowMode;
+    use bevy::window::WindowPosition;
+
+    use super::*;
+
+    fn monitor_0() -> MonitorInfo {
+        MonitorInfo {
+            index:    0,
+            scale:    2.0,
+            position: IVec2::ZERO,
+            size:     UVec2::new(3456, 2234),
+        }
+    }
+
+    fn monitors_with(info: MonitorInfo) -> Monitors { Monitors { list: vec![info] } }
+
+    fn window_at(pos: IVec2, width: u32, height: u32) -> Window {
+        let mut window = Window {
+            position: WindowPosition::At(pos),
+            mode: WindowMode::Windowed,
+            ..Default::default()
+        };
+        window.resolution.set_physical_resolution(width, height);
+        window
+    }
+
+    #[test]
+    fn effective_mode_fullscreen_when_window_fills_monitor() {
+        let mon = monitor_0();
+        let monitors = monitors_with(mon);
+        let window = window_at(mon.position, mon.size.x, mon.size.y);
+
+        let mode = compute_effective_mode(&window, &mon, &monitors);
+        assert_eq!(
+            mode,
+            WindowMode::BorderlessFullscreen(MonitorSelection::Index(0))
+        );
+    }
+
+    #[test]
+    fn effective_mode_windowed_when_window_smaller_than_monitor() {
+        let mon = monitor_0();
+        let monitors = monitors_with(mon);
+        let window = window_at(IVec2::new(100, 100), 1600, 1200);
+
+        let mode = compute_effective_mode(&window, &mon, &monitors);
+        assert_eq!(mode, WindowMode::Windowed);
+    }
+
+    #[test]
+    fn effective_mode_windowed_when_not_left_aligned() {
+        let mon = monitor_0();
+        let monitors = monitors_with(mon);
+        // Full width + reaches bottom, but offset from left edge
+        let window = window_at(IVec2::new(1, 0), mon.size.x, mon.size.y);
+
+        let mode = compute_effective_mode(&window, &mon, &monitors);
+        assert_eq!(mode, WindowMode::Windowed);
+    }
+
+    #[test]
+    fn effective_mode_trusts_exclusive_fullscreen() {
+        let mon = monitor_0();
+        let monitors = monitors_with(mon);
+        let mut window = window_at(IVec2::ZERO, 800, 600);
+        window.mode =
+            WindowMode::Fullscreen(MonitorSelection::Index(0), VideoModeSelection::Current);
+
+        let mode = compute_effective_mode(&window, &mon, &monitors);
+        assert!(matches!(mode, WindowMode::Fullscreen(_, _)));
+    }
+
+    #[test]
+    fn effective_mode_returns_mode_when_no_position() {
+        let mon = monitor_0();
+        let monitors = monitors_with(mon);
+        let mut window = Window::default();
+        window
+            .resolution
+            .set_physical_resolution(mon.size.x, mon.size.y);
+        // position is Automatic (no position available, like Wayland)
+
+        let mode = compute_effective_mode(&window, &mon, &monitors);
+        assert_eq!(mode, WindowMode::Windowed);
+    }
+
+    #[test]
+    fn effective_mode_returns_mode_when_no_monitors() {
+        let mon = monitor_0();
+        let empty = Monitors { list: vec![] };
+        let window = window_at(IVec2::ZERO, mon.size.x, mon.size.y);
+
+        let mode = compute_effective_mode(&window, &mon, &empty);
+        assert_eq!(mode, WindowMode::Windowed);
+    }
 }

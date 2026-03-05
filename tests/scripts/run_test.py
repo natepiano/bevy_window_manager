@@ -467,6 +467,7 @@ def launch_app(
         cmd.extend(feature_flags.split())
 
     env = dict(os.environ)
+    env["BWM_TEST_MODE"] = "1"
     if backend == "x11":
         env["WAYLAND_DISPLAY"] = ""
 

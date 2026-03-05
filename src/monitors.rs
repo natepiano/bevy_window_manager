@@ -36,7 +36,7 @@ pub struct MonitorInfo {
 #[derive(Resource, Reflect)]
 #[reflect(Resource)]
 pub struct Monitors {
-    list: Vec<MonitorInfo>,
+    pub list: Vec<MonitorInfo>,
 }
 
 /// Component storing the current monitor and effective window mode.

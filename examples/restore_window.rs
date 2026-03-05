@@ -44,6 +44,9 @@ use bevy_window_manager::Monitors;
 use bevy_window_manager::WindowManagerPlugin;
 use bevy_window_manager::WindowRestored;
 
+/// When set, keyboard input is suppressed (used by the test runner).
+const TEST_MODE_ENV_VAR: &str = "BWM_TEST_MODE";
+
 /// BRP-triggerable event to spawn a managed secondary window.
 #[derive(Event, Reflect)]
 #[reflect(Event)]
@@ -64,6 +67,7 @@ fn main() {
         .add_observer(on_window_restored)
         .add_observer(on_secondary_window_added)
         .add_observer(on_secondary_window_removed)
+        .insert_resource(TestMode(std::env::var(TEST_MODE_ENV_VAR).is_ok()))
         .init_resource::<SelectedVideoModes>()
         .init_resource::<WindowCounter>()
         .init_resource::<RestoredStates>()
@@ -73,8 +77,8 @@ fn main() {
             (
                 update_primary_display,
                 update_secondary_displays,
-                handle_global_input,
-                handle_window_mode_input,
+                handle_global_input.run_if(keyboard_enabled),
+                handle_window_mode_input.run_if(keyboard_enabled),
                 debug_winit_monitor,
                 debug_window_changed,
                 debug_scale_factor_changed,
@@ -84,6 +88,12 @@ fn main() {
 }
 
 // --- Resources ---
+
+/// When true, keyboard input is suppressed so the test script can control the app via BRP.
+#[derive(Resource)]
+struct TestMode(bool);
+
+fn keyboard_enabled(test_mode: Res<TestMode>) -> bool { !test_mode.0 }
 
 /// Tracks the next window number for auto-incrementing names.
 #[derive(Resource, Default)]

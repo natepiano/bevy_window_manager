@@ -314,12 +314,7 @@ fn on_managed_window_load(
     // Hide window during restore
     if let Ok(mut window) = windows.get_mut(entity) {
         // On Linux X11 with frame extent compensation, don't hide
-        #[cfg(all(target_os = "linux", feature = "workaround-winit-4445"))]
-        let should_hide = systems::is_wayland();
-        #[cfg(not(all(target_os = "linux", feature = "workaround-winit-4445")))]
-        let should_hide = true;
-
-        if should_hide {
+        if systems::should_hide_on_startup() {
             window.visible = false;
         }
     }
@@ -438,13 +433,7 @@ fn restore_managed_window(
     commands.entity(entity).insert(target);
 
     // Insert `X11FrameCompensated` for platforms that don't need compensation
-    #[cfg(not(all(target_os = "linux", feature = "workaround-winit-4445")))]
-    commands.entity(entity).insert(types::X11FrameCompensated);
-
-    #[cfg(all(target_os = "linux", feature = "workaround-winit-4445"))]
-    if systems::is_wayland() {
-        commands.entity(entity).insert(types::X11FrameCompensated);
-    }
+    systems::insert_x11_frame_token(commands, entity);
 }
 
 /// Run condition: returns true if any entity has a `TargetPosition` component.
@@ -465,10 +454,7 @@ fn build_plugin(app: &mut App, path: PathBuf, persistence: ManagedWindowPersiste
     // EXCEPTION: On Linux X11 with frame extent compensation (workaround-winit-4445),
     // we cannot hide the window because the compensation system needs to query
     // _NET_FRAME_EXTENTS, which requires the window to be visible/mapped.
-    #[cfg(all(target_os = "linux", feature = "workaround-winit-4445"))]
-    let should_hide = systems::is_wayland();
-    #[cfg(not(all(target_os = "linux", feature = "workaround-winit-4445")))]
-    let should_hide = true;
+    let should_hide = systems::should_hide_on_startup();
 
     if should_hide {
         let mut query = app

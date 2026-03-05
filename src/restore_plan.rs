@@ -4,15 +4,10 @@ use bevy::prelude::*;
 
 use crate::monitors::MonitorInfo;
 use crate::monitors::Monitors;
-#[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
 use crate::types::FullscreenRestoreState;
 use crate::types::MonitorScaleStrategy;
-#[cfg(feature = "workaround-winit-4440")]
-#[cfg_attr(target_os = "windows", allow(unused_imports))]
 use crate::types::SCALE_FACTOR_EPSILON;
 use crate::types::TargetPosition;
-#[cfg(feature = "workaround-winit-4440")]
-#[cfg_attr(target_os = "windows", allow(unused_imports))]
 use crate::types::WindowRestoreState;
 use crate::types::WindowState;
 
@@ -56,13 +51,18 @@ pub(crate) fn compute_target_position(
         width,
         height,
         target_scale,
-        #[cfg(feature = "workaround-winit-4440")]
         starting_scale,
         monitor_scale_strategy: determine_scale_strategy(starting_scale, target_scale),
         mode: saved_state.mode.clone(),
         target_monitor_index: target_info.index,
-        #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
-        fullscreen_restore_state: FullscreenRestoreState::WaitingForSurface,
+        fullscreen_restore_state: if cfg!(all(
+            target_os = "windows",
+            feature = "workaround-winit-3124"
+        )) {
+            Some(FullscreenRestoreState::WaitingForSurface)
+        } else {
+            None
+        },
     }
 }
 
@@ -110,60 +110,22 @@ fn clamp_position_to_monitor(
 }
 
 /// Determine the monitor scale strategy based on platform and scale factors.
-/// Windows: compensate size only when scales differ.
-#[cfg(all(target_os = "windows", feature = "workaround-winit-4440"))]
-fn determine_scale_strategy(starting_scale: f64, target_scale: f64) -> MonitorScaleStrategy {
-    if (starting_scale - target_scale).abs() < SCALE_FACTOR_EPSILON {
-        MonitorScaleStrategy::ApplyUnchanged
-    } else {
-        MonitorScaleStrategy::CompensateSizeOnly
+pub fn determine_scale_strategy(starting_scale: f64, target_scale: f64) -> MonitorScaleStrategy {
+    if !cfg!(feature = "workaround-winit-4440") {
+        return MonitorScaleStrategy::ApplyUnchanged;
     }
-}
 
-/// Determine the monitor scale strategy based on platform and scale factors.
-/// Windows without workaround: always use `ApplyUnchanged`.
-#[cfg(all(target_os = "windows", not(feature = "workaround-winit-4440")))]
-fn determine_scale_strategy(_starting_scale: f64, _target_scale: f64) -> MonitorScaleStrategy {
-    MonitorScaleStrategy::ApplyUnchanged
-}
-
-/// Determine the monitor scale strategy based on platform and scale factors.
-/// macOS with workaround: compensate position and size based on scale relationship.
-/// Wayland: always use `ApplyUnchanged` (can't detect starting monitor, can't set position).
-#[cfg(all(not(target_os = "windows"), feature = "workaround-winit-4440"))]
-fn determine_scale_strategy(starting_scale: f64, target_scale: f64) -> MonitorScaleStrategy {
-    // On Wayland, we can't reliably detect the starting monitor (outer_position returns 0,0
-    // and current_monitor/primary_monitor return None at init). Since we also can't set
-    // position on Wayland, skip scale compensation entirely.
-    if is_wayland() {
+    if cfg!(target_os = "linux") && crate::systems::is_wayland() {
         return MonitorScaleStrategy::ApplyUnchanged;
     }
 
     if (starting_scale - target_scale).abs() < SCALE_FACTOR_EPSILON {
         MonitorScaleStrategy::ApplyUnchanged
+    } else if cfg!(target_os = "windows") {
+        MonitorScaleStrategy::CompensateSizeOnly
     } else if starting_scale < target_scale {
-        // Low DPI -> high DPI
         MonitorScaleStrategy::LowerToHigher
     } else {
-        // High DPI -> low DPI
         MonitorScaleStrategy::HigherToLower(WindowRestoreState::NeedInitialMove)
     }
-}
-
-/// Determine the monitor scale strategy based on platform and scale factors.
-/// macOS without workaround: always use `ApplyUnchanged`.
-#[cfg(all(not(target_os = "windows"), not(feature = "workaround-winit-4440")))]
-fn determine_scale_strategy(_starting_scale: f64, _target_scale: f64) -> MonitorScaleStrategy {
-    // Without workaround, assume upstream fixes handle scale factor correctly.
-    MonitorScaleStrategy::ApplyUnchanged
-}
-
-/// True if running on Wayland.
-#[cfg(feature = "workaround-winit-4440")]
-#[cfg_attr(target_os = "windows", allow(dead_code))]
-fn is_wayland() -> bool {
-    cfg!(target_os = "linux")
-        && std::env::var("WAYLAND_DISPLAY")
-            .map(|v| !v.is_empty())
-            .unwrap_or(false)
 }
