@@ -4,10 +4,11 @@
 //! Run with: `cargo run --example restore_window`
 //!
 //! Controls (all windows):
-//! - Press `1` or `Enter` for exclusive fullscreen (uses selected video mode) WARNING: Exclusive fullscreen on
-//!   macOS may panic on exit due to winit bugs. See: <https://github.com/rust-windowing/winit/issues/3668>
-//! - Press `2` for borderless fullscreen (recommended on macOS)
-//! - Press `W` or `Escape` for windowed mode
+//! - Press `Enter` for exclusive fullscreen (uses selected video mode)
+//!   WARNING: Exclusive fullscreen on macOS may panic on exit due to winit bugs.
+//!   See: <https://github.com/rust-windowing/winit/issues/3668>
+//! - Press `B` for borderless fullscreen (recommended on macOS)
+//! - Press `W` for windowed mode
 //! - Press `Up`/`Down` to cycle through available video modes
 //!
 //! - Press `Space` to spawn a new managed window
@@ -52,6 +53,36 @@ const TEST_MODE_ENV_VAR: &str = "BWM_TEST_MODE";
 #[reflect(Event)]
 struct SpawnManagedWindow;
 
+/// Set the focused window to borderless fullscreen.
+#[derive(Event, Reflect)]
+#[reflect(Event)]
+struct SetBorderlessFullscreen;
+
+/// Set the focused window to windowed mode.
+#[derive(Event, Reflect)]
+#[reflect(Event)]
+struct SetWindowed;
+
+/// Set the focused window to exclusive fullscreen with the currently selected video mode.
+#[derive(Event, Reflect)]
+#[reflect(Event)]
+struct SetExclusiveFullscreen;
+
+/// Toggle persistence mode between `RememberAll` and `ActiveOnly`.
+#[derive(Event, Reflect)]
+#[reflect(Event)]
+struct TogglePersistence;
+
+/// Clear saved state file and quit.
+#[derive(Event, Reflect)]
+#[reflect(Event)]
+struct ClearStateAndQuit;
+
+/// Quit the app gracefully.
+#[derive(Event, Reflect)]
+#[reflect(Event)]
+struct QuitApp;
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -67,6 +98,12 @@ fn main() {
         .add_observer(on_window_restored)
         .add_observer(on_secondary_window_added)
         .add_observer(on_secondary_window_removed)
+        .add_observer(on_set_borderless_fullscreen)
+        .add_observer(on_set_windowed)
+        .add_observer(on_set_exclusive_fullscreen)
+        .add_observer(on_toggle_persistence)
+        .add_observer(on_clear_state_and_quit)
+        .add_observer(on_quit_app)
         .insert_resource(TestMode(std::env::var(TEST_MODE_ENV_VAR).is_ok()))
         .init_resource::<SelectedVideoModes>()
         .init_resource::<WindowCounter>()
@@ -93,7 +130,9 @@ fn main() {
 #[derive(Resource)]
 struct TestMode(bool);
 
-fn keyboard_enabled(test_mode: Res<TestMode>) -> bool { !test_mode.0 }
+fn keyboard_enabled(test_mode: Res<TestMode>) -> bool {
+    !test_mode.0
+}
 
 /// Tracks the next window number for auto-incrementing names.
 #[derive(Resource, Default)]
@@ -105,7 +144,7 @@ struct WindowCounter {
 #[derive(Resource, Default)]
 struct SelectedVideoModes {
     /// Selected index per monitor (keyed by monitor index).
-    indices:   HashMap<usize, usize>,
+    indices: HashMap<usize, usize>,
     /// Track last synced mode to avoid overriding user selection.
     last_sync: Option<(UVec2, u32)>,
 }
@@ -137,9 +176,9 @@ struct SecondaryDisplay(Entity);
 #[derive(Resource, Debug, Clone, Reflect)]
 #[reflect(Resource)]
 struct WindowRestoredReceived {
-    position:      Option<IVec2>,
-    size:          UVec2,
-    mode:          WindowMode,
+    position: Option<IVec2>,
+    size: UVec2,
+    mode: WindowMode,
     monitor_index: usize,
 }
 
@@ -152,11 +191,11 @@ struct RestoredStates {
 
 /// State cached from a `WindowRestored` event for display comparison.
 struct CachedRestoredState {
-    position:      Option<IVec2>,
-    width:         u32,
-    height:        u32,
+    position: Option<IVec2>,
+    width: u32,
+    height: u32,
     monitor_index: usize,
-    mode:          WindowMode,
+    mode: WindowMode,
 }
 
 // --- Constants ---
@@ -496,8 +535,9 @@ fn update_primary_display(
             &font,
             &format!(
                 "\nControls:\n\
-                 [1/Enter] Exclusive Fullscreen  [2] Borderless Fullscreen\n\
-                 [W/Esc] Windowed\n\
+                 [Enter] Exclusive Fullscreen\n\
+                 [B] Borderless Fullscreen\n\
+                 [W] Windowed\n\
                  [Space] Spawn managed window\n\
                  [P] Toggle persistence ({persistence:?})\n\
                  [Ctrl+Shift+Backspace] Clear state and quit\n\
@@ -554,7 +594,7 @@ fn update_secondary_displays(
             continue;
         };
         let monitor_info = current_monitor.copied().unwrap_or(CurrentMonitor {
-            monitor:        *monitors_res.first(),
+            monitor: *monitors_res.first(),
             effective_mode: window.mode,
         });
 
@@ -604,8 +644,9 @@ fn update_secondary_displays(
                 cb,
                 &font,
                 "\nControls:\n\
-                 [1/Enter] Exclusive Fullscreen  [2] Borderless Fullscreen\n\
-                 [W/Esc] Windowed\n\
+                 [Enter] Exclusive Fullscreen\n\
+                 [B] Borderless Fullscreen\n\
+                 [W] Windowed\n\
                  [Space] Spawn managed window\n\
                  [P] Toggle persistence\n\
                  [Ctrl+Shift+Backspace] Clear state and quit\n\
@@ -624,10 +665,7 @@ fn update_secondary_displays(
 fn handle_global_input(
     keys: Res<ButtonInput<KeyCode>>,
     windows: Query<&Window>,
-    managed_entities: Query<Entity, With<ManagedWindow>>,
     mut commands: Commands,
-    mut persistence: ResMut<ManagedWindowPersistence>,
-    mut app_exit: MessageWriter<AppExit>,
 ) {
     // Only process input when any window is focused
     if !windows.iter().any(|w| w.focused) {
@@ -637,32 +675,18 @@ fn handle_global_input(
     if keys.just_pressed(KeyCode::Space) {
         commands.trigger(SpawnManagedWindow);
     }
-
     if keys.just_pressed(KeyCode::KeyP) {
-        *persistence = match *persistence {
-            ManagedWindowPersistence::RememberAll => ManagedWindowPersistence::ActiveOnly,
-            ManagedWindowPersistence::ActiveOnly => ManagedWindowPersistence::RememberAll,
-        };
-        info!("[restore_window] Persistence mode: {:?}", *persistence);
+        commands.trigger(TogglePersistence);
     }
-
     // Ctrl+Shift+Backspace: clear saved state and exit
     if keys.just_pressed(KeyCode::Backspace)
         && keys.pressed(KeyCode::ShiftLeft)
         && keys.pressed(KeyCode::ControlLeft)
     {
-        if let Some(state_path) = get_state_file_path() {
-            if let Err(e) = std::fs::remove_file(&state_path) {
-                warn!("[restore_window] Failed to remove state file: {e}");
-            } else {
-                info!("[restore_window] Cleared state file: {state_path:?}");
-            }
-        }
-        despawn_managed_and_exit(&managed_entities, &mut commands, &mut app_exit);
+        commands.trigger(ClearStateAndQuit);
     }
-
     if keys.just_pressed(KeyCode::KeyQ) {
-        despawn_managed_and_exit(&managed_entities, &mut commands, &mut app_exit);
+        commands.trigger(QuitApp);
     }
 }
 
@@ -701,7 +725,7 @@ fn get_state_file_path() -> Option<std::path::PathBuf> {
     dirs::config_dir().map(|d| d.join(exe_name).join("windows.ron"))
 }
 
-/// Handle mode-switching and video mode navigation for the focused window.
+/// Sync effective mode and handle video mode navigation / keyboard mode triggers.
 fn handle_window_mode_input(
     keys: Res<ButtonInput<KeyCode>>,
     mut windows: Query<(Entity, &mut Window, Option<&CurrentMonitor>)>,
@@ -709,6 +733,7 @@ fn handle_window_mode_input(
     bevy_monitors: Query<(Entity, &Monitor)>,
     mut selected: ResMut<SelectedVideoModes>,
     restored_states: Res<RestoredStates>,
+    mut commands: Commands,
 ) {
     // Find the focused window
     let Some((entity, mut window, current_monitor)) =
@@ -718,7 +743,7 @@ fn handle_window_mode_input(
     };
 
     let monitor = current_monitor.copied().unwrap_or(CurrentMonitor {
-        monitor:        *monitors_res.first(),
+        monitor: *monitors_res.first(),
         effective_mode: window.mode,
     });
 
@@ -753,24 +778,14 @@ fn handle_window_mode_input(
         selected.set(monitor.index, current_idx + 1);
     }
 
-    if keys.just_pressed(KeyCode::Digit1) || keys.just_pressed(KeyCode::Enter) {
-        let selected_idx = selected
-            .get(monitor.index)
-            .min(video_modes.len().saturating_sub(1));
-        let video_mode_selection = video_modes
-            .get(selected_idx)
-            .map_or(VideoModeSelection::Current, |mode| {
-                VideoModeSelection::Specific(*mode)
-            });
-
-        window.mode =
-            WindowMode::Fullscreen(MonitorSelection::Index(monitor.index), video_mode_selection);
+    if keys.just_pressed(KeyCode::Enter) {
+        commands.trigger(SetExclusiveFullscreen);
     }
-    if keys.just_pressed(KeyCode::Digit2) {
-        window.mode = WindowMode::BorderlessFullscreen(MonitorSelection::Index(monitor.index));
+    if keys.just_pressed(KeyCode::KeyB) {
+        commands.trigger(SetBorderlessFullscreen);
     }
-    if keys.just_pressed(KeyCode::KeyW) || keys.just_pressed(KeyCode::Escape) {
-        window.mode = WindowMode::Windowed;
+    if keys.just_pressed(KeyCode::KeyW) {
+        commands.trigger(SetWindowed);
     }
 }
 
@@ -972,10 +987,10 @@ fn debug_winit_monitor(
 #[derive(Default)]
 struct CachedWindowDebug {
     position: Option<WindowPosition>,
-    width:    u32,
-    height:   u32,
-    mode:     Option<WindowMode>,
-    focused:  bool,
+    width: u32,
+    height: u32,
+    mode: Option<WindowMode>,
+    focused: bool,
 }
 
 /// Debug system that logs when Changed<Window> fires and what changed.
@@ -1035,6 +1050,105 @@ fn debug_scale_factor_changed(mut messages: MessageReader<WindowScaleFactorChang
     }
 }
 
+// --- Mode Change Observers ---
+//
+// These observers handle the actual window mode changes. They are triggered both by keyboard
+// input (via `commands.trigger()`) and by BRP remote calls (via `world.trigger()`).
+
+fn on_set_borderless_fullscreen(
+    _trigger: On<SetBorderlessFullscreen>,
+    mut windows: Query<(&mut Window, Option<&CurrentMonitor>)>,
+    monitors_res: Res<Monitors>,
+) {
+    let Some((mut window, current_monitor)) = windows.iter_mut().find(|(w, _)| w.focused) else {
+        return;
+    };
+    let monitor = current_monitor.copied().unwrap_or(CurrentMonitor {
+        monitor: *monitors_res.first(),
+        effective_mode: window.mode,
+    });
+    window.mode = WindowMode::BorderlessFullscreen(MonitorSelection::Index(monitor.monitor.index));
+}
+
+fn on_set_windowed(_trigger: On<SetWindowed>, mut windows: Query<&mut Window>) {
+    let Some(mut window) = windows.iter_mut().find(|w| w.focused) else {
+        return;
+    };
+    window.mode = WindowMode::Windowed;
+}
+
+fn on_set_exclusive_fullscreen(
+    _trigger: On<SetExclusiveFullscreen>,
+    mut windows: Query<(&mut Window, Option<&CurrentMonitor>)>,
+    monitors_res: Res<Monitors>,
+    bevy_monitors: Query<(Entity, &Monitor)>,
+    selected: Res<SelectedVideoModes>,
+) {
+    let Some((mut window, current_monitor)) = windows.iter_mut().find(|(w, _)| w.focused) else {
+        return;
+    };
+    let monitor = current_monitor.copied().unwrap_or(CurrentMonitor {
+        monitor: *monitors_res.first(),
+        effective_mode: window.mode,
+    });
+
+    let video_modes: Vec<VideoMode> = bevy_monitors
+        .iter()
+        .find(|(_, m)| m.physical_position == monitor.monitor.position)
+        .map(|(_, m)| m.video_modes.clone())
+        .unwrap_or_default();
+
+    let selected_idx = selected
+        .get(monitor.monitor.index)
+        .min(video_modes.len().saturating_sub(1));
+    let video_mode_selection = video_modes
+        .get(selected_idx)
+        .map_or(VideoModeSelection::Current, |mode| {
+            VideoModeSelection::Specific(*mode)
+        });
+
+    window.mode = WindowMode::Fullscreen(
+        MonitorSelection::Index(monitor.monitor.index),
+        video_mode_selection,
+    );
+}
+
+fn on_toggle_persistence(
+    _trigger: On<TogglePersistence>,
+    mut persistence: ResMut<ManagedWindowPersistence>,
+) {
+    *persistence = match *persistence {
+        ManagedWindowPersistence::RememberAll => ManagedWindowPersistence::ActiveOnly,
+        ManagedWindowPersistence::ActiveOnly => ManagedWindowPersistence::RememberAll,
+    };
+    info!("[restore_window] Persistence mode: {:?}", *persistence);
+}
+
+fn on_clear_state_and_quit(
+    _trigger: On<ClearStateAndQuit>,
+    managed_entities: Query<Entity, With<ManagedWindow>>,
+    mut commands: Commands,
+    mut app_exit: MessageWriter<AppExit>,
+) {
+    if let Some(state_path) = get_state_file_path() {
+        if let Err(e) = std::fs::remove_file(&state_path) {
+            warn!("[restore_window] Failed to remove state file: {e}");
+        } else {
+            info!("[restore_window] Cleared state file: {state_path:?}");
+        }
+    }
+    despawn_managed_and_exit(&managed_entities, &mut commands, &mut app_exit);
+}
+
+fn on_quit_app(
+    _trigger: On<QuitApp>,
+    managed_entities: Query<Entity, With<ManagedWindow>>,
+    mut commands: Commands,
+    mut app_exit: MessageWriter<AppExit>,
+) {
+    despawn_managed_and_exit(&managed_entities, &mut commands, &mut app_exit);
+}
+
 /// Observer that logs when `WindowRestored` event is received and caches the restored state.
 fn on_window_restored(
     trigger: On<WindowRestored>,
@@ -1050,18 +1164,18 @@ fn on_window_restored(
     restored_states.states.insert(
         event.entity,
         CachedRestoredState {
-            position:      event.position,
-            width:         event.size.x,
-            height:        event.size.y,
+            position: event.position,
+            width: event.size.x,
+            height: event.size.y,
             monitor_index: event.monitor_index,
-            mode:          event.mode,
+            mode: event.mode,
         },
     );
 
     commands.insert_resource(WindowRestoredReceived {
-        position:      event.position,
-        size:          event.size,
-        mode:          event.mode,
+        position: event.position,
+        size: event.size,
+        mode: event.mode,
         monitor_index: event.monitor_index,
     });
 }

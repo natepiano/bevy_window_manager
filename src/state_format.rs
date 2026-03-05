@@ -59,7 +59,7 @@ impl fmt::Display for WindowKey {
 /// One persisted key/state pair in v1.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersistedEntry {
-    pub key:   WindowKey,
+    pub key: WindowKey,
     pub state: WindowState,
 }
 
@@ -131,7 +131,7 @@ pub fn encode(states: &HashMap<WindowKey, WindowState>) -> Result<String, ron::E
     let mut entries: Vec<PersistedEntry> = states
         .iter()
         .map(|(key, state)| PersistedEntry {
-            key:   key.clone(),
+            key: key.clone(),
             state: state.clone(),
         })
         .collect();
@@ -162,12 +162,12 @@ mod tests {
 
     fn sample_state() -> WindowState {
         WindowState {
-            position:      Some((10, 20)),
-            width:         800,
-            height:        600,
+            position: Some((10, 20)),
+            width: 800,
+            height: 600,
             monitor_index: 1,
-            mode:          SavedWindowMode::Windowed,
-            app_name:      "test-app".to_string(),
+            mode: SavedWindowMode::Windowed,
+            app_name: "test-app".to_string(),
         }
     }
 
@@ -177,11 +177,11 @@ mod tests {
             version: CURRENT_STATE_VERSION,
             entries: vec![
                 PersistedEntry {
-                    key:   WindowKey::Primary,
+                    key: WindowKey::Primary,
                     state: sample_state(),
                 },
                 PersistedEntry {
-                    key:   WindowKey::Managed("primary".to_string()),
+                    key: WindowKey::Managed("primary".to_string()),
                     state: WindowState {
                         position: Some((30, 40)),
                         ..sample_state()
@@ -228,11 +228,11 @@ mod tests {
             version: CURRENT_STATE_VERSION,
             entries: vec![
                 PersistedEntry {
-                    key:   WindowKey::Primary,
+                    key: WindowKey::Primary,
                     state: sample_state(),
                 },
                 PersistedEntry {
-                    key:   WindowKey::Primary,
+                    key: WindowKey::Primary,
                     state: sample_state(),
                 },
             ],

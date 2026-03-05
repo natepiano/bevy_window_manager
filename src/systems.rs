@@ -232,8 +232,8 @@ pub fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
     #[derive(Debug)]
     struct MoveParams {
         position: IVec2,
-        width:    u32,
-        height:   u32,
+        width: u32,
+        height: u32,
     }
 
     // For fullscreen modes, just move to target monitor position (no 1x1 size)
@@ -296,14 +296,14 @@ pub fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
             MoveParams {
                 position: IVec2::new(comp_x, comp_y),
                 // Use actual target size to avoid macOS caching tiny size
-                width:    target.width,
-                height:   target.height,
+                width: target.width,
+                height: target.height,
             }
         },
         _ => MoveParams {
             position: pos,
-            width:    target.width,
-            height:   target.height,
+            width: target.width,
+            height: target.height,
         },
     };
 
@@ -321,10 +321,10 @@ pub fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
 /// Cached window state for change detection comparison.
 #[derive(Default)]
 pub struct CachedWindowState {
-    position:      Option<IVec2>,
-    width:         u32,
-    height:        u32,
-    mode:          Option<SavedWindowMode>,
+    position: Option<IVec2>,
+    width: u32,
+    height: u32,
+    mode: Option<SavedWindowMode>,
     monitor_index: Option<usize>,
 }
 
@@ -558,12 +558,12 @@ pub fn save_window_state(
                     states.insert(
                         key,
                         WindowState {
-                            position:      entry.position.map(|p| (p.x, p.y)),
-                            width:         entry.width,
-                            height:        entry.height,
+                            position: entry.position.map(|p| (p.x, p.y)),
+                            width: entry.width,
+                            height: entry.height,
                             monitor_index: entry.monitor_index.unwrap_or(0),
-                            mode:          mode.clone(),
-                            app_name:      app_name.clone(),
+                            mode: mode.clone(),
+                            app_name: app_name.clone(),
                         },
                     );
                 }
@@ -1016,14 +1016,16 @@ mod tests {
 
     fn monitor_0() -> MonitorInfo {
         MonitorInfo {
-            index:    0,
-            scale:    2.0,
+            index: 0,
+            scale: 2.0,
             position: IVec2::ZERO,
-            size:     UVec2::new(3456, 2234),
+            size: UVec2::new(3456, 2234),
         }
     }
 
-    fn monitors_with(info: MonitorInfo) -> Monitors { Monitors { list: vec![info] } }
+    fn monitors_with(info: MonitorInfo) -> Monitors {
+        Monitors { list: vec![info] }
+    }
 
     fn window_at(pos: IVec2, width: u32, height: u32) -> Window {
         let mut window = Window {
