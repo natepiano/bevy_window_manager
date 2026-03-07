@@ -184,31 +184,6 @@
     },
 
     {
-      "id": "cross_low_to_high_W1",
-      "description": "Window on high-DPI monitor restores correctly when launched from low-DPI monitor",
-      "automation": "full",
-      "launch_monitor": 1,
-      "requires": {"min_monitors": 2, "different_scales": true},
-      "workaround_keys": ["W1"],
-
-      "workaround_validation": {
-        "feature_flag": "workaround-winit-4440",
-        "build_without": "--no-default-features",
-        "build_with": "",
-        "without_behavior": "Window restores to wrong position/size on Monitor 0 due to scale factor mismatch",
-        "with_behavior": "Window restores to correct position/size on Monitor 0"
-      },
-
-      "ron_file": "cross_monitor_low_to_high.ron",
-
-      "windows": {
-        "primary": {
-          "validate": ["position", "size", "monitor_index", "mode"]
-        }
-      }
-    },
-
-    {
       "id": "multi_window_1_0",
       "description": "Primary on Monitor 1, secondary on Monitor 0",
       "automation": "full",

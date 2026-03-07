@@ -137,22 +137,5 @@ panic = "deny"
 pedantic = { level = "deny", priority = -1 }
 unwrap_used = "deny"
 
-[patch.crates-io]
-winit = { git = "https://github.com/natepiano/winit", branch = "fix/set-outer-position-scale-factor" }
-bevy = { git = "https://github.com/natepiano/bevy", branch = "fix/position-before-size" }
-bevy_internal = { git = "https://github.com/natepiano/bevy", branch = "fix/position-before-size" }
-bevy_app = { git = "https://github.com/natepiano/bevy", branch = "fix/position-before-size" }
-bevy_ecs = { git = "https://github.com/natepiano/bevy", branch = "fix/position-before-size" }
-bevy_reflect = { git = "https://github.com/natepiano/bevy", branch = "fix/position-before-size" }
-bevy_utils = { git = "https://github.com/natepiano/bevy", branch = "fix/position-before-size" }
-bevy_log = { git = "https://github.com/natepiano/bevy", branch = "fix/position-before-size" }
-bevy_math = { git = "https://github.com/natepiano/bevy", branch = "fix/position-before-size" }
-bevy_input = { git = "https://github.com/natepiano/bevy", branch = "fix/position-before-size" }
-bevy_window = { git = "https://github.com/natepiano/bevy", branch = "fix/position-before-size" }
-bevy_platform = { git = "https://github.com/natepiano/bevy", branch = "fix/position-before-size" }
-bevy_tasks = { git = "https://github.com/natepiano/bevy", branch = "fix/position-before-size" }
-bevy_winit = { git = "https://github.com/natepiano/bevy", branch = "fix/position-before-size" }
-bevy_remote = { git = "https://github.com/natepiano/bevy", branch = "fix/position-before-size" }
-
 [profile.dev.package."*"]
 opt-level = 3
