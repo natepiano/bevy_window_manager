@@ -166,13 +166,12 @@ if ($null -eq $containingMonitor) {
     exit 1
 }
 
-# Convert Bevy physical positions to Windows logical positions for matching
-# Windows uses the PRIMARY monitor's scale for the entire virtual screen coordinate system
-$primaryScale = $Mon0Scale
-$bevy0LogicalX = [int]($Mon0X / $primaryScale)
-$bevy0LogicalY = [int]($Mon0Y / $primaryScale)
-$bevy1LogicalX = [int]($Mon1X / $primaryScale)
-$bevy1LogicalY = [int]($Mon1Y / $primaryScale)
+# Convert Bevy physical positions to Windows virtual screen coordinates
+# Bevy reports positions in physical pixels; divide by each monitor's OWN scale
+$bevy0LogicalX = [int]($Mon0X / $Mon0Scale)
+$bevy0LogicalY = [int]($Mon0Y / $Mon0Scale)
+$bevy1LogicalX = [int]($Mon1X / $Mon1Scale)
+$bevy1LogicalY = [int]($Mon1Y / $Mon1Scale)
 
 # Match the containing Windows monitor to Bevy monitor by position
 # Use a tolerance of 5 pixels for floating point scale factor rounding

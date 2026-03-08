@@ -28,6 +28,7 @@ use crate::monitors::Monitors;
 use crate::restore_plan;
 use crate::types::FullscreenRestoreState;
 use crate::types::MonitorScaleStrategy;
+use crate::types::SCALE_FACTOR_EPSILON;
 use crate::types::SavedWindowMode;
 use crate::types::TargetPosition;
 use crate::types::WindowDecoration;
@@ -218,12 +219,13 @@ pub fn load_target_position(
 ///
 /// Sets position and size based on the `TargetPosition` strategy, handling fullscreen,
 /// Wayland (no position), and cross-DPI scenarios. Called from `restore_windows` during
-/// the `HigherToLower(NeedInitialMove)` phase for both primary and managed windows.
+/// the `NeedInitialMove` phase for `HigherToLower` and `CompensateSizeOnly` strategies.
 ///
 /// On macOS with `HigherToLower` strategy, the position is compensated because winit
 /// divides coordinates by the launch monitor's scale factor.
 ///
-/// On Windows, this compensation is never needed (strategy is always `ApplyUnchanged`).
+/// On Windows with `CompensateSizeOnly`, position is applied directly and size is
+/// compensated by `starting_scale / target_scale`. Phase 2 re-applies the exact size.
 ///
 /// For fullscreen modes, we still move to the target monitor so the fullscreen mode
 /// is applied on the correct monitor when `try_apply_restore` runs.
@@ -298,6 +300,20 @@ pub fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
                 // Use actual target size to avoid macOS caching tiny size
                 width: target.width,
                 height: target.height,
+            }
+        },
+        MonitorScaleStrategy::CompensateSizeOnly(_) => {
+            // Position applied directly, size compensated to survive DPI transition.
+            // Phase 2 will re-apply the exact target size after ScaleFactorChanged.
+            let compensated = target.compensated_size();
+            debug!(
+                "[apply_initial_move] CompensateSizeOnly: position={:?} compensated_size={}x{} (ratio={})",
+                pos, compensated.x, compensated.y, target.ratio()
+            );
+            MoveParams {
+                position: pos,
+                width: compensated.x,
+                height: compensated.y,
             }
         },
         _ => MoveParams {
@@ -610,30 +626,69 @@ pub fn restore_windows(
             debug!("[restore_windows] Skipping entity {entity:?}: winit window not yet created");
             continue;
         }
-        // Unified initial move for HigherToLower: both primary and managed windows
-        // enter here via `NeedInitialMove`. We call `apply_initial_move` to set the
-        // compensated position (triggering a monitor scale change), then transition
-        // to `WaitingForScaleChange` to wait for the scale event before applying size.
+
+        // Managed windows may be created on a different monitor than assumed.
+        // `starting_scale` was computed from the primary window's current monitor,
+        // but Windows OS places new windows on the OS primary display (which may differ).
+        // Detect this and recalculate the scale strategy with the actual creation scale.
+        if cfg!(target_os = "windows") {
+            let actual_scale = f64::from(window.resolution.base_scale_factor());
+            if (actual_scale - target.starting_scale).abs() > SCALE_FACTOR_EPSILON {
+                let old_strategy = target.monitor_scale_strategy;
+                target.starting_scale = actual_scale;
+                target.monitor_scale_strategy =
+                    restore_plan::determine_scale_strategy(actual_scale, target.target_scale);
+                debug!(
+                    "[restore_windows] Corrected starting_scale for entity {entity:?}: \
+                     strategy: {old_strategy:?} -> {:?} (actual_scale={actual_scale:.2})",
+                    target.monitor_scale_strategy
+                );
+            }
+        }
+
+        // Two-phase restore for cross-DPI strategies (HigherToLower, CompensateSizeOnly).
+        // Phase 1: apply_initial_move sets compensated position/size to trigger DPI change.
+        // Phase 2: after ScaleFactorChanged, re-apply exact target size.
         if matches!(
             target.monitor_scale_strategy,
             MonitorScaleStrategy::HigherToLower(WindowRestoreState::NeedInitialMove)
+                | MonitorScaleStrategy::CompensateSizeOnly(WindowRestoreState::NeedInitialMove)
         ) {
             apply_initial_move(&target, &mut window);
-            target.monitor_scale_strategy =
-                MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange);
+            target.monitor_scale_strategy = match target.monitor_scale_strategy {
+                MonitorScaleStrategy::HigherToLower(_) => {
+                    MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange)
+                },
+                _ => {
+                    MonitorScaleStrategy::CompensateSizeOnly(
+                        WindowRestoreState::WaitingForScaleChange,
+                    )
+                },
+            };
             continue;
         }
 
-        // Handle HigherToLower state transition on scale change
-        if target.monitor_scale_strategy
-            == MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange)
-            && scale_changed
-        {
-            debug!(
-                "[Restore] ScaleChanged received, transitioning to WindowRestoreState::ApplySize"
-            );
-            target.monitor_scale_strategy =
-                MonitorScaleStrategy::HigherToLower(WindowRestoreState::ApplySize);
+        // Handle state transition on scale change for both strategies.
+        // CompensateSizeOnly: also advance if no scale change arrives (e.g., hidden window
+        // didn't trigger WM_DPICHANGED, or the app launched on the target monitor).
+        match target.monitor_scale_strategy {
+            MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange)
+                if scale_changed =>
+            {
+                debug!(
+                    "[Restore] ScaleChanged received, transitioning to WindowRestoreState::ApplySize"
+                );
+                target.monitor_scale_strategy =
+                    MonitorScaleStrategy::HigherToLower(WindowRestoreState::ApplySize);
+            },
+            MonitorScaleStrategy::CompensateSizeOnly(WindowRestoreState::WaitingForScaleChange) => {
+                debug!(
+                    "[Restore] CompensateSizeOnly: transitioning to ApplySize (scale_changed={scale_changed})"
+                );
+                target.monitor_scale_strategy =
+                    MonitorScaleStrategy::CompensateSizeOnly(WindowRestoreState::ApplySize);
+            },
+            _ => {},
         }
 
         // Transition fullscreen state after first frame (DX12/DXGI workaround)
@@ -966,14 +1021,19 @@ fn try_apply_restore(target: &TargetPosition, window: &mut Window) -> RestoreSta
                 None,
             );
         },
-        MonitorScaleStrategy::CompensateSizeOnly => {
-            apply_window_geometry(
-                window,
-                target.position(),
-                target.compensated_size(),
-                "CompensateSizeOnly",
-                Some(target.ratio()),
+        MonitorScaleStrategy::CompensateSizeOnly(WindowRestoreState::ApplySize) => {
+            let size = target.size();
+            debug!(
+                "[try_apply_restore] size={}x{} ONLY (CompensateSizeOnly::ApplySize, position already set)",
+                size.x, size.y
             );
+            window.resolution.set_physical_resolution(size.x, size.y);
+        },
+        MonitorScaleStrategy::CompensateSizeOnly(
+            WindowRestoreState::NeedInitialMove | WindowRestoreState::WaitingForScaleChange,
+        ) => {
+            debug!("[Restore] CompensateSizeOnly: waiting for initial move or ScaleChanged message");
+            return RestoreStatus::Waiting;
         },
         MonitorScaleStrategy::LowerToHigher => {
             apply_window_geometry(

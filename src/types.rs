@@ -239,8 +239,9 @@ pub enum FullscreenRestoreState {
 ///
 /// - **`ApplyUnchanged`**: Apply position and size directly without compensation.
 ///
-/// - **`CompensateSizeOnly`**: Windows only. Apply position directly, compensate size by
-///   multiplying by `starting_scale / target_scale`.
+/// - **`CompensateSizeOnly`**: Windows only. Uses two-phase approach via `WindowRestoreState`:
+///   1. Apply position directly + compensated size (triggers `WM_DPICHANGED`)
+///   2. After scale changes, re-apply exact target size to eliminate rounding errors
 ///
 /// - **`LowerToHigher`**: macOS/Linux X11. Low→High DPI (1x→2x, ratio < 1). Multiply both position
 ///   and size by ratio.
@@ -253,8 +254,8 @@ pub enum FullscreenRestoreState {
 pub enum MonitorScaleStrategy {
     /// Same scale - apply position and size directly.
     ApplyUnchanged,
-    /// Apply position directly, compensate size only.
-    CompensateSizeOnly,
+    /// Windows cross-DPI: position direct, size in two phases.
+    CompensateSizeOnly(WindowRestoreState),
     /// Low→High DPI (1x→2x) - apply with compensation (ratio < 1).
     LowerToHigher,
     /// High→Low DPI (2x→1x) - requires two phases (see enum docs).

@@ -409,7 +409,10 @@ def write_env_file(path: str, env: dict[str, str]) -> None:
 
 
 def kill_stale_apps() -> None:
-    _ = subprocess.run(["pkill", "-9", "-f", "restore_window"], capture_output=True)
+    if sys.platform == "win32":
+        _ = subprocess.run(["taskkill", "/F", "/IM", "restore_window.exe"], capture_output=True)
+    else:
+        _ = subprocess.run(["pkill", "-9", "-f", "restore_window"], capture_output=True)
     time.sleep(0.5)
 
 

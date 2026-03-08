@@ -110,6 +110,21 @@ fn clamp_position_to_monitor(
 }
 
 /// Determine the monitor scale strategy based on platform and scale factors.
+///
+/// The strategy depends on how each platform's winit backend interprets coordinates
+/// passed to `request_inner_size` and `set_outer_position`:
+///
+/// - **Feature gate**: Without `workaround-winit-4440`, always returns `ApplyUnchanged`.
+/// - **Wayland**: Handles DPI natively; no compensation needed → `ApplyUnchanged`.
+/// - **Same scale**: `starting ≈ target` → `ApplyUnchanged` (no cross-DPI issue).
+/// - **Windows** (different scales): Position is physical and unaffected, but size goes
+///   through a scale conversion using the current monitor's scale → `CompensateSizeOnly`.
+///   Uses a two-phase approach: Phase 1 applies compensated size + position to move the
+///   window to the target monitor, Phase 2 re-applies the exact target size after the DPI
+///   transition to eliminate rounding errors from fractional scale factors (e.g. 1.5×).
+/// - **macOS / Linux X11** (different scales): Both position and size are affected by
+///   winit's scale conversion → `LowerToHigher` (ratio < 1) or `HigherToLower` (ratio > 1,
+///   two-phase to avoid size clamping from macOS).
 pub fn determine_scale_strategy(starting_scale: f64, target_scale: f64) -> MonitorScaleStrategy {
     if !cfg!(feature = "workaround-winit-4440") {
         return MonitorScaleStrategy::ApplyUnchanged;
@@ -122,7 +137,7 @@ pub fn determine_scale_strategy(starting_scale: f64, target_scale: f64) -> Monit
     if (starting_scale - target_scale).abs() < SCALE_FACTOR_EPSILON {
         MonitorScaleStrategy::ApplyUnchanged
     } else if cfg!(target_os = "windows") {
-        MonitorScaleStrategy::CompensateSizeOnly
+        MonitorScaleStrategy::CompensateSizeOnly(WindowRestoreState::NeedInitialMove)
     } else if starting_scale < target_scale {
         MonitorScaleStrategy::LowerToHigher
     } else {
