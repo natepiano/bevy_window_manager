@@ -14,11 +14,11 @@ Tests reference these tracked issues via `workaround_keys` in the JSON configs:
 | W5 | [winit #4443](https://github.com/rust-windowing/winit/issues/4443) | Linux X11 | `workaround-winit-4443` | Keyboard snap/tile doesn't emit `Moved` event on X11. |
 | W6 | [winit #4445](https://github.com/rust-windowing/winit/issues/4445) | Linux X11 | `workaround-winit-4445` | `outer_position()` returns offset by title bar height on X11. |
 
-**Usage**: `/test3 [flags]`
+**Usage**: `/test [flags]`
 
 **Examples**:
-- `/test3` - Auto-detect OS and run all tests
-- `/test3 single-monitor` - Force single-monitor mode
+- `/test` - Auto-detect OS and run all tests
+- `/test single-monitor` - Force single-monitor mode
 
 **Arguments**: $ARGUMENTS
 
@@ -63,9 +63,9 @@ If either build reports `failed`, STOP and report the error.
 <LinuxEnvironmentCheck>
 **Linux only**: Check if running from XWayland Konsole.
 
-1. Run `.claude/scripts/linux_detect_konsole_monitor.sh`
+1. Run `tests/scripts/linux_detect_konsole_monitor.sh`
 2. **If SUCCESS**: proceed
-3. **If FAILURE**: Launch `.claude/scripts/linux_test.sh [single-monitor]` and STOP
+3. **If FAILURE**: Launch `tests/scripts/linux_test.sh [single-monitor]` and STOP
 </LinuxEnvironmentCheck>
 
 <LoadTestConfig>
@@ -102,9 +102,9 @@ Parse the stdout output to extract:
 **After discovery**:
 
 1. Detect editor/terminal monitor:
-   - **macOS**: Run `.claude/scripts/macos_detect_zed_monitor.sh`
-   - **Windows**: Run `powershell -Command "& '.claude/scripts/windows_detect_zed_monitor.ps1' ..."`
-   - **Linux**: Run `.claude/scripts/linux_detect_konsole_monitor.sh`
+   - **macOS**: Run `tests/scripts/macos_detect_zed_monitor.sh`
+   - **Windows**: Run `powershell -Command "& 'tests/scripts/windows_detect_zed_monitor.ps1' ..."`
+   - **Linux**: Run `tests/scripts/linux_detect_konsole_monitor.sh`
 
 2. Compute:
    - `SINGLE_MONITOR_MODE` = true if `NUM_MONITORS == 1` OR `forced_single_monitor == true`
@@ -136,11 +136,11 @@ Linux X11:
 </TemplateVariables>
 
 <MacOSZedMove>
-Run `.claude/scripts/macos_move_zed_to_monitor.sh <monitor_index>` with `dangerouslyDisableSandbox: true` (AppleScript access needed).
+Run `tests/scripts/macos_move_zed_to_monitor.sh <monitor_index>` with `dangerouslyDisableSandbox: true` (AppleScript access needed).
 </MacOSZedMove>
 
 <LinuxTerminalMove>
-Run `.claude/scripts/linux_move_konsole_to_monitor.sh <monitor_index>` with `dangerouslyDisableSandbox: true`.
+Run `tests/scripts/linux_move_konsole_to_monitor.sh <monitor_index>` with `dangerouslyDisableSandbox: true`.
 </LinuxTerminalMove>
 
 <WindowsZedMove>
