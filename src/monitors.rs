@@ -6,6 +6,7 @@
 use bevy::prelude::*;
 use bevy::window::Monitor;
 use bevy::window::WindowMode;
+use bevy_diagnostic::FrameCount;
 
 /// Plugin that manages the `Monitors` resource.
 pub struct MonitorPlugin;
@@ -21,13 +22,13 @@ impl Plugin for MonitorPlugin {
 #[derive(Clone, Copy, Debug, Reflect)]
 pub struct MonitorInfo {
     /// Index in the sorted monitor list.
-    pub index: usize,
+    pub index:    usize,
     /// Scale factor (typically 1.0 or 2.0 on macOS).
-    pub scale: f64,
+    pub scale:    f64,
     /// Physical position of top-left corner.
     pub position: IVec2,
     /// Physical size in pixels.
-    pub size: UVec2,
+    pub size:     UVec2,
 }
 
 /// Sorted monitor list, updated when monitors change.
@@ -59,7 +60,7 @@ pub struct Monitors {
 #[reflect(Component)]
 pub struct CurrentMonitor {
     /// The monitor this window is currently on.
-    pub monitor: MonitorInfo,
+    pub monitor:        MonitorInfo,
     /// The effective window mode, accounting for OS-level fullscreen changes.
     pub effective_mode: WindowMode,
 }
@@ -67,9 +68,7 @@ pub struct CurrentMonitor {
 impl std::ops::Deref for CurrentMonitor {
     type Target = MonitorInfo;
 
-    fn deref(&self) -> &Self::Target {
-        &self.monitor
-    }
+    fn deref(&self) -> &Self::Target { &self.monitor }
 }
 
 impl Monitors {
@@ -86,17 +85,13 @@ impl Monitors {
 
     /// Get monitor by index in sorted list.
     #[must_use]
-    pub fn by_index(&self, index: usize) -> Option<&MonitorInfo> {
-        self.list.get(index)
-    }
+    pub fn by_index(&self, index: usize) -> Option<&MonitorInfo> { self.list.get(index) }
 
     /// Returns true if no monitors are available.
     ///
     /// This can happen when the laptop lid is closed or all displays are disconnected.
     #[must_use]
-    pub const fn is_empty(&self) -> bool {
-        self.list.is_empty()
-    }
+    pub const fn is_empty(&self) -> bool { self.list.is_empty() }
 
     /// Get the first monitor (index 0). Used as fallback when no specific monitor is known.
     ///
@@ -179,10 +174,10 @@ fn build_monitors(monitors: &Query<&Monitor>) -> Monitors {
         .iter()
         .enumerate()
         .map(|(idx, mon)| MonitorInfo {
-            index: idx,
-            scale: mon.scale_factor,
+            index:    idx,
+            scale:    mon.scale_factor,
             position: mon.physical_position,
-            size: mon.physical_size(),
+            size:     mon.physical_size(),
         })
         .collect();
 
@@ -211,15 +206,29 @@ fn update_monitors(
     monitors: Query<&Monitor>,
     added: Query<Entity, Added<Monitor>>,
     mut removed: RemovedComponents<Monitor>,
+    frame_count: Res<FrameCount>,
+    current_monitor_q: Query<Option<&CurrentMonitor>, With<bevy::window::PrimaryWindow>>,
 ) {
     let has_changes = !added.is_empty() || removed.read().next().is_some();
 
     if has_changes {
         let monitors_resource = build_monitors(&monitors);
-        debug!(
-            "[update_monitors] Monitors changed, now {} monitors",
-            monitors_resource.list.len()
-        );
+        let current = current_monitor_q.iter().next().flatten();
+        if let Some(cm) = current {
+            debug!(
+                "[update_monitors] frame={} Monitors changed, now {} monitors, current_monitor_index={} current_monitor_scale={}",
+                frame_count.0,
+                monitors_resource.list.len(),
+                cm.monitor.index,
+                cm.monitor.scale,
+            );
+        } else {
+            debug!(
+                "[update_monitors] frame={} Monitors changed, now {} monitors, current_monitor=None",
+                frame_count.0,
+                monitors_resource.list.len(),
+            );
+        }
         commands.insert_resource(monitors_resource);
     }
 }

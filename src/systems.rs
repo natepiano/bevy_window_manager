@@ -234,8 +234,8 @@ pub fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
     #[derive(Debug)]
     struct MoveParams {
         position: IVec2,
-        width: u32,
-        height: u32,
+        width:    u32,
+        height:   u32,
     }
 
     // For fullscreen modes, just move to target monitor position (no 1x1 size)
@@ -298,8 +298,8 @@ pub fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
             MoveParams {
                 position: IVec2::new(comp_x, comp_y),
                 // Use actual target size to avoid macOS caching tiny size
-                width: target.width,
-                height: target.height,
+                width:    target.width,
+                height:   target.height,
             }
         },
         MonitorScaleStrategy::CompensateSizeOnly(_) => {
@@ -308,18 +308,21 @@ pub fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
             let compensated = target.compensated_size();
             debug!(
                 "[apply_initial_move] CompensateSizeOnly: position={:?} compensated_size={}x{} (ratio={})",
-                pos, compensated.x, compensated.y, target.ratio()
+                pos,
+                compensated.x,
+                compensated.y,
+                target.ratio()
             );
             MoveParams {
                 position: pos,
-                width: compensated.x,
-                height: compensated.y,
+                width:    compensated.x,
+                height:   compensated.y,
             }
         },
         _ => MoveParams {
             position: pos,
-            width: target.width,
-            height: target.height,
+            width:    target.width,
+            height:   target.height,
         },
     };
 
@@ -337,10 +340,10 @@ pub fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
 /// Cached window state for change detection comparison.
 #[derive(Default)]
 pub struct CachedWindowState {
-    position: Option<IVec2>,
-    width: u32,
-    height: u32,
-    mode: Option<SavedWindowMode>,
+    position:      Option<IVec2>,
+    width:         u32,
+    height:        u32,
+    mode:          Option<SavedWindowMode>,
     monitor_index: Option<usize>,
 }
 
@@ -444,7 +447,7 @@ pub fn save_window_state(
         ),
         (
             Or<(With<PrimaryWindow>, With<crate::ManagedWindow>)>,
-            Changed<Window>,
+            Or<(Changed<Window>, Changed<CurrentMonitor>)>,
         ),
     >,
     all_windows: Query<
@@ -485,10 +488,7 @@ pub fn save_window_state(
         let logical_w = window.resolution.width();
         let logical_h = window.resolution.height();
         let res_scale = window.resolution.scale_factor();
-        debug!(
-            "[save_window_state] [{key}] SAVE DETAIL: pos={pos:?} physical={}x{} logical={:.0}x{:.0} res_scale={res_scale}",
-            width, height, logical_w, logical_h
-        );
+
         // Read monitor and effective mode from `CurrentMonitor` (maintained by
         // `update_current_monitor`)
         let (monitor_index, monitor_scale) = existing_monitor.map_or_else(
@@ -503,8 +503,22 @@ pub fn save_window_state(
 
         let entry = cached.entry(window_entity).or_default();
 
-        // Log monitor transitions with detailed info
+        // Only save if position, size, or mode actually changed
+        let position_changed = entry.position != pos;
+        let size_changed = entry.width != width || entry.height != height;
+        let mode_changed = entry.mode.as_ref() != Some(&mode);
         let monitor_changed = entry.monitor_index != Some(monitor_index);
+
+        if !position_changed && !size_changed && !mode_changed && !monitor_changed {
+            continue;
+        }
+
+        debug!(
+            "[save_window_state] [{key}] SAVE DETAIL: pos={pos:?} physical={}x{} logical={:.0}x{:.0} res_scale={res_scale} monitor={monitor_index} mode={mode:?}",
+            width, height, logical_w, logical_h
+        );
+
+        // Log monitor transitions with detailed info
         if monitor_changed {
             let prev_scale = entry
                 .monitor_index
@@ -514,16 +528,6 @@ pub fn save_window_state(
                 "[save_window_state] [{key}] MONITOR CHANGE: {:?} (scale={:?}) -> {} (scale={})",
                 entry.monitor_index, prev_scale, monitor_index, monitor_scale
             );
-        }
-
-        // Only save if position, size, or mode actually changed
-        let position_changed = entry.position != pos;
-        let size_changed = entry.width != width || entry.height != height;
-        let mode_changed = entry.mode.as_ref() != Some(&mode);
-
-        if !position_changed && !size_changed && !mode_changed {
-            entry.monitor_index = Some(monitor_index);
-            continue;
         }
 
         // Update cache
@@ -574,12 +578,12 @@ pub fn save_window_state(
                     states.insert(
                         key,
                         WindowState {
-                            position: entry.position.map(|p| (p.x, p.y)),
-                            width: entry.width,
-                            height: entry.height,
+                            position:      entry.position.map(|p| (p.x, p.y)),
+                            width:         entry.width,
+                            height:        entry.height,
                             monitor_index: entry.monitor_index.unwrap_or(0),
-                            mode: mode.clone(),
-                            app_name: app_name.clone(),
+                            mode:          mode.clone(),
+                            app_name:      app_name.clone(),
                         },
                     );
                 }
@@ -659,11 +663,9 @@ pub fn restore_windows(
                 MonitorScaleStrategy::HigherToLower(_) => {
                     MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange)
                 },
-                _ => {
-                    MonitorScaleStrategy::CompensateSizeOnly(
-                        WindowRestoreState::WaitingForScaleChange,
-                    )
-                },
+                _ => MonitorScaleStrategy::CompensateSizeOnly(
+                    WindowRestoreState::WaitingForScaleChange,
+                ),
             };
             continue;
         }
@@ -782,6 +784,7 @@ pub fn is_wayland() -> bool {
 fn get_window_position(entity: Entity, window: &Window) -> Option<IVec2> {
     #[cfg(all(target_os = "linux", feature = "workaround-winit-4443"))]
     {
+        let _ = window;
         return WINIT_WINDOWS.with(|ww| {
             let ww = ww.borrow();
             let winit_win = ww.get_window(entity)?;
@@ -850,10 +853,22 @@ pub fn update_current_monitor(
     }
 
     for (entity, window, existing) in &windows {
-        let monitor_info = winit_detect_monitor(entity, &monitors)
-            .or_else(|| position_detect_monitor(window, &monitors))
-            .or_else(|| existing.map(|cm| cm.monitor))
-            .unwrap_or(*monitors.first());
+        let winit_result = winit_detect_monitor(entity, &monitors);
+        let position_result = if winit_result.is_none() {
+            position_detect_monitor(window, &monitors)
+        } else {
+            None
+        };
+
+        let (monitor_info, source) = if let Some(info) = winit_result {
+            (info, "winit")
+        } else if let Some(info) = position_result {
+            (info, "position")
+        } else if let Some(cm) = existing {
+            (cm.monitor, "existing")
+        } else {
+            (*monitors.first(), "fallback")
+        };
 
         // Compute effective mode
         let effective_mode = compute_effective_mode(window, &monitor_info, &monitors);
@@ -870,6 +885,10 @@ pub fn update_current_monitor(
         });
 
         if changed {
+            debug!(
+                "[update_current_monitor] source={} index={} scale={} effective_mode={:?}",
+                source, monitor_info.index, monitor_info.scale, effective_mode
+            );
             commands.entity(entity).insert(new_current);
         }
     }
@@ -935,7 +954,9 @@ fn compute_effective_mode(
 }
 
 /// Apply fullscreen mode, handling Wayland limitations.
-fn apply_fullscreen_restore(target: &TargetPosition, window: &mut Window, monitor_index: usize) {
+fn apply_fullscreen_restore(target: &TargetPosition, window: &mut Window) {
+    let monitor_index = target.target_monitor_index;
+
     // On Wayland, exclusive fullscreen is ignored by winit, so we restore it as
     // borderless fullscreen instead.
     let window_mode = if is_wayland() && matches!(target.mode, SavedWindowMode::Fullscreen { .. }) {
@@ -1001,7 +1022,15 @@ fn apply_window_geometry(
 fn try_apply_restore(target: &TargetPosition, window: &mut Window) -> RestoreStatus {
     // Handle fullscreen modes - use saved monitor index from TargetPosition
     if target.mode.is_fullscreen() {
-        apply_fullscreen_restore(target, window, target.target_monitor_index);
+        debug!(
+            "[try_apply_restore] fullscreen: window_scale={} target_scale={} starting_scale={} physical={}x{}",
+            window.resolution.scale_factor(),
+            target.target_scale,
+            target.starting_scale,
+            window.physical_width(),
+            window.physical_height(),
+        );
+        apply_fullscreen_restore(target, window);
         window.visible = true;
         return RestoreStatus::Complete;
     }
@@ -1032,7 +1061,9 @@ fn try_apply_restore(target: &TargetPosition, window: &mut Window) -> RestoreSta
         MonitorScaleStrategy::CompensateSizeOnly(
             WindowRestoreState::NeedInitialMove | WindowRestoreState::WaitingForScaleChange,
         ) => {
-            debug!("[Restore] CompensateSizeOnly: waiting for initial move or ScaleChanged message");
+            debug!(
+                "[Restore] CompensateSizeOnly: waiting for initial move or ScaleChanged message"
+            );
             return RestoreStatus::Waiting;
         },
         MonitorScaleStrategy::LowerToHigher => {
@@ -1076,16 +1107,14 @@ mod tests {
 
     fn monitor_0() -> MonitorInfo {
         MonitorInfo {
-            index: 0,
-            scale: 2.0,
+            index:    0,
+            scale:    2.0,
             position: IVec2::ZERO,
-            size: UVec2::new(3456, 2234),
+            size:     UVec2::new(3456, 2234),
         }
     }
 
-    fn monitors_with(info: MonitorInfo) -> Monitors {
-        Monitors { list: vec![info] }
-    }
+    fn monitors_with(info: MonitorInfo) -> Monitors { Monitors { list: vec![info] } }
 
     fn window_at(pos: IVec2, width: u32, height: u32) -> Window {
         let mut window = Window {

@@ -5,7 +5,7 @@
             key: Primary,
             state: (
                 // BorderlessFullscreen targeting Monitor 0 (eDP, scale 2)
-                position: Some((${MONITOR_0_X}, ${MONITOR_0_Y})),
+                position: Some((${MONITOR_0_POS_X}, ${MONITOR_0_POS_Y})),
                 width: ${MONITOR_0_WIDTH},
                 height: ${MONITOR_0_HEIGHT},
                 monitor_index: 0,

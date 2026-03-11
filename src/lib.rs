@@ -84,7 +84,7 @@ impl WindowManagerPlugin {
     #[expect(clippy::expect_used, reason = "fail fast if path cannot be determined")]
     pub fn with_app_name(app_name: impl Into<String>) -> impl Plugin {
         WindowManagerPluginCustomPath {
-            path: state::get_state_path_for_app(&app_name.into())
+            path:        state::get_state_path_for_app(&app_name.into())
                 .expect("Could not determine state file path"),
             persistence: ManagedWindowPersistence::default(),
         }
@@ -94,7 +94,7 @@ impl WindowManagerPlugin {
     #[must_use]
     pub fn with_path(path: impl Into<PathBuf>) -> impl Plugin {
         WindowManagerPluginCustomPath {
-            path: path.into(),
+            path:        path.into(),
             persistence: ManagedWindowPersistence::default(),
         }
     }
@@ -124,7 +124,7 @@ impl Plugin for WindowManagerPlugin {
 
 /// Plugin variant with a custom state file path.
 struct WindowManagerPluginCustomPath {
-    path: PathBuf,
+    path:        PathBuf,
     persistence: ManagedWindowPersistence,
 }
 
@@ -437,14 +437,10 @@ fn restore_managed_window(
 }
 
 /// Run condition: returns true if any entity has a `TargetPosition` component.
-fn has_restoring_windows(q: Query<(), With<TargetPosition>>) -> bool {
-    !q.is_empty()
-}
+fn has_restoring_windows(q: Query<(), With<TargetPosition>>) -> bool { !q.is_empty() }
 
 /// Run condition: returns true if no entity has a `TargetPosition` component.
-fn no_restoring_windows(q: Query<(), With<TargetPosition>>) -> bool {
-    q.is_empty()
-}
+fn no_restoring_windows(q: Query<(), With<TargetPosition>>) -> bool { q.is_empty() }
 
 /// The run conditions allow us to separate the initial primary window restore from
 /// subsequent positions saves - which we dont' want to do until AFTER we've done

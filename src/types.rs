@@ -40,15 +40,15 @@ use crate::WindowKey;
 #[derive(EntityEvent, Debug, Clone, Reflect)]
 pub struct WindowRestored {
     /// The window entity this event targets.
-    pub entity: Entity,
+    pub entity:        Entity,
     /// Identifier for this window (primary or managed name).
-    pub window_id: WindowKey,
+    pub window_id:     WindowKey,
     /// Target position that was applied (None on Wayland).
-    pub position: Option<IVec2>,
+    pub position:      Option<IVec2>,
     /// Target size that was applied (content area).
-    pub size: UVec2,
+    pub size:          UVec2,
     /// Window mode that was applied.
-    pub mode: WindowMode,
+    pub mode:          WindowMode,
     /// Monitor index the window was restored to.
     pub monitor_index: usize,
 }
@@ -62,8 +62,8 @@ pub const SCALE_FACTOR_EPSILON: f64 = 0.01;
 /// Saved video mode for exclusive fullscreen.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SavedVideoMode {
-    pub physical_size: UVec2,
-    pub bit_depth: u16,
+    pub physical_size:           UVec2,
+    pub bit_depth:               u16,
     pub refresh_rate_millihertz: u32,
 }
 
@@ -72,8 +72,8 @@ impl SavedVideoMode {
     #[must_use]
     pub const fn to_video_mode(&self) -> VideoMode {
         VideoMode {
-            physical_size: self.physical_size,
-            bit_depth: self.bit_depth,
+            physical_size:           self.physical_size,
+            bit_depth:               self.bit_depth,
             refresh_rate_millihertz: self.refresh_rate_millihertz,
         }
     }
@@ -113,9 +113,7 @@ impl SavedWindowMode {
 
     /// Check if this is a fullscreen mode (borderless or exclusive).
     #[must_use]
-    pub const fn is_fullscreen(&self) -> bool {
-        !matches!(self, Self::Windowed)
-    }
+    pub const fn is_fullscreen(&self) -> bool { !matches!(self, Self::Windowed) }
 }
 
 impl From<&WindowMode> for SavedWindowMode {
@@ -127,8 +125,8 @@ impl From<&WindowMode> for SavedWindowMode {
                 video_mode: match video_mode_selection {
                     VideoModeSelection::Current => None,
                     VideoModeSelection::Specific(mode) => Some(SavedVideoMode {
-                        physical_size: mode.physical_size,
-                        bit_depth: mode.bit_depth,
+                        physical_size:           mode.physical_size,
+                        bit_depth:               mode.bit_depth,
                         refresh_rate_millihertz: mode.refresh_rate_millihertz,
                     }),
                 },
@@ -139,7 +137,7 @@ impl From<&WindowMode> for SavedWindowMode {
 
 /// Window decoration dimensions (title bar, borders).
 pub struct WindowDecoration {
-    pub width: u32,
+    pub width:  u32,
     pub height: u32,
 }
 
@@ -147,7 +145,7 @@ pub struct WindowDecoration {
 #[derive(Resource)]
 pub struct WinitInfo {
     pub starting_monitor_index: usize,
-    pub window_decoration: WindowDecoration,
+    pub window_decoration:      WindowDecoration,
 }
 
 impl WinitInfo {
@@ -275,25 +273,25 @@ pub enum MonitorScaleStrategy {
 pub struct TargetPosition {
     /// Final clamped position (adjusted to fit within target monitor).
     /// None on Wayland where clients can't access window position.
-    pub position: Option<IVec2>,
+    pub position:                 Option<IVec2>,
     /// Target width in physical pixels (content area, excluding window decoration).
     /// Copied directly from `WindowState.width`. Applied via `set_physical_resolution()`.
-    pub width: u32,
+    pub width:                    u32,
     /// Target height in physical pixels (content area, excluding window decoration).
     /// Copied directly from `WindowState.height`. Applied via `set_physical_resolution()`.
-    pub height: u32,
+    pub height:                   u32,
     /// Scale factor of the target monitor.
-    pub target_scale: f64,
+    pub target_scale:             f64,
     /// Scale factor of the monitor where the window starts (keyboard focus monitor).
-    pub starting_scale: f64,
+    pub starting_scale:           f64,
     /// Strategy for handling scale factor differences between monitors.
-    pub monitor_scale_strategy: MonitorScaleStrategy,
+    pub monitor_scale_strategy:   MonitorScaleStrategy,
     /// Window mode to restore.
-    pub mode: SavedWindowMode,
+    pub mode:                     SavedWindowMode,
     /// Target monitor index for fullscreen restore.
     /// On non-Wayland platforms, this could be derived from position, but Wayland
     /// doesn't provide window position, so we store it explicitly.
-    pub target_monitor_index: usize,
+    pub target_monitor_index:     usize,
     /// Fullscreen restore state (DX12/DXGI workaround).
     pub fullscreen_restore_state: Option<FullscreenRestoreState>,
 }
@@ -301,21 +299,15 @@ pub struct TargetPosition {
 impl TargetPosition {
     /// Get the target position as an `IVec2`, if available.
     #[must_use]
-    pub const fn position(&self) -> Option<IVec2> {
-        self.position
-    }
+    pub const fn position(&self) -> Option<IVec2> { self.position }
 
     /// Get the target size as a `UVec2`.
     #[must_use]
-    pub const fn size(&self) -> UVec2 {
-        UVec2::new(self.width, self.height)
-    }
+    pub const fn size(&self) -> UVec2 { UVec2::new(self.width, self.height) }
 
     /// Scale ratio between starting and target monitors.
     #[must_use]
-    pub fn ratio(&self) -> f64 {
-        self.starting_scale / self.target_scale
-    }
+    pub fn ratio(&self) -> f64 { self.starting_scale / self.target_scale }
 
     /// Position compensated for scale factor differences.
     ///
@@ -349,7 +341,7 @@ impl TargetPosition {
 #[derive(Resource, Clone)]
 pub struct RestoreWindowConfig {
     /// Full path to the state file.
-    pub path: PathBuf,
+    pub path:          PathBuf,
     /// Snapshot of window states as loaded from the file at startup.
     /// Populated during restore so downstream code can compare intended vs actual state.
     /// Entries persist as a read-only snapshot for the example's File column.
@@ -368,15 +360,15 @@ pub struct RestoreWindowConfig {
 pub struct WindowState {
     /// Top-left corner of the window content area in physical monitor coordinates.
     /// `None` on Wayland where clients cannot access window position.
-    pub position: Option<(i32, i32)>,
+    pub position:      Option<(i32, i32)>,
     /// Content area width in physical pixels (excludes window decoration).
-    pub width: u32,
+    pub width:         u32,
     /// Content area height in physical pixels (excludes window decoration).
-    pub height: u32,
+    pub height:        u32,
     pub monitor_index: usize,
-    pub mode: SavedWindowMode,
+    pub mode:          SavedWindowMode,
     #[serde(default)]
-    pub app_name: String,
+    pub app_name:      String,
 }
 
 /// Marks a window entity as managed by the window manager plugin.
@@ -422,7 +414,7 @@ pub enum ManagedWindowPersistence {
 #[derive(Resource, Default)]
 pub struct ManagedWindowRegistry {
     /// Set of registered window names (for duplicate detection).
-    pub names: std::collections::HashSet<String>,
+    pub names:    std::collections::HashSet<String>,
     /// Map from entity to window name (for cleanup on removal).
     pub entities: std::collections::HashMap<Entity, String>,
 }

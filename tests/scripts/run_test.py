@@ -412,7 +412,7 @@ def kill_stale_apps() -> None:
     if sys.platform == "win32":
         _ = subprocess.run(["taskkill", "/F", "/IM", "restore_window.exe"], capture_output=True)
     else:
-        _ = subprocess.run(["pkill", "-9", "-f", "restore_window"], capture_output=True)
+        _ = subprocess.run(["pkill", "-9", "-x", "restore_window"], capture_output=True)
     time.sleep(0.5)
 
 
@@ -476,7 +476,8 @@ def launch_app(
 
     stderr_path: str | None = None
     if capture_stderr:
-        tmpdir = os.environ.get("TMPDIR", "/private/tmp/claude-501")
+        default_tmpdir = "/private/tmp/claude-501" if sys.platform == "darwin" else "/tmp/claude"
+        tmpdir = os.environ.get("TMPDIR", default_tmpdir)
         _ = os.makedirs(tmpdir, exist_ok=True)
         fd, stderr_path = tempfile.mkstemp(prefix="brp_stderr_", dir=tmpdir)
         stderr_handle = os.fdopen(fd, "w")
@@ -1109,7 +1110,8 @@ def run_prebuild() -> None:
         die(f"Config file not found: {config_file}")
 
     # Ensure tmp directory exists
-    tmpdir = os.environ.get("TMPDIR", "/private/tmp/claude-501")
+    default_tmpdir = "/private/tmp/claude-501" if sys.platform == "darwin" else "/tmp/claude"
+    tmpdir = os.environ.get("TMPDIR", default_tmpdir)
     os.makedirs(tmpdir, exist_ok=True)
 
     # Build default variant

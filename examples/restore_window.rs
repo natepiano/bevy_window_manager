@@ -130,9 +130,7 @@ fn main() {
 #[derive(Resource)]
 struct TestMode(bool);
 
-fn keyboard_enabled(test_mode: Res<TestMode>) -> bool {
-    !test_mode.0
-}
+fn keyboard_enabled(test_mode: Res<TestMode>) -> bool { !test_mode.0 }
 
 /// Tracks the next window number for auto-incrementing names.
 #[derive(Resource, Default)]
@@ -144,7 +142,7 @@ struct WindowCounter {
 #[derive(Resource, Default)]
 struct SelectedVideoModes {
     /// Selected index per monitor (keyed by monitor index).
-    indices: HashMap<usize, usize>,
+    indices:   HashMap<usize, usize>,
     /// Track last synced mode to avoid overriding user selection.
     last_sync: Option<(UVec2, u32)>,
 }
@@ -176,9 +174,9 @@ struct SecondaryDisplay(Entity);
 #[derive(Resource, Debug, Clone, Reflect)]
 #[reflect(Resource)]
 struct WindowRestoredReceived {
-    position: Option<IVec2>,
-    size: UVec2,
-    mode: WindowMode,
+    position:      Option<IVec2>,
+    size:          UVec2,
+    mode:          WindowMode,
     monitor_index: usize,
 }
 
@@ -191,11 +189,11 @@ struct RestoredStates {
 
 /// State cached from a `WindowRestored` event for display comparison.
 struct CachedRestoredState {
-    position: Option<IVec2>,
-    width: u32,
-    height: u32,
+    position:      Option<IVec2>,
+    width:         u32,
+    height:        u32,
     monitor_index: usize,
-    mode: WindowMode,
+    mode:          WindowMode,
 }
 
 // --- Constants ---
@@ -594,7 +592,7 @@ fn update_secondary_displays(
             continue;
         };
         let monitor_info = current_monitor.copied().unwrap_or(CurrentMonitor {
-            monitor: *monitors_res.first(),
+            monitor:        *monitors_res.first(),
             effective_mode: window.mode,
         });
 
@@ -743,7 +741,7 @@ fn handle_window_mode_input(
     };
 
     let monitor = current_monitor.copied().unwrap_or(CurrentMonitor {
-        monitor: *monitors_res.first(),
+        monitor:        *monitors_res.first(),
         effective_mode: window.mode,
     });
 
@@ -987,10 +985,10 @@ fn debug_winit_monitor(
 #[derive(Default)]
 struct CachedWindowDebug {
     position: Option<WindowPosition>,
-    width: u32,
-    height: u32,
-    mode: Option<WindowMode>,
-    focused: bool,
+    width:    u32,
+    height:   u32,
+    mode:     Option<WindowMode>,
+    focused:  bool,
 }
 
 /// Debug system that logs when Changed<Window> fires and what changed.
@@ -1064,7 +1062,7 @@ fn on_set_borderless_fullscreen(
         return;
     };
     let monitor = current_monitor.copied().unwrap_or(CurrentMonitor {
-        monitor: *monitors_res.first(),
+        monitor:        *monitors_res.first(),
         effective_mode: window.mode,
     });
     window.mode = WindowMode::BorderlessFullscreen(MonitorSelection::Index(monitor.monitor.index));
@@ -1088,7 +1086,7 @@ fn on_set_exclusive_fullscreen(
         return;
     };
     let monitor = current_monitor.copied().unwrap_or(CurrentMonitor {
-        monitor: *monitors_res.first(),
+        monitor:        *monitors_res.first(),
         effective_mode: window.mode,
     });
 
@@ -1164,18 +1162,18 @@ fn on_window_restored(
     restored_states.states.insert(
         event.entity,
         CachedRestoredState {
-            position: event.position,
-            width: event.size.x,
-            height: event.size.y,
+            position:      event.position,
+            width:         event.size.x,
+            height:        event.size.y,
             monitor_index: event.monitor_index,
-            mode: event.mode,
+            mode:          event.mode,
         },
     );
 
     commands.insert_resource(WindowRestoredReceived {
-        position: event.position,
-        size: event.size,
-        mode: event.mode,
+        position:      event.position,
+        size:          event.size,
+        mode:          event.mode,
         monitor_index: event.monitor_index,
     });
 }
