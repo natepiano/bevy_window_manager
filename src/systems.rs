@@ -208,11 +208,49 @@ pub fn load_target_position(
     }
 
     let entity = *window_entity;
+    let is_fullscreen = state.mode.is_fullscreen();
     commands.entity(entity).insert(target);
 
     // Insert X11FrameCompensated token for platforms that don't need compensation.
     // On Linux + W6 + X11, the compensation system inserts this token after adjusting position.
-    insert_x11_frame_token(&mut commands, entity);
+    // For fullscreen modes, skip frame compensation entirely — the window will cover the whole
+    // screen so frame extents are irrelevant, and delaying restore_windows by extra frames
+    // gives the compositor time to revert our PreStartup position change.
+    if is_fullscreen || !needs_x11_frame_compensation() {
+        commands.entity(entity).insert(X11FrameCompensated);
+    }
+}
+
+/// Move the primary window to the target monitor for fullscreen restore on X11.
+///
+/// On X11, the compositor (KWin via XWayland) reverts fullscreen if the position
+/// and mode changes arrive in the same `changed_windows` pass. By setting position
+/// in a separate PreStartup system (direct mutation, not commands.queue), the change
+/// is processed by bevy_winit before the Update system applies fullscreen mode.
+///
+/// Skipped on Wayland (no position) and non-fullscreen modes.
+/// For managed windows, the equivalent happens in `on_managed_window_load`.
+#[cfg(target_os = "linux")]
+pub fn move_to_target_monitor(
+    mut window: Single<&mut Window, With<PrimaryWindow>>,
+    targets: Query<&TargetPosition, With<PrimaryWindow>>,
+) {
+    if is_wayland() {
+        return;
+    }
+
+    let Ok(target) = targets.single() else {
+        return;
+    };
+
+    if !target.mode.is_fullscreen() {
+        return;
+    }
+
+    if let Some(pos) = target.position {
+        debug!("[move_to_target_monitor] X11 fullscreen: setting position={pos:?}");
+        window.position = WindowPosition::At(pos);
+    }
 }
 
 /// Apply the initial window move to the target monitor.
@@ -693,12 +731,36 @@ pub fn restore_windows(
             _ => {},
         }
 
-        // Transition fullscreen state after first frame (DX12/DXGI workaround)
-        if let Some(FullscreenRestoreState::WaitingForSurface) = target.fullscreen_restore_state {
-            if target.mode.is_fullscreen() {
-                debug!("[Restore] First frame passed, transitioning to ApplyFullscreen");
-                target.fullscreen_restore_state = Some(FullscreenRestoreState::ApplyFullscreen);
-                continue;
+        // Fullscreen phase state machine.
+        // Phases: MoveToMonitor → WaitForMove → ApplyMode (Linux X11)
+        //         WaitForSurface → ApplyMode (Windows DX12)
+        //         ApplyMode (Wayland, macOS — direct apply)
+        if let Some(fs_state) = target.fullscreen_restore_state {
+            match fs_state {
+                FullscreenRestoreState::MoveToMonitor => {
+                    // Move window to target monitor so compositor knows where it belongs
+                    if let Some(pos) = target.position {
+                        debug!("[restore_windows] Fullscreen MoveToMonitor: position={pos:?}");
+                        window.position = WindowPosition::At(pos);
+                    }
+                    target.fullscreen_restore_state = Some(FullscreenRestoreState::WaitForMove);
+                    continue;
+                },
+                FullscreenRestoreState::WaitForMove => {
+                    // Wait one frame for compositor to process the position change
+                    debug!("[restore_windows] Fullscreen WaitForMove: waiting for compositor");
+                    target.fullscreen_restore_state = Some(FullscreenRestoreState::ApplyMode);
+                    continue;
+                },
+                FullscreenRestoreState::WaitForSurface => {
+                    // Wait one frame for GPU surface creation (Windows DX12, winit #3124)
+                    debug!("[restore_windows] Fullscreen WaitForSurface: waiting for GPU surface");
+                    target.fullscreen_restore_state = Some(FullscreenRestoreState::ApplyMode);
+                    continue;
+                },
+                FullscreenRestoreState::ApplyMode => {
+                    // Fall through to try_apply_restore which applies the fullscreen mode
+                },
             }
         }
 
@@ -1023,12 +1085,13 @@ fn try_apply_restore(target: &TargetPosition, window: &mut Window) -> RestoreSta
     // Handle fullscreen modes - use saved monitor index from TargetPosition
     if target.mode.is_fullscreen() {
         debug!(
-            "[try_apply_restore] fullscreen: window_scale={} target_scale={} starting_scale={} physical={}x{}",
-            window.resolution.scale_factor(),
-            target.target_scale,
-            target.starting_scale,
+            "[try_apply_restore] fullscreen: mode={:?} target_monitor={} current_physical={}x{} current_mode={:?} current_pos={:?}",
+            target.mode,
+            target.target_monitor_index,
             window.physical_width(),
             window.physical_height(),
+            window.mode,
+            window.position,
         );
         apply_fullscreen_restore(target, window);
         window.visible = true;

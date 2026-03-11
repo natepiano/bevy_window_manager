@@ -749,15 +749,15 @@ fn handle_window_mode_input(
     // The OS can change fullscreen state (e.g. macOS green button) without updating
     // `window.mode`, causing bevy's `changed_windows` to skip the mode change.
     //
-    // Skip sync in two cases:
-    // 1. Explicit exclusive fullscreen — macOS may reject it and oscillate between Fullscreen and
-    //    Windowed, creating a feedback loop.
+    // Skip sync when:
+    // 1. Any fullscreen mode is set — the plugin or user intentionally set fullscreen,
+    //    but the compositor may not have processed it yet. Syncing back to `Windowed`
+    //    would cancel the pending fullscreen transition.
     // 2. Restore not yet complete — the plugin sets `window.mode` to the target fullscreen mode,
-    //    but macOS hasn't completed the transition yet so `effective_mode` still reads `Windowed`.
-    //    Without this guard we'd overwrite the intended mode back to `Windowed`.
-    let is_explicit_fullscreen = matches!(window.mode, WindowMode::Fullscreen(_, _));
+    //    but the transition hasn't completed so `effective_mode` still reads `Windowed`.
+    let is_fullscreen = !matches!(window.mode, WindowMode::Windowed);
     let restore_complete = restored_states.states.contains_key(&entity);
-    if !is_explicit_fullscreen && restore_complete && window.mode != monitor.effective_mode {
+    if !is_fullscreen && restore_complete && window.mode != monitor.effective_mode {
         window.mode = monitor.effective_mode;
     }
 

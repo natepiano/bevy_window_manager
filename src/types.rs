@@ -188,18 +188,29 @@ pub enum WindowRestoreState {
     ApplySize,
 }
 
-/// State for fullscreen restore on Windows (DX12/DXGI workaround).
+/// Phase-based fullscreen restore state machine.
 ///
-/// Exclusive fullscreen crashes on startup with DX12 due to DXGI flip model
-/// limitations (see <https://github.com/rust-windowing/winit/issues/3124>).
-/// We wait one frame for `create_surfaces` to create a windowed surface first,
-/// then switch to fullscreen.
+/// Fullscreen restore requires platform-specific sequencing:
+///
+/// - **Linux X11**: Move to target monitor first, wait a frame for the compositor to process, then
+///   apply fullscreen mode as a fresh change.
+/// - **Linux Wayland**: Apply mode directly (no position available).
+/// - **Windows (DX12)**: Wait for surface creation before applying fullscreen (see <https://github.com/rust-windowing/winit/issues/3124>).
+/// - **macOS**: Apply mode directly.
+///
+/// The key insight: on X11, if fullscreen mode is set in the same frame as
+/// position, the compositor may briefly honor it then revert. Splitting into
+/// separate frames ensures each change is processed independently.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FullscreenRestoreState {
-    /// Waiting for first frame to render (surface creation).
-    WaitingForSurface,
-    /// Surface created, ready to apply fullscreen mode.
-    ApplyFullscreen,
+    /// Move window to target monitor position. Skipped on Wayland (no position).
+    MoveToMonitor,
+    /// Wait for compositor to process the position change (1 frame).
+    WaitForMove,
+    /// Wait for GPU surface creation (Windows DX12 workaround, winit #3124).
+    WaitForSurface,
+    /// Apply the fullscreen mode.
+    ApplyMode,
 }
 
 /// Restore strategy based on scale factor relationship between launch and target monitors.

@@ -55,11 +55,20 @@ pub(crate) fn compute_target_position(
         monitor_scale_strategy: determine_scale_strategy(starting_scale, target_scale),
         mode: saved_state.mode.clone(),
         target_monitor_index: target_info.index,
-        fullscreen_restore_state: if cfg!(all(
-            target_os = "windows",
-            feature = "workaround-winit-3124"
-        )) {
-            Some(FullscreenRestoreState::WaitingForSurface)
+        fullscreen_restore_state: if saved_state.mode.is_fullscreen() {
+            if cfg!(all(
+                target_os = "windows",
+                feature = "workaround-winit-3124"
+            )) {
+                Some(FullscreenRestoreState::WaitForSurface)
+            } else if cfg!(target_os = "linux") && !crate::systems::is_wayland() {
+                // X11: use MoveToMonitor state machine so compositor has time to process
+                // the position change before fullscreen mode is applied.
+                Some(FullscreenRestoreState::MoveToMonitor)
+            } else {
+                // macOS/Wayland: apply mode directly.
+                Some(FullscreenRestoreState::ApplyMode)
+            }
         } else {
             None
         },

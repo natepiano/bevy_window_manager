@@ -430,10 +430,17 @@ fn restore_managed_window(
         target_info.size.y,
     );
 
+    let is_fullscreen = saved_state.mode.is_fullscreen();
     commands.entity(entity).insert(target);
 
-    // Insert `X11FrameCompensated` for platforms that don't need compensation
-    systems::insert_x11_frame_token(commands, entity);
+    // Insert `X11FrameCompensated` for platforms that don't need compensation.
+    // For fullscreen modes, skip frame compensation — frame extents are irrelevant
+    // and delaying restore gives the compositor time to revert position changes.
+    if is_fullscreen || !systems::needs_x11_frame_compensation() {
+        commands.entity(entity).insert(types::X11FrameCompensated);
+    } else {
+        systems::insert_x11_frame_token(commands, entity);
+    }
 }
 
 /// Run condition: returns true if any entity has a `TargetPosition` component.
@@ -487,12 +494,28 @@ fn build_plugin(app: &mut App, path: PathBuf, persistence: ManagedWindowPersiste
         .add_observer(on_managed_window_added)
         .add_observer(on_managed_window_removed)
         .add_observer(on_managed_window_load)
-        .add_systems(
-            PreStartup,
-            (systems::init_winit_info, systems::load_target_position)
-                .chain()
-                .after(init_monitors),
-        );
+        .add_systems(PreStartup, {
+            #[cfg(target_os = "linux")]
+            {
+                // X11 fullscreen: move window to target monitor before first event loop.
+                // Must be chained (not .after()) so apply_deferred runs between
+                // load_target_position and move_to_target_monitor — otherwise the
+                // TargetPosition component inserted via deferred commands won't exist yet.
+                (
+                    systems::init_winit_info,
+                    systems::load_target_position,
+                    systems::move_to_target_monitor,
+                )
+                    .chain()
+                    .after(init_monitors)
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                (systems::init_winit_info, systems::load_target_position)
+                    .chain()
+                    .after(init_monitors)
+            }
+        });
 
     // X11 frame extent compensation (Linux + W6 + X11 only)
     // Runs until all restoring windows have the X11FrameCompensated component
@@ -514,7 +537,7 @@ fn build_plugin(app: &mut App, path: PathBuf, persistence: ManagedWindowPersiste
     app.add_systems(
         Update,
         (
-            systems::update_current_monitor,
+            systems::update_current_monitor.run_if(no_restoring_windows),
             systems::save_window_state
                 .run_if(no_restoring_windows)
                 .after(systems::update_current_monitor),
