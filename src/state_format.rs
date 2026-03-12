@@ -158,6 +158,7 @@ mod tests {
     use super::WindowKey;
     use super::decode;
     use super::encode;
+    use crate::types::SavedVideoMode;
     use crate::types::SavedWindowMode;
     use crate::types::WindowState;
 
@@ -248,6 +249,110 @@ mod tests {
             decode(&contents).is_none(),
             "duplicate keys should fail decode"
         );
+    }
+
+    /// Golden-file tests using exact RON strings from the pre-multi-window era
+    /// (commit 516f5930, used through v0.18.2). These are byte-for-byte copies of
+    /// files that the published crate wrote via `ron::ser::to_string_pretty` with
+    /// `PrettyConfig::default()`. If a dependency bump or struct change silently
+    /// breaks deserialization, these tests catch it.
+    mod golden_legacy {
+        use super::*;
+
+        /// Bare `WindowState` — windowed mode, from `macos_0/same_monitor_restore.ron`.
+        const WINDOWED: &str = "\
+(
+    position: Some((200, 200)),
+    width: 1600,
+    height: 1200,
+    monitor_index: 0,
+    mode: Windowed,
+    app_name: \"restore_window\",
+)";
+
+        /// Bare `WindowState` — borderless fullscreen, from
+        /// `macos_0/fullscreen_borderless_programmatic.ron`.
+        const BORDERLESS_FULLSCREEN: &str = "\
+(
+    position: Some((0, 0)),
+    width: 3456,
+    height: 2234,
+    monitor_index: 0,
+    mode: BorderlessFullscreen,
+    app_name: \"restore_window\",
+)";
+
+        /// Bare `WindowState` — exclusive fullscreen with explicit video mode,
+        /// from `macos_0/fullscreen_exclusive.ron`.
+        const EXCLUSIVE_FULLSCREEN: &str = "\
+(
+    position: Some((0, 0)),
+    width: 1920,
+    height: 1200,
+    monitor_index: 0,
+    mode: Fullscreen(
+        video_mode: Some((
+            physical_size: (1920, 1200),
+            bit_depth: 32,
+            refresh_rate_millihertz: 60000,
+        )),
+    ),
+    app_name: \"restore_window\",
+)";
+
+        #[test]
+        fn decode_golden_legacy_windowed() {
+            let decoded = decode(WINDOWED);
+            assert!(decoded.is_some(), "golden legacy windowed file must decode");
+            let decoded = decoded.unwrap_or_default();
+            assert_eq!(decoded.len(), 1);
+            let state = &decoded[&WindowKey::Primary];
+            assert_eq!(state.position, Some((200, 200)));
+            assert_eq!(state.width, 1600);
+            assert_eq!(state.height, 1200);
+            assert_eq!(state.monitor_index, 0);
+            assert_eq!(state.mode, SavedWindowMode::Windowed);
+            assert_eq!(state.app_name, "restore_window");
+        }
+
+        #[test]
+        fn decode_golden_legacy_borderless_fullscreen() {
+            let decoded = decode(BORDERLESS_FULLSCREEN);
+            assert!(
+                decoded.is_some(),
+                "golden legacy borderless fullscreen file must decode"
+            );
+            let decoded = decoded.unwrap_or_default();
+            let state = &decoded[&WindowKey::Primary];
+            assert_eq!(state.position, Some((0, 0)));
+            assert_eq!(state.width, 3456);
+            assert_eq!(state.height, 2234);
+            assert_eq!(state.mode, SavedWindowMode::BorderlessFullscreen);
+        }
+
+        #[test]
+        fn decode_golden_legacy_exclusive_fullscreen() {
+            let decoded = decode(EXCLUSIVE_FULLSCREEN);
+            assert!(
+                decoded.is_some(),
+                "golden legacy exclusive fullscreen file must decode"
+            );
+            let decoded = decoded.unwrap_or_default();
+            let state = &decoded[&WindowKey::Primary];
+            assert_eq!(state.position, Some((0, 0)));
+            assert_eq!(state.width, 1920);
+            assert_eq!(state.height, 1200);
+            assert_eq!(
+                state.mode,
+                SavedWindowMode::Fullscreen {
+                    video_mode: Some(SavedVideoMode {
+                        physical_size:           UVec2::new(1920, 1200),
+                        bit_depth:               32,
+                        refresh_rate_millihertz: 60000,
+                    }),
+                }
+            );
+        }
     }
 
     #[test]
