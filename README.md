@@ -3,6 +3,7 @@
 [![License](https://img.shields.io/badge/license-MIT%2FApache-blue.svg)](https://github.com/natemccoy/bevy_window_manager#license)
 [![Crates.io](https://img.shields.io/crates/v/bevy_window_manager.svg)](https://crates.io/crates/bevy_window_manager)
 [![Downloads](https://img.shields.io/crates/d/bevy_window_manager.svg)](https://crates.io/crates/bevy_window_manager)
+[![CI](https://github.com/natepiano/bevy_window_manager/actions/workflows/ci.yml/badge.svg)](https://github.com/natepiano/bevy_window_manager/actions/workflows/ci.yml)
 
 
 A Bevy plugin for window state persistence and multi-monitor utilities.

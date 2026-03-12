@@ -156,8 +156,8 @@ mod tests {
     use super::PersistedEntry;
     use super::PersistedState;
     use super::WindowKey;
-    use crate::state_format::decode;
-    use crate::state_format::encode;
+    use super::decode;
+    use super::encode;
     use crate::types::SavedWindowMode;
     use crate::types::WindowState;
 
