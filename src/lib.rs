@@ -202,7 +202,7 @@ fn on_managed_window_added(
         warn!(
             "[on_managed_window_added] Duplicate ManagedWindow name: \"{name}\" — renamed to \"{unique_name}\" for entity {entity:?}"
         );
-        managed_window.window_name = unique_name.clone();
+        managed_window.window_name.clone_from(&unique_name);
     }
 
     registry.names.insert(unique_name.clone());
@@ -217,34 +217,30 @@ fn on_managed_window_added(
         .as_ref()
         .is_some_and(|s| s.contains_key(&WindowKey::Managed(unique_name.clone())));
 
-    if !already_saved {
-        if let Ok(window) = windows.get(entity) {
-            let monitor = match window.position {
-                bevy::window::WindowPosition::At(pos) => *monitors.monitor_for_window(
-                    pos,
-                    window.physical_width(),
-                    window.physical_height(),
-                ),
-                _ => *monitors.first(),
-            };
-            let position = match window.position {
-                bevy::window::WindowPosition::At(pos) => Some((pos.x, pos.y)),
-                _ => None,
-            };
-            let window_state = types::WindowState {
-                position,
-                width: window.physical_width(),
-                height: window.physical_height(),
-                monitor_index: monitor.index,
-                mode: SavedWindowMode::Windowed,
-                app_name: String::new(),
-            };
+    if !already_saved && let Ok(window) = windows.get(entity) {
+        let monitor = match window.position {
+            bevy::window::WindowPosition::At(pos) => {
+                *monitors.monitor_for_window(pos, window.physical_width(), window.physical_height())
+            },
+            _ => *monitors.first(),
+        };
+        let position = match window.position {
+            bevy::window::WindowPosition::At(pos) => Some((pos.x, pos.y)),
+            _ => None,
+        };
+        let window_state = types::WindowState {
+            position,
+            width: window.physical_width(),
+            height: window.physical_height(),
+            monitor_index: monitor.index,
+            mode: SavedWindowMode::Windowed,
+            app_name: String::new(),
+        };
 
-            let mut states = existing.unwrap_or_default();
-            states.insert(WindowKey::Managed(unique_name.clone()), window_state);
-            state::save_all_states(&config.path, &states);
-            debug!("[on_managed_window_added] Saved initial state for \"{unique_name}\"");
-        }
+        let mut states = existing.unwrap_or_default();
+        states.insert(WindowKey::Managed(unique_name.clone()), window_state);
+        state::save_all_states(&config.path, &states);
+        debug!("[on_managed_window_added] Saved initial state for \"{unique_name}\"");
     }
 }
 

@@ -1,12 +1,12 @@
 [package]
-name = "bevy_window_manager"
-version = "0.19.0-dev"
-edition = "2024"
+categories  = ["game-development", "gui"]
 description = "Bevy plugin for primary window restoration and multi-monitor support"
-repository = "https://github.com/natepiano/bevy_window_manager"
-license = "MIT OR Apache-2.0"
-keywords = ["bevy", "gamedev", "monitor", "multi-monitor", "window"]
-categories = ["game-development", "gui"]
+edition     = "2024"
+keywords    = ["bevy", "gamedev", "monitor", "multi-monitor", "window"]
+license     = "MIT OR Apache-2.0"
+name        = "bevy_window_manager"
+repository  = "https://github.com/natepiano/bevy_window_manager"
+version     = "0.19.0-dev"
 
 [lib]
 name = "bevy_window_manager"
@@ -22,14 +22,14 @@ bevy = { version = "0.18.1", default-features = false, features = [
 ] }
 bevy_diagnostic = "0.18"
 
-dirs = "6.0"
-ron = "0.12"
+dirs  = "6.0"
+ron   = "0.12"
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
-bevy = "0.18.1"
+bevy            = "0.18.1"
 bevy_brp_extras = "=0.18.6"
-tempfile = "3"
+tempfile        = "3"
 
 [target.'cfg(windows)'.dependencies]
 raw-window-handle = "0.6"
@@ -41,23 +41,23 @@ windows = { version = "0.62.2", features = [
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-raw-window-handle = "0.6"
 objc2 = "0.6.4"
 objc2-app-kit = { version = "0.3.2", features = [
+  "NSResponder",
   "NSView",
   "NSWindow",
-  "NSResponder",
 ] }
+raw-window-handle = "0.6"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 raw-window-handle = "0.6"
-x11rb = { version = "0.13", default-features = false, features = ["dl-libxcb"] }
+x11rb             = { version = "0.13", default-features = false, features = ["dl-libxcb"] }
 
 [features]
 default = [
-  "workaround-winit-4440",
   "workaround-winit-3124",
   "workaround-winit-4341",
+  "workaround-winit-4440",
   "workaround-winit-4443",
   "workaround-winit-4445",
 ]
@@ -131,20 +131,20 @@ workaround-winit-4445 = []
 
 [lints.clippy]
 # Enable lint groups as errors (with lower priority so allows can override)
-all = { level = "deny", priority = -1 }
-cargo = { level = "deny", priority = -1 }
+all                      = { level = "deny", priority = -1 }
+cargo                    = { level = "deny", priority = -1 }
 cast_possible_truncation = "allow"
 # Screen dimensions are always within safe ranges for these casts
 cast_possible_wrap = "allow"
-cast_sign_loss = "allow"
-expect_used = "deny"
+cast_sign_loss     = "allow"
+expect_used        = "deny"
 # Allow specific lints that conflict with Bevy patterns
 multiple_crate_versions = "allow"
-needless_pass_by_value = "allow"
-nursery = { level = "deny", priority = -1 }
-panic = "deny"
-pedantic = { level = "deny", priority = -1 }
-unwrap_used = "deny"
+needless_pass_by_value  = "allow"
+nursery                 = { level = "deny", priority = -1 }
+panic                   = "deny"
+pedantic                = { level = "deny", priority = -1 }
+unwrap_used             = "deny"
 
 [profile.dev.package."*"]
 opt-level = 3

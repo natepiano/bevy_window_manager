@@ -33,7 +33,7 @@ impl Platform {
     /// On Linux, checks `WAYLAND_DISPLAY` to distinguish Wayland from X11.
     /// On macOS and Windows the result is compile-time constant.
     #[must_use]
-    pub fn detect() -> Self {
+    pub const fn detect() -> Self {
         #[cfg(target_os = "macos")]
         {
             Self::MacOs

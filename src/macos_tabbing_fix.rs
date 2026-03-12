@@ -2,7 +2,7 @@
 //!
 //! When two windows from the same app both go `BorderlessFullscreen`, macOS tabs them
 //! into the same fullscreen space. Setting `NSWindow.tabbingMode = .disallowed` on every
-//! window prevents this at the AppKit level.
+//! window prevents this at the `AppKit` level.
 //!
 //! The primary window gets the fix at `Startup` (after winit creates the OS window).
 //! Secondary managed windows get it via an `Update` query on `Added<ManagedWindow>`.

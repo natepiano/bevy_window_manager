@@ -9,7 +9,7 @@ A Bevy plugin for window state persistence and multi-monitor utilities.
 
 ## Motivation
 
-Originally created as a mechanism to restore the PrimaryWindow to its last known position when launching - the way you expect an app to work. I quickly discovered that on my MacBook Pro with Retina display (scale factor 2.0) and my external monitor (scale factor 1.0), there were numerous issues with saving/restoring positions across differently-scaled monitors. 
+Originally created as a mechanism to restore the `PrimaryWindow` to its last known position when launching - the way you expect an app to work. I quickly discovered that on my `MacBook` Pro with Retina display (scale factor 2.0) and my external monitor (scale factor 1.0), there were numerous issues with saving/restoring positions across differently-scaled monitors. 
 
 The first discovered issue is that winit uses the scale factor of the focused window from which you launch the application. And if the target monitor for the app has a different scale factor, then that will get factored into the size and position calculations resulting in something you definitely don't want.
 
@@ -136,12 +136,12 @@ Legacy state files are still accepted on read and rewritten as v1 on save.
 | Platform | Status | Notes |
 |----------|--------|-------|
 | macOS    | ✅ Tested | Native hardware with multiple monitors at different scales |
-| Windows  | ✅ Tested | VMware VM with multi-monitor, different scale factors |
+| Windows  | ✅ Tested | `VMware` VM with multi-monitor, different scale factors |
 | Linux X11 | ✅ Tested | Position and size restoration with keyboard snap workaround |
 | Linux Wayland | ✅ Tested | Size + fullscreen only (Wayland cannot query/set position) |
 
 
-**Note on Windows testing**: Windows support has been tested in a VMware virtual machine with multiple monitors at different scale factors. Native Windows installations may behave differently - if you encounter issues, please open an issue with details about your monitor configuration.
+**Note on Windows testing**: Windows support has been tested in a `VMware` virtual machine with multiple monitors at different scale factors. Native Windows installations may behave differently - if you encounter issues, please open an issue with details about your monitor configuration.
 
 **Note on Linux support**: Linux support has been tested on KDE Plasma (Asahi Linux on Fedora). X11 includes a workaround for keyboard snap shortcuts (Meta+Arrow) that don't fire position events ([winit #4443](https://github.com/rust-windowing/winit/issues/4443)). Wayland has an inherent limitation: clients cannot query or set window position, so only size and fullscreen state can be restored. If you encounter issues, please open an issue with details about your distribution, desktop environment, and monitor configuration.
 
@@ -181,7 +181,7 @@ bevy_window_manager = { version = "0.18", default-features = false, features = [
 
 ## License
 
-bevy_window_manager is free, open source and permissively licensed!
+`bevy_window_manager` is free, open source and permissively licensed!
 Except where noted (below and/or in individual files), all code in this repository is dual-licensed under either:
 
 * MIT License ([LICENSE-MIT](LICENSE-MIT) or [http://opensource.org/licenses/MIT](http://opensource.org/licenses/MIT))
