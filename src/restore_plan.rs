@@ -2,13 +2,10 @@
 
 use bevy::prelude::*;
 
+use crate::Platform;
 use crate::monitors::MonitorInfo;
 use crate::monitors::Monitors;
-use crate::types::FullscreenRestoreState;
-use crate::types::MonitorScaleStrategy;
-use crate::types::SCALE_FACTOR_EPSILON;
 use crate::types::TargetPosition;
-use crate::types::WindowRestoreState;
 use crate::types::WindowState;
 
 /// Resolve the target monitor from saved state and return an adjusted saved position.
@@ -36,6 +33,7 @@ pub(crate) fn compute_target_position(
     fallback_position: Option<(i32, i32)>,
     decoration: UVec2,
     starting_scale: f64,
+    platform: &Platform,
 ) -> TargetPosition {
     let width = saved_state.width;
     let height = saved_state.height;
@@ -43,8 +41,9 @@ pub(crate) fn compute_target_position(
 
     let outer_width = width + decoration.x;
     let outer_height = height + decoration.y;
-    let position = fallback_position
-        .map(|(x, y)| clamp_position_to_monitor(x, y, target_info, outer_width, outer_height));
+    let position = fallback_position.map(|(x, y)| {
+        clamp_position_to_monitor(x, y, target_info, outer_width, outer_height, platform)
+    });
 
     TargetPosition {
         position,
@@ -52,23 +51,11 @@ pub(crate) fn compute_target_position(
         height,
         target_scale,
         starting_scale,
-        monitor_scale_strategy: determine_scale_strategy(starting_scale, target_scale),
+        monitor_scale_strategy: platform.scale_strategy(starting_scale, target_scale),
         mode: saved_state.mode.clone(),
         target_monitor_index: target_info.index,
         fullscreen_restore_state: if saved_state.mode.is_fullscreen() {
-            if cfg!(all(
-                target_os = "windows",
-                feature = "workaround-winit-3124"
-            )) {
-                Some(FullscreenRestoreState::WaitForSurface)
-            } else if cfg!(target_os = "linux") && !crate::systems::is_wayland() {
-                // X11: use MoveToMonitor state machine so compositor has time to process
-                // the position change before fullscreen mode is applied.
-                Some(FullscreenRestoreState::MoveToMonitor)
-            } else {
-                // macOS/Wayland: apply mode directly.
-                Some(FullscreenRestoreState::ApplyMode)
-            }
+            Some(platform.fullscreen_restore_state())
         } else {
             None
         },
@@ -76,12 +63,12 @@ pub(crate) fn compute_target_position(
     }
 }
 
-/// Calculate restored window position, with optional clamping for macOS.
+/// Calculate restored window position, with optional clamping.
 ///
 /// On macOS, clamps to monitor bounds because macOS may resize/reposition windows
 /// that extend beyond the screen. macOS does not allow windows to span monitors.
 ///
-/// On Windows and Linux X11, windows can legitimately span multiple monitors,
+/// On Windows and Linux, windows can legitimately span multiple monitors,
 /// so we preserve the exact saved position without clamping.
 #[must_use]
 fn clamp_position_to_monitor(
@@ -90,8 +77,9 @@ fn clamp_position_to_monitor(
     target_info: &MonitorInfo,
     outer_width: u32,
     outer_height: u32,
+    platform: &Platform,
 ) -> IVec2 {
-    if cfg!(target_os = "macos") {
+    if platform.should_clamp_position() {
         let mon_right = target_info.position.x + target_info.size.x as i32;
         let mon_bottom = target_info.position.y + target_info.size.y as i32;
 
@@ -116,41 +104,5 @@ fn clamp_position_to_monitor(
         IVec2::new(x, y)
     } else {
         IVec2::new(saved_x, saved_y)
-    }
-}
-
-/// Determine the monitor scale strategy based on platform and scale factors.
-///
-/// The strategy depends on how each platform's winit backend interprets coordinates
-/// passed to `request_inner_size` and `set_outer_position`:
-///
-/// - **Feature gate**: Without `workaround-winit-4440`, always returns `ApplyUnchanged`.
-/// - **Wayland**: Handles DPI natively; no compensation needed → `ApplyUnchanged`.
-/// - **Same scale**: `starting ≈ target` → `ApplyUnchanged` (no cross-DPI issue).
-/// - **Windows** (different scales): Position is physical and unaffected, but size goes through a
-///   scale conversion using the current monitor's scale → `CompensateSizeOnly`. Uses a two-phase
-///   approach: Phase 1 applies compensated size + position to move the window to the target
-///   monitor, Phase 2 re-applies the exact target size after the DPI transition to eliminate
-///   rounding errors from fractional scale factors (e.g. 1.5×).
-/// - **macOS / Linux X11** (different scales): Both position and size are affected by winit's scale
-///   conversion → `LowerToHigher` (ratio < 1) or `HigherToLower` (ratio > 1, two-phase to avoid
-///   size clamping from macOS).
-pub fn determine_scale_strategy(starting_scale: f64, target_scale: f64) -> MonitorScaleStrategy {
-    if !cfg!(feature = "workaround-winit-4440") {
-        return MonitorScaleStrategy::ApplyUnchanged;
-    }
-
-    if cfg!(target_os = "linux") && crate::systems::is_wayland() {
-        return MonitorScaleStrategy::ApplyUnchanged;
-    }
-
-    if (starting_scale - target_scale).abs() < SCALE_FACTOR_EPSILON {
-        MonitorScaleStrategy::ApplyUnchanged
-    } else if cfg!(target_os = "windows") {
-        MonitorScaleStrategy::CompensateSizeOnly(WindowRestoreState::NeedInitialMove)
-    } else if starting_scale < target_scale {
-        MonitorScaleStrategy::LowerToHigher
-    } else {
-        MonitorScaleStrategy::HigherToLower(WindowRestoreState::NeedInitialMove)
     }
 }

@@ -21,6 +21,7 @@ use bevy::winit::WINIT_WINDOWS;
 use super::state;
 use super::types::RestoreWindowConfig;
 use super::types::WindowState;
+use crate::Platform;
 use crate::WindowKey;
 use crate::monitors::CurrentMonitor;
 use crate::monitors::MonitorInfo;
@@ -74,9 +75,8 @@ pub fn init_winit_info(
                 .unwrap_or(IVec2::ZERO);
 
             debug!(
-                "[init_winit_info] outer_position={:?} is_wayland={}",
-                pos,
-                is_wayland()
+                "[init_winit_info] outer_position={pos:?} platform={:?}",
+                Platform::detect()
             );
 
             // Use winit's current_monitor() as the primary source for starting monitor.
@@ -131,6 +131,7 @@ pub fn load_target_position(
     monitors: Res<Monitors>,
     winit_info: Res<WinitInfo>,
     mut config: ResMut<RestoreWindowConfig>,
+    platform: Res<Platform>,
 ) {
     // Load all states from the file into `loaded_states` as a startup snapshot.
     // This must happen before any managed window observers fire so they can check
@@ -181,6 +182,7 @@ pub fn load_target_position(
         fallback_position,
         winit_info.decoration(),
         starting_scale,
+        &platform,
     );
 
     debug!(
@@ -219,7 +221,7 @@ pub fn load_target_position(
     // For fullscreen modes, skip frame compensation entirely — the window will cover the whole
     // screen so frame extents are irrelevant, and delaying restore_windows by extra frames
     // gives the compositor time to revert our PreStartup position change.
-    if is_fullscreen || !needs_x11_frame_compensation() {
+    if is_fullscreen || !platform.needs_frame_compensation() {
         commands.entity(entity).insert(X11FrameCompensated);
     }
 }
@@ -237,8 +239,9 @@ pub fn load_target_position(
 pub fn move_to_target_monitor(
     mut window: Single<&mut Window, With<PrimaryWindow>>,
     targets: Query<&TargetPosition, With<PrimaryWindow>>,
+    platform: Res<Platform>,
 ) {
-    if is_wayland() {
+    if platform.is_wayland() {
         return;
     }
 
@@ -648,6 +651,7 @@ pub fn restore_windows(
     mut scale_changed_messages: MessageReader<WindowScaleFactorChanged>,
     mut windows: Query<(Entity, &mut TargetPosition, &mut Window), With<X11FrameCompensated>>,
     _non_send: NonSendMarker,
+    platform: Res<Platform>,
 ) {
     let scale_changed = scale_changed_messages.read().last().is_some();
 
@@ -677,13 +681,13 @@ pub fn restore_windows(
         // `starting_scale` was computed from the primary window's current monitor,
         // but Windows OS places new windows on the OS primary display (which may differ).
         // Detect this and recalculate the scale strategy with the actual creation scale.
-        if cfg!(target_os = "windows") {
+        if platform.needs_managed_scale_fixup() {
             let actual_scale = f64::from(window.resolution.base_scale_factor());
             if (actual_scale - target.starting_scale).abs() > SCALE_FACTOR_EPSILON {
                 let old_strategy = target.monitor_scale_strategy;
                 target.starting_scale = actual_scale;
                 target.monitor_scale_strategy =
-                    restore_plan::determine_scale_strategy(actual_scale, target.target_scale);
+                    platform.scale_strategy(actual_scale, target.target_scale);
                 debug!(
                     "[restore_windows] Corrected starting_scale for entity {entity:?}: \
                      strategy: {old_strategy:?} -> {:?} (actual_scale={actual_scale:.2})",
@@ -769,7 +773,7 @@ pub fn restore_windows(
         }
 
         if matches!(
-            try_apply_restore(&target, &mut window),
+            try_apply_restore(&target, &mut window, &platform),
             RestoreStatus::Complete
         ) {
             // Restore applied — start settle timer to wait for compositor/winit to
@@ -807,6 +811,7 @@ pub fn check_restore_settling(
     >,
     primary_q: Query<(), With<PrimaryWindow>>,
     managed_q: Query<&crate::ManagedWindow>,
+    platform: Res<Platform>,
 ) {
     for (entity, mut target, window, current_monitor) in &mut windows {
         if target.settle_state.is_none() {
@@ -816,9 +821,14 @@ pub fn check_restore_settling(
         // Read target fields before borrowing settle_state mutably
         let target_mode = target.mode.to_window_mode(target.target_monitor_index);
         let target_size = target.size();
-        let target_position = if is_wayland() { None } else { target.position };
         let target_monitor = target.target_monitor_index;
         let expected_scale = target.target_scale;
+
+        let target_position = if platform.position_available() {
+            target.position
+        } else {
+            None
+        };
 
         let key = if primary_q.get(entity).is_ok() {
             WindowKey::Primary
@@ -828,13 +838,13 @@ pub fn check_restore_settling(
             WindowKey::Primary
         };
 
-        let actual_position = if is_wayland() {
-            None
-        } else {
+        let actual_position = if platform.position_available() {
             match window.position {
                 bevy::window::WindowPosition::At(p) => Some(IVec2::new(p.x, p.y)),
                 _ => None,
             }
+        } else {
+            None
         };
         let actual_size = UVec2::new(
             window.resolution.physical_width(),
@@ -882,10 +892,7 @@ pub fn check_restore_settling(
 
         let pos_match = target_position == actual_position;
         let size_match = target_size == actual_size;
-        let mode_match = target_mode == actual_mode
-            || (is_wayland()
-                && target_mode == WindowMode::Fullscreen
-                && actual_mode == WindowMode::BorderlessFullscreen);
+        let mode_match = platform.modes_match(target_mode, actual_mode);
         let monitor_match = target_monitor == actual_monitor;
         let all_match = pos_match && size_match && mode_match && monitor_match;
 
@@ -953,14 +960,6 @@ enum RestoreStatus {
     Waiting,
 }
 
-/// Run condition: returns true if running on Wayland.
-pub fn is_wayland() -> bool {
-    cfg!(target_os = "linux")
-        && std::env::var("WAYLAND_DISPLAY")
-            .map(|v| !v.is_empty())
-            .unwrap_or(false)
-}
-
 /// Get window position, using winit's `outer_position` on Linux with W5 workaround.
 fn get_window_position(entity: Entity, window: &Window) -> Option<IVec2> {
     #[cfg(all(target_os = "linux", feature = "workaround-winit-4443"))]
@@ -980,34 +979,6 @@ fn get_window_position(entity: Entity, window: &Window) -> Option<IVec2> {
             bevy::window::WindowPosition::At(p) => Some(p),
             _ => None,
         }
-    }
-}
-
-/// Whether the primary window should be hidden on startup.
-///
-/// On Linux X11 with frame extent compensation, the window must stay visible
-/// so `_NET_FRAME_EXTENTS` can be queried. On all other platforms, hide it
-/// to prevent the flash at the default position.
-pub fn should_hide_on_startup() -> bool {
-    #[cfg(all(target_os = "linux", feature = "workaround-winit-4445"))]
-    {
-        is_wayland()
-    }
-    #[cfg(not(all(target_os = "linux", feature = "workaround-winit-4445")))]
-    {
-        true
-    }
-}
-
-/// Whether X11 frame compensation is needed on this platform.
-pub fn needs_x11_frame_compensation() -> bool {
-    cfg!(all(target_os = "linux", feature = "workaround-winit-4445")) && !is_wayland()
-}
-
-/// Insert `X11FrameCompensated` token for platforms that don't need compensation.
-pub fn insert_x11_frame_token(commands: &mut Commands, entity: Entity) {
-    if !needs_x11_frame_compensation() {
-        commands.entity(entity).insert(X11FrameCompensated);
     }
 }
 
@@ -1135,12 +1106,14 @@ fn compute_effective_mode(
 }
 
 /// Apply fullscreen mode, handling Wayland limitations.
-fn apply_fullscreen_restore(target: &TargetPosition, window: &mut Window) {
+fn apply_fullscreen_restore(target: &TargetPosition, window: &mut Window, platform: &Platform) {
     let monitor_index = target.target_monitor_index;
 
-    // On Wayland, exclusive fullscreen is ignored by winit, so we restore it as
+    // On Wayland, exclusive fullscreen is not supported by winit, so restore as
     // borderless fullscreen instead.
-    let window_mode = if is_wayland() && matches!(target.mode, SavedWindowMode::Fullscreen { .. }) {
+    let window_mode = if platform.exclusive_fullscreen_fallback()
+        && matches!(target.mode, SavedWindowMode::Fullscreen { .. })
+    {
         warn!(
             "Exclusive fullscreen is not supported on Wayland, restoring as BorderlessFullscreen"
         );
@@ -1200,7 +1173,11 @@ fn apply_window_geometry(
 }
 
 /// Try to apply a pending window restore.
-fn try_apply_restore(target: &TargetPosition, window: &mut Window) -> RestoreStatus {
+fn try_apply_restore(
+    target: &TargetPosition,
+    window: &mut Window,
+    platform: &Platform,
+) -> RestoreStatus {
     // Handle fullscreen modes - use saved monitor index from TargetPosition
     if target.mode.is_fullscreen() {
         debug!(
@@ -1212,7 +1189,7 @@ fn try_apply_restore(target: &TargetPosition, window: &mut Window) -> RestoreSta
             window.mode,
             window.position,
         );
-        apply_fullscreen_restore(target, window);
+        apply_fullscreen_restore(target, window, platform);
         window.visible = true;
         return RestoreStatus::Complete;
     }

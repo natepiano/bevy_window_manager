@@ -35,6 +35,7 @@
 #[cfg(target_os = "macos")]
 mod macos_tabbing_fix;
 mod monitors;
+mod platform;
 mod restore_plan;
 mod state;
 mod state_format;
@@ -54,6 +55,7 @@ pub use monitors::MonitorInfo;
 use monitors::MonitorPlugin;
 pub use monitors::Monitors;
 use monitors::init_monitors;
+pub use platform::Platform;
 pub use state_format::WindowKey;
 pub use types::ManagedWindow;
 pub use types::ManagedWindowPersistence;
@@ -305,6 +307,7 @@ fn on_managed_window_load(
     config: Res<RestoreWindowConfig>,
     mut windows: Query<&mut Window>,
     primary_monitor: Query<&CurrentMonitor, With<PrimaryWindow>>,
+    platform: Res<Platform>,
 ) {
     let entity = add.entity;
     let Ok(managed_window) = managed.get(entity) else {
@@ -315,7 +318,7 @@ fn on_managed_window_load(
     // Hide window during restore
     if let Ok(mut window) = windows.get_mut(entity) {
         // On Linux X11 with frame extent compensation, don't hide
-        if systems::should_hide_on_startup() {
+        if platform.should_hide_on_startup() {
             window.visible = false;
         }
     }
@@ -368,6 +371,7 @@ fn on_managed_window_load(
         &winit_info,
         &mut commands,
         primary_scale,
+        &platform,
     );
 }
 
@@ -386,6 +390,7 @@ fn restore_managed_window(
     winit_info: &types::WinitInfo,
     commands: &mut Commands,
     primary_scale: f64,
+    platform: &Platform,
 ) {
     let (target_info, fallback_position, used_fallback) =
         restore_plan::resolve_target_monitor_and_position(
@@ -413,6 +418,7 @@ fn restore_managed_window(
         fallback_position,
         decoration,
         primary_scale,
+        platform,
     );
 
     debug!(
@@ -437,10 +443,8 @@ fn restore_managed_window(
     // Insert `X11FrameCompensated` for platforms that don't need compensation.
     // For fullscreen modes, skip frame compensation — frame extents are irrelevant
     // and delaying restore gives the compositor time to revert position changes.
-    if is_fullscreen || !systems::needs_x11_frame_compensation() {
+    if is_fullscreen || !platform.needs_frame_compensation() {
         commands.entity(entity).insert(types::X11FrameCompensated);
-    } else {
-        systems::insert_x11_frame_token(commands, entity);
     }
 }
 
@@ -454,6 +458,9 @@ fn no_restoring_windows(q: Query<(), With<TargetPosition>>) -> bool { q.is_empty
 /// subsequent positions saves - which we dont' want to do until AFTER we've done
 /// the initial restore.
 fn build_plugin(app: &mut App, path: PathBuf, persistence: ManagedWindowPersistence) {
+    let platform = Platform::detect();
+    app.insert_resource(platform);
+
     // Hide primary window to prevent flash at default position.
     // Two cases to handle:
     // 1. Window already exists (WindowManagerPlugin added after DefaultPlugins) - hide immediately
@@ -462,7 +469,7 @@ fn build_plugin(app: &mut App, path: PathBuf, persistence: ManagedWindowPersiste
     // EXCEPTION: On Linux X11 with frame extent compensation (workaround-winit-4445),
     // we cannot hide the window because the compensation system needs to query
     // _NET_FRAME_EXTENTS, which requires the window to be visible/mapped.
-    let should_hide = systems::should_hide_on_startup();
+    let should_hide = platform.should_hide_on_startup();
 
     if should_hide {
         let mut query = app
@@ -525,7 +532,7 @@ fn build_plugin(app: &mut App, path: PathBuf, persistence: ManagedWindowPersiste
         Update,
         x11_frame_extents::compensate_target_position
             .run_if(has_restoring_windows)
-            .run_if(not(systems::is_wayland)),
+            .run_if(|p: Res<Platform>| p.is_x11()),
     );
 
     // Restore windows - processes all entities with `TargetPosition` + `X11FrameCompensated`
