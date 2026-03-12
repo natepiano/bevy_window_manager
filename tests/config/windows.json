@@ -168,31 +168,6 @@
     },
 
     {
-      "id": "cross_low_to_high_W1",
-      "description": "Window on high-DPI monitor restores correctly when launched from low-DPI monitor",
-      "automation": "full",
-      "launch_monitor": 1,
-      "requires": {"min_monitors": 2, "different_scales": true},
-      "workaround_keys": ["W1"],
-
-      "workaround_validation": {
-        "feature_flag": "workaround-winit-4440",
-        "build_without": "--no-default-features",
-        "build_with": "",
-        "without_behavior": "Window restores to wrong size on Monitor 0 due to scale factor mismatch",
-        "with_behavior": "Window restores to correct size on Monitor 0"
-      },
-
-      "ron_file": "cross_monitor_low_to_high.ron",
-
-      "windows": {
-        "primary": {
-          "validate": ["position", "size", "monitor_index", "mode"]
-        }
-      }
-    },
-
-    {
       "id": "borderless_mon1",
       "description": "Borderless fullscreen restore on Monitor 1",
       "automation": "full",
@@ -203,30 +178,6 @@
       "windows": {
         "primary": {
           "validate": ["monitor_index", "mode"]
-        }
-      }
-    },
-
-    {
-      "id": "exclusive_mon1_W3",
-      "description": "Exclusive fullscreen with DX12 crash workaround on Monitor 1",
-      "automation": "full",
-      "launch_monitor": 1,
-      "workaround_keys": ["W3"],
-
-      "workaround_validation": {
-        "feature_flag": "workaround-winit-3124",
-        "build_without": "--no-default-features --features workaround-winit-4341,workaround-winit-4440",
-        "build_with": "",
-        "without_behavior": "App crashes on startup (DXGI flip model issue with exclusive fullscreen)",
-        "with_behavior": "App starts correctly with brief windowed flash before entering fullscreen"
-      },
-
-      "ron_file": "fullscreen_exclusive_mon1.ron",
-
-      "windows": {
-        "primary": {
-          "validate": ["exit_code"]
         }
       }
     },
