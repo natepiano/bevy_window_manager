@@ -229,10 +229,10 @@ pub fn load_target_position(
 
 /// Move the primary window to the target monitor for fullscreen restore on X11.
 ///
-/// On X11, the compositor (KWin via XWayland) reverts fullscreen if the position
+/// On X11, the compositor (`KWin` via `XWayland`) reverts fullscreen if the position
 /// and mode changes arrive in the same `changed_windows` pass. By setting position
-/// in a separate PreStartup system (direct mutation, not commands.queue), the change
-/// is processed by bevy_winit before the Update system applies fullscreen mode.
+/// in a separate `PreStartup` system (direct mutation, not commands.queue), the change
+/// is processed by `bevy_winit` before the `Update` system applies fullscreen mode.
 ///
 /// Skipped on Wayland (no position) and non-fullscreen modes.
 /// For managed windows, the equivalent happens in `on_managed_window_load`.
@@ -1040,12 +1040,12 @@ fn get_window_position(entity: Entity, window: &Window) -> Option<IVec2> {
     #[cfg(all(target_os = "linux", feature = "workaround-winit-4443"))]
     {
         let _ = window;
-        return WINIT_WINDOWS.with(|ww| {
+        WINIT_WINDOWS.with(|ww| {
             let ww = ww.borrow();
             let winit_win = ww.get_window(entity)?;
             let outer_pos = winit_win.outer_position().ok()?;
             Some(IVec2::new(outer_pos.x, outer_pos.y))
-        });
+        })
     }
     #[cfg(not(all(target_os = "linux", feature = "workaround-winit-4443")))]
     {
