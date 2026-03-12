@@ -111,6 +111,7 @@ fn main() {
         .init_resource::<WindowCounter>()
         .init_resource::<RestoredStates>()
         .init_resource::<MismatchStates>()
+        .init_resource::<WindowsSettledCount>()
         .add_systems(Startup, setup)
         .add_systems(
             Update,
@@ -194,6 +195,14 @@ struct WindowRestoreMismatchReceived {
     actual_size:      UVec2,
     expected_mode:    WindowMode,
     actual_mode:      WindowMode,
+}
+
+/// Count of windows that have completed settling (restored or mismatched).
+/// Queryable via BRP so the test script can wait for all windows to settle.
+#[derive(Resource, Debug, Default, Reflect)]
+#[reflect(Resource)]
+struct WindowsSettledCount {
+    count: usize,
 }
 
 /// Cached mismatch state per window for display.
@@ -1353,6 +1362,7 @@ fn on_window_restored(
     trigger: On<WindowRestored>,
     mut commands: Commands,
     mut restored_states: ResMut<RestoredStates>,
+    mut settled_count: ResMut<WindowsSettledCount>,
 ) {
     let event = trigger.event();
     info!(
@@ -1377,6 +1387,7 @@ fn on_window_restored(
         mode:          event.mode,
         monitor_index: event.monitor_index,
     });
+    settled_count.count += 1;
 }
 
 /// Observer that logs when `WindowRestoreMismatch` event is received.
@@ -1385,6 +1396,7 @@ fn on_window_restore_mismatch(
     mut commands: Commands,
     mut restored_states: ResMut<RestoredStates>,
     mut mismatch_states: ResMut<MismatchStates>,
+    mut settled_count: ResMut<WindowsSettledCount>,
 ) {
     let event = trigger.event();
     warn!(
@@ -1435,4 +1447,5 @@ fn on_window_restore_mismatch(
         expected_mode:    event.expected_mode,
         actual_mode:      event.actual_mode,
     });
+    settled_count.count += 1;
 }

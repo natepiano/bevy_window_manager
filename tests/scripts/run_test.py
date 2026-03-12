@@ -68,6 +68,7 @@ COMP_MONITOR: Final = "bevy_window::monitor::Monitor"
 COMP_PERSISTENCE: Final = "bevy_window_manager::types::ManagedWindowPersistence"
 RES_RESTORED: Final = "restore_window::WindowRestoredReceived"
 RES_MISMATCH: Final = "restore_window::WindowRestoreMismatchReceived"
+RES_SETTLED_COUNT: Final = "restore_window::WindowsSettledCount"
 
 # JSON dict type alias for BRP responses (deeply nested, untyped JSON)
 type JsonDict = dict[str, object]
@@ -704,23 +705,44 @@ def resolve_primary_entity() -> JsonDict | None:
     return None
 
 
-def spawn_and_poll_managed(spawn_event: str) -> list[JsonDict]:
+def wait_for_all_windows_settled(expected_count: int) -> None:
+    """Poll until WindowsSettledCount reaches expected_count."""
+    for _ in range(MAX_POLLS):
+        try:
+            result = brp.call("world.get_resources", {"resource": RES_SETTLED_COUNT})
+            value = json_get(result, "result", "value")
+            if isinstance(value, dict):
+                count = value.get("count", 0)
+                if isinstance(count, int) and count >= expected_count:
+                    return
+        except (URLError, OSError):
+            pass
+        time.sleep(POLL_INTERVAL)
+    die(f"WindowsSettledCount did not reach {expected_count} within timeout")
+
+
+def spawn_and_poll_managed(
+    spawn_event: str,
+    expected_total_windows: int,
+) -> list[JsonDict]:
     _ = brp.call("world.trigger_event", {"event": spawn_event, "value": None})
 
+    # Wait for all windows (primary + managed) to settle
+    wait_for_all_windows_settled(expected_total_windows)
+
+    # Now query managed entities
     for _ in range(20):
-        time.sleep(0.5)
+        time.sleep(0.2)
         try:
             result = brp.query_managed()
             raw_entities = json_list(result.get("result"))
             entities = [json_dict(e) for e in raw_entities]
-            for ent in entities:
-                pos = extract_from_entity(ent, COMP_WINDOW, "position")
-                if pos != "Automatic":
-                    return entities
+            if entities:
+                return entities
         except (URLError, OSError):
             pass
 
-    die("Managed window did not become ready after polling")
+    die("Managed window not found after settling")
 
 
 def get_managed_by_name(entities: list[JsonDict], window_name: str) -> JsonDict | None:
@@ -746,6 +768,7 @@ def validate_all_windows(
 ) -> None:
     triggered_events: set[str] = set()
     managed_entities: list[JsonDict] = []
+    total_window_count = len(windows)
 
     for wkey, wconfig in windows.items():
         validate_fields = wconfig.get("validate", [])
@@ -758,7 +781,10 @@ def validate_all_windows(
             entity = resolve_primary_entity()
         else:
             if spawn_event and spawn_event not in triggered_events:
-                managed_entities = spawn_and_poll_managed(spawn_event)
+                managed_entities = spawn_and_poll_managed(
+                    spawn_event,
+                    expected_total_windows=total_window_count,
+                )
                 triggered_events.add(spawn_event)
 
             if managed_entities:
