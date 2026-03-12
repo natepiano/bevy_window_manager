@@ -72,6 +72,7 @@ pub(crate) fn compute_target_position(
         } else {
             None
         },
+        settle_state: None,
     }
 }
 

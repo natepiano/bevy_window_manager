@@ -30,8 +30,11 @@ use crate::types::FullscreenRestoreState;
 use crate::types::MonitorScaleStrategy;
 use crate::types::SCALE_FACTOR_EPSILON;
 use crate::types::SavedWindowMode;
+use crate::types::SettleSnapshot;
+use crate::types::SettleState;
 use crate::types::TargetPosition;
 use crate::types::WindowDecoration;
+use crate::types::WindowRestoreMismatch;
 use crate::types::WindowRestoreState;
 use crate::types::WindowRestored;
 use crate::types::WinitInfo;
@@ -642,12 +645,8 @@ pub fn save_window_state(
 /// which runs between frames.
 #[allow(clippy::too_many_arguments)]
 pub fn restore_windows(
-    mut commands: Commands,
     mut scale_changed_messages: MessageReader<WindowScaleFactorChanged>,
     mut windows: Query<(Entity, &mut TargetPosition, &mut Window), With<X11FrameCompensated>>,
-    primary_q: Query<(), With<PrimaryWindow>>,
-    managed_q: Query<&crate::ManagedWindow>,
-    config: Res<RestoreWindowConfig>,
     _non_send: NonSendMarker,
 ) {
     let scale_changed = scale_changed_messages.read().last().is_some();
@@ -663,6 +662,11 @@ pub fn restore_windows(
         // `create_windows` runs, `create_windows` will call
         // `set_scale_factor_and_apply_to_physical_size(scale)` which multiplies our
         // already-correct physical size by the scale factor (doubling it on 2x displays).
+        // Already settling — skip restore logic, handled by check_restore_settling
+        if target.settle_state.is_some() {
+            continue;
+        }
+
         let winit_window_exists = WINIT_WINDOWS.with(|ww| ww.borrow().get_window(entity).is_some());
         if !winit_window_exists {
             debug!("[restore_windows] Skipping entity {entity:?}: winit window not yet created");
@@ -768,58 +772,173 @@ pub fn restore_windows(
             try_apply_restore(&target, &mut window),
             RestoreStatus::Complete
         ) {
-            // Determine window identity
-            let key = if primary_q.get(entity).is_ok() {
-                WindowKey::Primary
-            } else if let Ok(managed) = managed_q.get(entity) {
-                WindowKey::Managed(managed.window_name.clone())
-            } else {
-                WindowKey::Primary // fallback, shouldn't happen
-            };
-
-            // Compare intended vs actual and warn on mismatch
-            if let Some(loaded) = config.loaded_states.get(&key) {
-                let actual_pos = match window.position {
-                    bevy::window::WindowPosition::At(p) => Some(IVec2::new(p.x, p.y)),
-                    _ => None,
-                };
-                let actual_phys_w = window.resolution.physical_width();
-                let actual_phys_h = window.resolution.physical_height();
-                let target_pos = target.position;
-                let target_w = target.width;
-                let target_h = target.height;
-
-                let pos_mismatch = target_pos != actual_pos;
-                let size_mismatch = target_w != actual_phys_w || target_h != actual_phys_h;
-
-                if pos_mismatch || size_mismatch {
-                    warn!(
-                        "[restore_windows] [{key}] RESTORE MISMATCH: \
-                         file=({:?}, {}x{}) actual=({:?}, {}x{})",
-                        loaded.position,
-                        loaded.width,
-                        loaded.height,
-                        actual_pos.map(|p| (p.x, p.y)),
-                        actual_phys_w,
-                        actual_phys_h,
-                    );
-                }
+            // Restore applied — start settle timer to wait for compositor/winit to
+            // deliver matching state before declaring success or mismatch.
+            if target.settle_state.is_none() {
+                info!(
+                    "[restore_windows] Restore applied, starting settle (200ms stability / 1s timeout)"
+                );
+                target.settle_state = Some(SettleState::new());
             }
+        }
+    }
+}
 
-            // Fire `WindowRestored` event
-            let target_mode = target.mode.to_window_mode(target.target_monitor_index);
-            let target_size = target.size();
-            let target_position = target.position;
-            let target_monitor = target.target_monitor_index;
+/// Check settling windows each frame using a two-timer approach.
+///
+/// - **Stability timer** (200ms): resets whenever any compared value changes. If values stay stable
+///   for 200ms, fires `WindowRestored`.
+/// - **Total timeout** (1s): hard deadline. Fires `WindowRestoreMismatch` if stability is never
+///   reached.
+///
+/// Runs while `TargetPosition` entities exist (same gate as `restore_windows`).
+/// Only processes entities that have a `settle_state` set.
+pub fn check_restore_settling(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut windows: Query<
+        (
+            Entity,
+            &mut TargetPosition,
+            &Window,
+            Option<&CurrentMonitor>,
+        ),
+        With<X11FrameCompensated>,
+    >,
+    primary_q: Query<(), With<PrimaryWindow>>,
+    managed_q: Query<&crate::ManagedWindow>,
+) {
+    for (entity, mut target, window, current_monitor) in &mut windows {
+        if target.settle_state.is_none() {
+            continue;
+        }
+
+        // Read target fields before borrowing settle_state mutably
+        let target_mode = target.mode.to_window_mode(target.target_monitor_index);
+        let target_size = target.size();
+        let target_position = if is_wayland() { None } else { target.position };
+        let target_monitor = target.target_monitor_index;
+        let expected_scale = target.target_scale;
+
+        let key = if primary_q.get(entity).is_ok() {
+            WindowKey::Primary
+        } else if let Ok(managed) = managed_q.get(entity) {
+            WindowKey::Managed(managed.window_name.clone())
+        } else {
+            WindowKey::Primary
+        };
+
+        let actual_position = if is_wayland() {
+            None
+        } else {
+            match window.position {
+                bevy::window::WindowPosition::At(p) => Some(IVec2::new(p.x, p.y)),
+                _ => None,
+            }
+        };
+        let actual_size = UVec2::new(
+            window.resolution.physical_width(),
+            window.resolution.physical_height(),
+        );
+        let actual_mode = window.mode;
+        let actual_monitor = current_monitor.map_or(0, |cm| cm.monitor.index);
+        let actual_scale = f64::from(window.resolution.scale_factor());
+
+        // Build snapshot for change detection (excludes scale — it's informational)
+        let current_snapshot = SettleSnapshot {
+            position: actual_position,
+            size:     actual_size,
+            mode:     actual_mode,
+            monitor:  actual_monitor,
+        };
+
+        // Now borrow settle_state mutably for timer ticking and change detection
+        let settle = target.settle_state.as_mut().expect("checked above");
+        settle.total_timeout.tick(time.delta());
+        settle.stability_timer.tick(time.delta());
+
+        let total_elapsed_ms = settle.total_timeout.elapsed_secs() * 1000.0;
+        let stability_elapsed_ms = settle.stability_timer.elapsed_secs() * 1000.0;
+        let total_timed_out = settle.total_timeout.is_finished();
+
+        // Detect change from last frame and reset stability timer if anything changed
+        let changed = settle.last_snapshot.as_ref() != Some(&current_snapshot);
+        if changed {
+            if settle.last_snapshot.is_some() {
+                debug!(
+                    "[check_restore_settling] [{key}] {total_elapsed_ms:.0}ms: values changed, \
+                     resetting stability timer"
+                );
+            }
+            settle.stability_timer.reset();
+            settle.last_snapshot = Some(current_snapshot);
+            // Don't check stability this frame — we just reset
+            if !total_timed_out {
+                continue;
+            }
+        }
+
+        let stable = settle.stability_timer.is_finished();
+
+        let pos_match = target_position == actual_position;
+        let size_match = target_size == actual_size;
+        let mode_match = target_mode == actual_mode
+            || (is_wayland()
+                && target_mode == WindowMode::Fullscreen
+                && actual_mode == WindowMode::BorderlessFullscreen);
+        let monitor_match = target_monitor == actual_monitor;
+        let all_match = pos_match && size_match && mode_match && monitor_match;
+
+        debug!(
+            "[check_restore_settling] [{key}] {total_elapsed_ms:.0}ms (stable: {stability_elapsed_ms:.0}ms): \
+             pos={pos_match} size={size_match} mode={mode_match} monitor={monitor_match} | \
+             size: {target_size} vs {actual_size}, \
+             mode: {target_mode:?} vs {actual_mode:?}, \
+             monitor: {target_monitor} vs {actual_monitor}, \
+             scale: {expected_scale} vs {actual_scale}"
+        );
+
+        if stable && all_match {
+            info!(
+                "[check_restore_settling] [{key}] Settled after {total_elapsed_ms:.0}ms \
+                 (stable for {stability_elapsed_ms:.0}ms)"
+            );
             commands.entity(entity).trigger(|entity| WindowRestored {
                 entity,
-                window_id: key.clone(),
+                window_id: key,
                 position: target_position,
                 size: target_size,
                 mode: target_mode,
                 monitor_index: target_monitor,
             });
-
+            commands.entity(entity).remove::<TargetPosition>();
+            commands.entity(entity).remove::<X11FrameCompensated>();
+        } else if total_timed_out {
+            warn!(
+                "[check_restore_settling] [{key}] Settle timeout after {total_elapsed_ms:.0}ms — \
+                 mismatch remains: \
+                 position: {target_position:?} vs {actual_position:?}, \
+                 size: {target_size} vs {actual_size}, \
+                 mode: {target_mode:?} vs {actual_mode:?}, \
+                 monitor: {target_monitor} vs {actual_monitor}, \
+                 scale: {expected_scale} vs {actual_scale}"
+            );
+            commands
+                .entity(entity)
+                .trigger(|entity| WindowRestoreMismatch {
+                    entity,
+                    window_id: key,
+                    expected_position: target_position,
+                    actual_position,
+                    expected_size: target_size,
+                    actual_size,
+                    expected_mode: target_mode,
+                    actual_mode,
+                    expected_monitor: target_monitor,
+                    actual_monitor,
+                    expected_scale,
+                    actual_scale,
+                });
             commands.entity(entity).remove::<TargetPosition>();
             commands.entity(entity).remove::<X11FrameCompensated>();
         }

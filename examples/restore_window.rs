@@ -43,6 +43,7 @@ use bevy_window_manager::ManagedWindow;
 use bevy_window_manager::ManagedWindowPersistence;
 use bevy_window_manager::Monitors;
 use bevy_window_manager::WindowManagerPlugin;
+use bevy_window_manager::WindowRestoreMismatch;
 use bevy_window_manager::WindowRestored;
 
 /// When set, keyboard input is suppressed (used by the test runner).
@@ -96,6 +97,7 @@ fn main() {
         .add_plugins(BrpExtrasPlugin::default())
         .add_observer(on_spawn_managed_window)
         .add_observer(on_window_restored)
+        .add_observer(on_window_restore_mismatch)
         .add_observer(on_secondary_window_added)
         .add_observer(on_secondary_window_removed)
         .add_observer(on_set_borderless_fullscreen)
@@ -108,6 +110,7 @@ fn main() {
         .init_resource::<SelectedVideoModes>()
         .init_resource::<WindowCounter>()
         .init_resource::<RestoredStates>()
+        .init_resource::<MismatchStates>()
         .add_systems(Startup, setup)
         .add_systems(
             Update,
@@ -180,6 +183,40 @@ struct WindowRestoredReceived {
     monitor_index: usize,
 }
 
+/// Resource inserted when `WindowRestoreMismatch` event is received.
+/// Queryable via BRP to verify the event fired.
+#[derive(Resource, Debug, Clone, Reflect)]
+#[reflect(Resource)]
+struct WindowRestoreMismatchReceived {
+    expected_monitor: usize,
+    actual_monitor:   usize,
+    expected_size:    UVec2,
+    actual_size:      UVec2,
+    expected_mode:    WindowMode,
+    actual_mode:      WindowMode,
+}
+
+/// Cached mismatch state per window for display.
+#[derive(Clone)]
+struct CachedMismatchState {
+    expected_position: Option<IVec2>,
+    actual_position:   Option<IVec2>,
+    expected_size:     UVec2,
+    actual_size:       UVec2,
+    expected_mode:     WindowMode,
+    actual_mode:       WindowMode,
+    expected_monitor:  usize,
+    actual_monitor:    usize,
+    expected_scale:    f64,
+    actual_scale:      f64,
+}
+
+/// Per-entity mismatch states for display.
+#[derive(Resource, Default)]
+struct MismatchStates {
+    states: HashMap<Entity, CachedMismatchState>,
+}
+
 /// Cached restored state per window, populated from `WindowRestored` events.
 /// Used for the "File" column comparison display.
 #[derive(Resource, Default)]
@@ -203,6 +240,7 @@ const FONT_SIZE: f32 = 14.0;
 const SECONDARY_WINDOW_WIDTH: u32 = 600;
 const SECONDARY_WINDOW_HEIGHT: u32 = 400;
 const MISMATCH_COLOR: Color = Color::linear_rgb(1.0, 0.3, 0.3);
+const MISMATCH_WARN_COLOR: Color = Color::linear_rgb(1.0, 0.7, 0.2);
 const DEFAULT_COLOR: Color = Color::WHITE;
 const LABEL_WIDTH: usize = 18;
 
@@ -310,6 +348,7 @@ fn on_secondary_window_removed(
 fn build_comparison_spans(
     cb: &mut ChildSpawnerCommands,
     restored_state: Option<&CachedRestoredState>,
+    mismatch_state: Option<&CachedMismatchState>,
     window: &Window,
     monitor: &CurrentMonitor,
     font: &TextFont,
@@ -333,7 +372,7 @@ fn build_comparison_spans(
     let current_mode = format!("{effective_mode:?}");
 
     if let Some(state) = restored_state {
-        // Restored values from `WindowRestored` event
+        // Restored values from `WindowRestored` or `WindowRestoreMismatch` event
         let file_pos = state
             .position
             .map_or_else(|| "None".to_string(), |p| format!("({}, {})", p.x, p.y));
@@ -354,24 +393,85 @@ fn build_comparison_spans(
             + 2;
         let col1_width = col1_width.max(16);
 
-        let header = format!(
-            "{:LABEL_WIDTH$}{:<col1_width$}{}\n",
-            "", "Restored", "Current"
-        );
-        add_span(cb, font, &header, DEFAULT_COLOR);
+        // Mismatch columns (expected/actual from the event)
+        let mm = mismatch_state.map(|m| {
+            let exp_pos = m
+                .expected_position
+                .map_or_else(|| "None".to_string(), |p| format!("({}, {})", p.x, p.y));
+            let act_pos = m
+                .actual_position
+                .map_or_else(|| "None".to_string(), |p| format!("({}, {})", p.x, p.y));
+            let exp_size = format!("{}x{}", m.expected_size.x, m.expected_size.y);
+            let act_size = format!("{}x{}", m.actual_size.x, m.actual_size.y);
+            let exp_monitor = format!("{}", m.expected_monitor);
+            let act_monitor = format!("{}", m.actual_monitor);
+            let exp_mode = format!("{:?}", m.expected_mode);
+            let act_mode = format!("{:?}", m.actual_mode);
+            (
+                exp_pos,
+                act_pos,
+                exp_size,
+                act_size,
+                exp_monitor,
+                act_monitor,
+                exp_mode,
+                act_mode,
+            )
+        });
+
+        if mm.is_some() {
+            let header = format!(
+                "{:LABEL_WIDTH$}{:<col1_width$}{:<col1_width$}{:<col1_width$}{}\n",
+                "", "Restored", "Current", "Expected", "Actual"
+            );
+            add_span(cb, font, &header, DEFAULT_COLOR);
+        } else {
+            let header = format!(
+                "{:LABEL_WIDTH$}{:<col1_width$}{}\n",
+                "", "Restored", "Current"
+            );
+            add_span(cb, font, &header, DEFAULT_COLOR);
+        }
 
         // Rows with mismatch highlighting
-        add_comparison_row(cb, font, "Position:", &file_pos, &current_pos, col1_width);
-        add_comparison_row(
-            cb,
-            font,
-            "Size (physical):",
-            &file_size_phys,
-            &current_size_phys,
-            col1_width,
-        );
+        if let Some((ref exp_pos, ref act_pos, ..)) = mm {
+            add_comparison_row_5(
+                cb,
+                font,
+                "Position:",
+                &file_pos,
+                &current_pos,
+                exp_pos,
+                act_pos,
+                col1_width,
+            );
+        } else {
+            add_comparison_row(cb, font, "Position:", &file_pos, &current_pos, col1_width);
+        }
 
-        // Logical size and scale — no file equivalent, show current only
+        if let Some((_, _, ref exp_size, ref act_size, ..)) = mm {
+            add_comparison_row_5(
+                cb,
+                font,
+                "Size (physical):",
+                &file_size_phys,
+                &current_size_phys,
+                exp_size,
+                act_size,
+                col1_width,
+            );
+        } else {
+            add_comparison_row(
+                cb,
+                font,
+                "Size (physical):",
+                &file_size_phys,
+                &current_size_phys,
+                col1_width,
+            );
+        }
+
+        // Logical size and scale
         add_span(
             cb,
             font,
@@ -381,25 +481,67 @@ fn build_comparison_spans(
             ),
             DEFAULT_COLOR,
         );
-        add_span(
-            cb,
-            font,
-            &format!(
-                "{:<LABEL_WIDTH$}{:<col1_width$}{current_scale}\n",
-                "Scale:", ""
-            ),
-            DEFAULT_COLOR,
-        );
+        if let Some(ref m) = mismatch_state {
+            let exp_scale = format!("{}", m.expected_scale);
+            let act_scale = format!("{}", m.actual_scale);
+            add_comparison_row_5(
+                cb,
+                font,
+                "Scale:",
+                "",
+                &current_scale,
+                &exp_scale,
+                &act_scale,
+                col1_width,
+            );
+        } else {
+            add_span(
+                cb,
+                font,
+                &format!(
+                    "{:<LABEL_WIDTH$}{:<col1_width$}{current_scale}\n",
+                    "Scale:", ""
+                ),
+                DEFAULT_COLOR,
+            );
+        }
 
-        add_comparison_row(
-            cb,
-            font,
-            "Monitor:",
-            &file_monitor,
-            &current_monitor,
-            col1_width,
-        );
-        add_comparison_row(cb, font, "Mode:", &file_mode, &current_mode, col1_width);
+        if let Some((.., ref exp_monitor, ref act_monitor, _, _)) = mm {
+            add_comparison_row_5(
+                cb,
+                font,
+                "Monitor:",
+                &file_monitor,
+                &current_monitor,
+                exp_monitor,
+                act_monitor,
+                col1_width,
+            );
+        } else {
+            add_comparison_row(
+                cb,
+                font,
+                "Monitor:",
+                &file_monitor,
+                &current_monitor,
+                col1_width,
+            );
+        }
+
+        if let Some((.., ref exp_mode, ref act_mode)) = mm {
+            add_comparison_row_5(
+                cb,
+                font,
+                "Mode:",
+                &file_mode,
+                &current_mode,
+                exp_mode,
+                act_mode,
+                col1_width,
+            );
+        } else {
+            add_comparison_row(cb, font, "Mode:", &file_mode, &current_mode, col1_width);
+        }
     } else {
         add_span(cb, font, "State: No restore data\n\n", MISMATCH_COLOR);
         add_span(
@@ -474,6 +616,54 @@ fn add_comparison_row(
     add_span(cb, font, &format!("{current_val}\n"), color);
 }
 
+/// Add a 5-column comparison row: label + restored + current + expected + actual.
+/// Expected/actual columns use warning color when they differ.
+fn add_comparison_row_5(
+    cb: &mut ChildSpawnerCommands,
+    font: &TextFont,
+    label: &str,
+    file_val: &str,
+    current_val: &str,
+    expected_val: &str,
+    actual_val: &str,
+    col_width: usize,
+) {
+    let current_color = if file_val == current_val {
+        DEFAULT_COLOR
+    } else {
+        MISMATCH_COLOR
+    };
+    let mismatch_color = if expected_val == actual_val {
+        DEFAULT_COLOR
+    } else {
+        MISMATCH_WARN_COLOR
+    };
+
+    // Label + restored value (always white)
+    add_span(
+        cb,
+        font,
+        &format!("{label:<LABEL_WIDTH$}{file_val:<col_width$}"),
+        DEFAULT_COLOR,
+    );
+    // Current value
+    add_span(
+        cb,
+        font,
+        &format!("{current_val:<col_width$}"),
+        current_color,
+    );
+    // Expected value (always white)
+    add_span(
+        cb,
+        font,
+        &format!("{expected_val:<col_width$}"),
+        DEFAULT_COLOR,
+    );
+    // Actual value (warning color if mismatch)
+    add_span(cb, font, &format!("{actual_val}\n"), mismatch_color);
+}
+
 /// Add a single `TextSpan` child.
 fn add_span(cb: &mut ChildSpawnerCommands, font: &TextFont, text: &str, color: Color) {
     cb.spawn((TextSpan(text.to_string()), font.clone(), TextColor(color)));
@@ -490,12 +680,14 @@ fn update_primary_display(
     persistence: Res<ManagedWindowPersistence>,
     managed_q: Query<(&Window, &ManagedWindow, Option<&CurrentMonitor>)>,
     restored_states: Res<RestoredStates>,
+    mismatch_states: Res<MismatchStates>,
     mut commands: Commands,
 ) {
     let display_entity = *primary_display;
     let (window_entity, window, monitor) = *window_query;
 
     let restored_state = restored_states.states.get(&window_entity);
+    let mismatch_state = mismatch_states.states.get(&window_entity);
 
     let (video_modes, refresh_rate) = get_video_modes_for_monitor(&bevy_monitors, monitor);
     let refresh_display = format_refresh_rate(window, refresh_rate);
@@ -517,7 +709,7 @@ fn update_primary_display(
         add_span(cb, &font, &format!("{monitor_row}\n\n"), DEFAULT_COLOR);
 
         // Comparison table
-        build_comparison_spans(cb, restored_state, window, monitor, &font);
+        build_comparison_spans(cb, restored_state, mismatch_state, window, monitor, &font);
 
         // Video modes
         add_span(
@@ -585,6 +777,7 @@ fn update_secondary_displays(
     bevy_monitors: Query<(Entity, &Monitor)>,
     mut selected: ResMut<SelectedVideoModes>,
     restored_states: Res<RestoredStates>,
+    mismatch_states: Res<MismatchStates>,
     mut commands: Commands,
 ) {
     for (display_entity, display) in &mut displays {
@@ -600,6 +793,7 @@ fn update_secondary_displays(
             .get(display.0)
             .map_or("unknown", |m| &m.window_name);
         let restored_state = restored_states.states.get(&display.0);
+        let mismatch_state = mismatch_states.states.get(&display.0);
 
         let (video_modes, refresh_rate) =
             get_video_modes_for_monitor(&bevy_monitors, &monitor_info);
@@ -627,7 +821,14 @@ fn update_secondary_displays(
             );
 
             // Comparison table
-            build_comparison_spans(cb, restored_state, window, &monitor_info, &font);
+            build_comparison_spans(
+                cb,
+                restored_state,
+                mismatch_state,
+                window,
+                &monitor_info,
+                &font,
+            );
 
             // Video modes
             add_span(
@@ -750,9 +951,9 @@ fn handle_window_mode_input(
     // `window.mode`, causing bevy's `changed_windows` to skip the mode change.
     //
     // Skip sync when:
-    // 1. Any fullscreen mode is set — the plugin or user intentionally set fullscreen,
-    //    but the compositor may not have processed it yet. Syncing back to `Windowed`
-    //    would cancel the pending fullscreen transition.
+    // 1. Any fullscreen mode is set — the plugin or user intentionally set fullscreen, but the
+    //    compositor may not have processed it yet. Syncing back to `Windowed` would cancel the
+    //    pending fullscreen transition.
     // 2. Restore not yet complete — the plugin sets `window.mode` to the target fullscreen mode,
     //    but the transition hasn't completed so `effective_mode` still reads `Windowed`.
     let is_fullscreen = !matches!(window.mode, WindowMode::Windowed);
@@ -1175,5 +1376,63 @@ fn on_window_restored(
         size:          event.size,
         mode:          event.mode,
         monitor_index: event.monitor_index,
+    });
+}
+
+/// Observer that logs when `WindowRestoreMismatch` event is received.
+fn on_window_restore_mismatch(
+    trigger: On<WindowRestoreMismatch>,
+    mut commands: Commands,
+    mut restored_states: ResMut<RestoredStates>,
+    mut mismatch_states: ResMut<MismatchStates>,
+) {
+    let event = trigger.event();
+    warn!(
+        "[on_window_restore_mismatch] window_id={} entity={:?} \
+         monitor: {} vs {}, size: {} vs {}, mode: {:?} vs {:?}",
+        event.window_id,
+        event.entity,
+        event.expected_monitor,
+        event.actual_monitor,
+        event.expected_size,
+        event.actual_size,
+        event.expected_mode,
+        event.actual_mode,
+    );
+
+    restored_states.states.insert(
+        event.entity,
+        CachedRestoredState {
+            position:      event.expected_position,
+            width:         event.expected_size.x,
+            height:        event.expected_size.y,
+            monitor_index: event.expected_monitor,
+            mode:          event.expected_mode,
+        },
+    );
+
+    mismatch_states.states.insert(
+        event.entity,
+        CachedMismatchState {
+            expected_position: event.expected_position,
+            actual_position:   event.actual_position,
+            expected_size:     event.expected_size,
+            actual_size:       event.actual_size,
+            expected_mode:     event.expected_mode,
+            actual_mode:       event.actual_mode,
+            expected_monitor:  event.expected_monitor,
+            actual_monitor:    event.actual_monitor,
+            expected_scale:    event.expected_scale,
+            actual_scale:      event.actual_scale,
+        },
+    );
+
+    commands.insert_resource(WindowRestoreMismatchReceived {
+        expected_monitor: event.expected_monitor,
+        actual_monitor:   event.actual_monitor,
+        expected_size:    event.expected_size,
+        actual_size:      event.actual_size,
+        expected_mode:    event.expected_mode,
+        actual_mode:      event.actual_mode,
     });
 }

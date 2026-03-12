@@ -67,6 +67,7 @@ COMP_MONITORS: Final = "bevy_window_manager::monitors::Monitors"
 COMP_MONITOR: Final = "bevy_window::monitor::Monitor"
 COMP_PERSISTENCE: Final = "bevy_window_manager::types::ManagedWindowPersistence"
 RES_RESTORED: Final = "restore_window::WindowRestoredReceived"
+RES_MISMATCH: Final = "restore_window::WindowRestoreMismatchReceived"
 
 # JSON dict type alias for BRP responses (deeply nested, untyped JSON)
 type JsonDict = dict[str, object]
@@ -163,6 +164,7 @@ class Args(argparse.Namespace):
     feature_flags: str = ""
     backend: str = "native"
     env_file: str = ""
+    no_shutdown: bool = False
 
 
 # =============================================================================
@@ -439,18 +441,28 @@ _ = signal.signal(signal.SIGTERM, _handle_signal)
 _ = signal.signal(signal.SIGINT, _handle_signal)
 
 
-def wait_for_restore() -> None:
-    """Poll for `WindowRestoredReceived` resource before validating."""
+def wait_for_restore() -> str:
+    """Poll for `WindowRestoredReceived` or `WindowRestoreMismatchReceived`.
+
+    Returns "restored" or "mismatch" depending on which resource appeared first.
+    """
     for _ in range(MAX_POLLS):
         try:
             result = brp.call("world.get_resources", {"resource": RES_RESTORED})
             value = json_get(result, "result", "value")
             if value is not None:
-                return
+                return "restored"
+        except (URLError, OSError):
+            pass
+        try:
+            result = brp.call("world.get_resources", {"resource": RES_MISMATCH})
+            value = json_get(result, "result", "value")
+            if value is not None:
+                return "mismatch"
         except (URLError, OSError):
             pass
         time.sleep(POLL_INTERVAL)
-    die("WindowRestoredReceived not found within timeout")
+    die("Neither WindowRestoredReceived nor WindowRestoreMismatchReceived found within timeout")
 
 
 def launch_app(
@@ -458,8 +470,9 @@ def launch_app(
     backend: str = "native",
     capture_stderr: bool = False,
     wait_restore: bool = True,
-) -> str | None:
-    """Launch the restore_window example. Returns stderr temp path if captured."""
+    test_mode: bool = True,
+) -> tuple[str | None, str]:
+    """Launch the restore_window example. Returns (stderr_path, restore_result)."""
     global app_process
     global stderr_handle
 
@@ -470,7 +483,8 @@ def launch_app(
         cmd.extend(feature_flags.split())
 
     env = dict(os.environ)
-    env["BWM_TEST_MODE"] = "1"
+    if test_mode:
+        env["BWM_TEST_MODE"] = "1"
     if backend == "x11":
         env["WAYLAND_DISPLAY"] = ""
 
@@ -488,17 +502,24 @@ def launch_app(
             env=env,
         )
     else:
+        default_tmpdir = "/private/tmp/claude-501" if sys.platform == "darwin" else "/tmp/claude"
+        tmpdir = os.environ.get("TMPDIR", default_tmpdir)
+        _ = os.makedirs(tmpdir, exist_ok=True)
+        debug_fd, debug_stderr_path = tempfile.mkstemp(prefix="brp_debug_", dir=tmpdir)
+        debug_handle = os.fdopen(debug_fd, "w")
         app_process = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=debug_handle,
             env=env,
         )
+        print(f"# App stderr: {debug_stderr_path}", flush=True)
 
     brp.wait_ready()
+    restore_result = ""
     if wait_restore:
-        wait_for_restore()
-    return stderr_path
+        restore_result = wait_for_restore()
+    return stderr_path, restore_result
 
 
 def shutdown_app() -> None:
@@ -1030,14 +1051,19 @@ def run_discovery(
     except (URLError, OSError):
         pass
 
-    # Validate WindowRestored event
+    # Validate WindowRestored or WindowRestoreMismatch event
     try:
         restored_result = brp.call("world.get_resources", {"resource": RES_RESTORED})
         restored_value = json_get(restored_result, "result", "value")
         if restored_value is not None:
             print("# WindowRestoredReceived validation: OK")
         else:
-            print("# WARNING: WindowRestoredReceived resource not found")
+            mismatch_result = brp.call("world.get_resources", {"resource": RES_MISMATCH})
+            mismatch_value = json_get(mismatch_result, "result", "value")
+            if mismatch_value is not None:
+                print("# WindowRestoreMismatchReceived validation: OK (mismatch detected)")
+            else:
+                print("# WARNING: Neither WindowRestoredReceived nor WindowRestoreMismatchReceived found")
     except (URLError, OSError):
         print("# WARNING: WindowRestoredReceived resource query failed")
 
@@ -1218,7 +1244,9 @@ def run_test(
     env_file: str,
     feature_flags: str,
     backend: str,
+    no_shutdown: bool = False,
 ) -> None:
+    global app_process
     test, resolved_backend, _ = setup_test(config, test_id, ron_dir, ron_path, env_file, backend)
 
     # Parse expected values from written RON
@@ -1239,7 +1267,10 @@ def run_test(
     )
 
     capture_stderr = bool(expected_log)
-    stderr_path = launch_app(feature_flags, resolved_backend, capture_stderr)
+    use_test_mode = not no_shutdown
+    stderr_path, restore_result = launch_app(feature_flags, resolved_backend, capture_stderr, test_mode=use_test_mode)
+    if restore_result == "mismatch":
+        fail_line("restore", "event", "WindowRestoreMismatch fired (restore state did not match)")
 
     # Click fullscreen button flow (macOS)
     if has_click_fullscreen:
@@ -1250,7 +1281,10 @@ def run_test(
     # Exit code only test
     if has_exit_code:
         pass_line("primary", "exit_code", "expected=0 actual=0")
-        shutdown_app()
+        if no_shutdown:
+            app_process = None
+        else:
+            shutdown_app()
         sys.exit(1 if fail_count > 0 else 0)
 
     # Initial validation
@@ -1277,6 +1311,9 @@ def run_test(
             verify_mutations(ron_values)
 
     # Shutdown
+    if no_shutdown and not has_mutation and not has_persistence:
+        app_process = None
+        sys.exit(1 if fail_count > 0 else 0)
     shutdown_app()
 
     # Check expected log warning
@@ -1294,9 +1331,14 @@ def run_test(
 
     # Relaunch and validate restore (if mutation)
     if has_mutation:
-        _ = launch_app(feature_flags, resolved_backend)
+        _, relaunch_result = launch_app(feature_flags, resolved_backend, test_mode=use_test_mode)
+        if relaunch_result == "mismatch":
+            fail_line("restore", "relaunch_event", "WindowRestoreMismatch fired on relaunch")
         validate_all_windows(windows, ron_values, prefix="relaunch ", backend=resolved_backend)
-        shutdown_app()
+        if no_shutdown:
+            app_process = None
+        else:
+            shutdown_app()
 
     sys.exit(1 if fail_count > 0 else 0)
 
@@ -1316,6 +1358,7 @@ def main() -> None:
     _ = parser.add_argument("--feature-flags", default="", help="Cargo feature flags override")
     _ = parser.add_argument("--backend", default="native", help="Backend: native, x11, x11-also")
     _ = parser.add_argument("--env-file", default="", help="Env file for MONITOR_* vars")
+    _ = parser.add_argument("--no-shutdown", action="store_true", help="Leave app running after test (skip shutdown)")
 
     args = cast(Args, parser.parse_args())
 
@@ -1360,7 +1403,7 @@ def main() -> None:
     else:
         if not args.test_id:
             die("Missing --test-id (required unless --discover or --prebuild)")
-        run_test(config, args.test_id, ron_dir, ron_path, args.env_file, args.feature_flags, args.backend)
+        run_test(config, args.test_id, ron_dir, ron_path, args.env_file, args.feature_flags, args.backend, args.no_shutdown)
 
 
 if __name__ == "__main__":

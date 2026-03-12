@@ -61,6 +61,7 @@ use types::ManagedWindowRegistry;
 use types::RestoreWindowConfig;
 use types::SavedWindowMode;
 use types::TargetPosition;
+pub use types::WindowRestoreMismatch;
 pub use types::WindowRestored;
 /// The main plugin. See module docs for usage.
 ///
@@ -530,14 +531,18 @@ fn build_plugin(app: &mut App, path: PathBuf, persistence: ManagedWindowPersiste
     // Restore windows - processes all entities with `TargetPosition` + `X11FrameCompensated`
     app.add_systems(
         Update,
-        systems::restore_windows.run_if(has_restoring_windows),
+        (
+            systems::restore_windows,
+            systems::check_restore_settling.after(systems::restore_windows),
+        )
+            .run_if(has_restoring_windows),
     );
 
     // Unified monitor detection + save window state
     app.add_systems(
         Update,
         (
-            systems::update_current_monitor.run_if(no_restoring_windows),
+            systems::update_current_monitor,
             systems::save_window_state
                 .run_if(no_restoring_windows)
                 .after(systems::update_current_monitor),

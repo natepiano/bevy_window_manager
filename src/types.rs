@@ -53,6 +53,62 @@ pub struct WindowRestored {
     pub monitor_index: usize,
 }
 
+/// Event fired when the actual window state doesn't match what was requested.
+///
+/// After `try_apply_restore` completes, the library compares the intended restore
+/// target against the live window state. If any field differs, this event fires
+/// instead of [`WindowRestored`].
+///
+/// ## Sources
+///
+/// **Expected values** come from [`TargetPosition`], which is computed from the saved
+/// RON state file at startup. These represent what the restore *intended* to achieve.
+///
+/// **Actual values** come from two live ECS sources, each chosen for accuracy:
+///
+/// - **`monitor_index`** → [`CurrentMonitor`](crate::CurrentMonitor) component, maintained by
+///   `update_current_monitor` which queries winit's `current_monitor()` and maps it to the
+///   `Monitors` list. This updates quickly when the compositor moves the window.
+///
+/// - **`position`, `size`, `mode`, `scale`** → the [`Window`](bevy::window::Window) component.
+///   Position and size reflect `window.position` / `window.resolution`, and scale comes from
+///   `window.resolution.scale_factor()`. These lag behind the compositor because they only update
+///   when winit fires corresponding events (`ScaleFactorChanged`, `Resized`, `Moved`). A common
+///   mismatch is the scale factor still reflecting the launch monitor while `CurrentMonitor` has
+///   already updated to the target monitor.
+///
+/// This intentional split means a mismatch signals that the window hasn't fully settled
+/// — the compositor accepted the request but winit hasn't yet delivered all the
+/// resulting state changes.
+#[derive(EntityEvent, Debug, Clone, Reflect)]
+pub struct WindowRestoreMismatch {
+    /// The window entity this event targets.
+    pub entity:            Entity,
+    /// Identifier for this window (primary or managed name).
+    pub window_id:         WindowKey,
+    /// Target position from `TargetPosition` (None on Wayland).
+    pub expected_position: Option<IVec2>,
+    /// Actual position from `Window.position` (None on Wayland).
+    pub actual_position:   Option<IVec2>,
+    /// Target size from `TargetPosition`.
+    pub expected_size:     UVec2,
+    /// Actual physical size from `Window.resolution`.
+    pub actual_size:       UVec2,
+    /// Target window mode from `TargetPosition`.
+    pub expected_mode:     WindowMode,
+    /// Actual window mode from `Window.mode`.
+    pub actual_mode:       WindowMode,
+    /// Target monitor index from `TargetPosition`.
+    pub expected_monitor:  usize,
+    /// Actual monitor index from `CurrentMonitor` (winit `current_monitor()`).
+    pub actual_monitor:    usize,
+    /// Target scale factor from `TargetPosition.target_scale`.
+    pub expected_scale:    f64,
+    /// Actual scale factor from `Window.resolution.scale_factor()`.
+    /// Lags behind monitor changes; updates only on winit `ScaleFactorChanged`.
+    pub actual_scale:      f64,
+}
+
 /// Threshold for considering two scale factors equal.
 ///
 /// Accounts for floating-point imprecision when comparing scale factors.
@@ -305,6 +361,56 @@ pub struct TargetPosition {
     pub target_monitor_index:     usize,
     /// Fullscreen restore state (DX12/DXGI workaround).
     pub fullscreen_restore_state: Option<FullscreenRestoreState>,
+    /// Settling state. When set, `try_apply_restore` has completed and we're waiting
+    /// for the compositor/winit to deliver stable, matching state.
+    ///
+    /// Uses a two-timer approach:
+    /// - **Stability timer** (200ms): resets whenever any compared value changes between frames.
+    ///   Fires `WindowRestored` when all values have been stable for 200ms.
+    /// - **Total timeout** (1s): hard deadline. If values never stabilize for 200ms continuously,
+    ///   fires `WindowRestoreMismatch` with whatever state exists at timeout.
+    ///
+    /// This handles compositor artifacts like Wayland `wl_surface.enter`/`leave` bounces
+    /// where `current_monitor()` transiently reports the wrong monitor during fullscreen
+    /// transitions.
+    pub settle_state:             Option<SettleState>,
+}
+
+/// Duration (in seconds) that all values must remain stable before declaring success.
+const SETTLE_STABILITY_SECS: f32 = 0.2;
+/// Maximum total duration (in seconds) to wait for values to stabilize.
+const SETTLE_TIMEOUT_SECS: f32 = 1.0;
+
+/// Tracks the two-timer settling state after restore completes.
+#[derive(Debug, Clone)]
+pub struct SettleState {
+    /// Hard deadline timer — fires mismatch if stability is never reached.
+    pub total_timeout:   Timer,
+    /// Resets whenever any compared value changes between frames.
+    pub stability_timer: Timer,
+    /// Snapshot of last frame's compared values, used to detect changes.
+    pub last_snapshot:   Option<SettleSnapshot>,
+}
+
+impl SettleState {
+    /// Create a new settle state with default durations.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            total_timeout:   Timer::from_seconds(SETTLE_TIMEOUT_SECS, TimerMode::Once),
+            stability_timer: Timer::from_seconds(SETTLE_STABILITY_SECS, TimerMode::Once),
+            last_snapshot:   None,
+        }
+    }
+}
+
+/// Snapshot of compared values for change detection between frames.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SettleSnapshot {
+    pub position: Option<IVec2>,
+    pub size:     UVec2,
+    pub mode:     WindowMode,
+    pub monitor:  usize,
 }
 
 impl TargetPosition {
