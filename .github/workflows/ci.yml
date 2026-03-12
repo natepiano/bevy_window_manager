@@ -23,7 +23,7 @@ jobs:
     name: Format Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v5
 
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@master
@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v5
 
       - name: Install Taplo
         run: cargo install taplo-cli --locked
@@ -52,13 +52,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v5
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
           components: clippy
+
+      - name: Install mold linker
+        uses: rui314/setup-mold@v1
 
       - name: Install and cache Linux dependencies
         uses: awalsh128/cache-apt-pkgs-action@latest
@@ -77,12 +80,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v5
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+
+      - name: Install mold linker
+        uses: rui314/setup-mold@v1
 
       - name: Install and cache Linux dependencies
         uses: awalsh128/cache-apt-pkgs-action@latest
@@ -101,7 +107,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v5
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@master
@@ -110,6 +116,9 @@ jobs:
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
+
+      - name: Install mold linker
+        uses: rui314/setup-mold@v1
 
       - name: Install and cache Linux dependencies
         uses: awalsh128/cache-apt-pkgs-action@latest
@@ -127,25 +136,30 @@ jobs:
           sudo rm -rf /opt/ghc
           df -h
 
-      - name: Run all tests
-        run: cargo nextest run --all-features --workspace
+      - name: Run lib and integration tests
+        run: cargo nextest run --all-features --workspace --lib --tests
         env:
           # Disable GPU/windowing for headless testing
           WGPU_BACKEND: "gl"
           WINIT_UNIX_BACKEND: "x11"
+          # Force mold linker for faster CI linking and more stable Linux builds.
+          RUSTFLAGS: "-C link-arg=-fuse-ld=mold"
 
   mend:
     name: Mend Check
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v5
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
           components: rust-src, rustc-dev, llvm-tools-preview
+
+      - name: Install mold linker
+        uses: rui314/setup-mold@v1
 
       - name: Install and cache Linux dependencies
         uses: awalsh128/cache-apt-pkgs-action@latest
