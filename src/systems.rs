@@ -890,8 +890,18 @@ pub fn check_restore_settling(
 
         let stable = settle.stability_timer.is_finished();
 
-        let pos_match = target_position == actual_position;
-        let size_match = target_size == actual_size;
+        let pos_match = if platform.position_reliable_for_settle() {
+            target_position == actual_position
+        } else {
+            true // X11 W6: target is frame coords, actual is client area — skip
+        };
+        // Fullscreen: skip size comparison — the window fills the monitor and the
+        // stored size is irrelevant. The physical size can also differ from the target
+        // when scales differ between backends (e.g. Wayland scale 1 vs XWayland scale 2
+        // gives physical 6880x2880 vs target 3440x1440, but logical sizes agree).
+        // TODO: once we store logical sizes and convert to physical on load, this can
+        // become a real logical-size comparison instead of a skip.
+        let size_match = target.mode.is_fullscreen() || target_size == actual_size;
         let mode_match = platform.modes_match(target_mode, actual_mode);
         let monitor_match = target_monitor == actual_monitor;
         let all_match = pos_match && size_match && mode_match && monitor_match;

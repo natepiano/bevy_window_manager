@@ -120,6 +120,16 @@ impl Platform {
         }
     }
 
+    /// Whether position readback is reliable for settle comparison.
+    ///
+    /// On X11 with `workaround-winit-4445`, the target position is in frame
+    /// coordinates (compensated by `frame_top`), but `Window.position` reports
+    /// the client area position (the W6 bug). The two reference frames differ
+    /// by exactly the title bar height, so position comparison always fails.
+    /// Other platforms have consistent position readback.
+    #[must_use]
+    pub const fn position_reliable_for_settle(self) -> bool { !self.needs_frame_compensation() }
+
     /// Whether saved position should be clamped to monitor bounds.
     ///
     /// macOS clamps because it may resize/reposition windows that extend beyond

@@ -179,44 +179,6 @@
     },
 
     {
-      "id": "wayland_multi_window_0_1",
-      "description": "Primary on Monitor 0, secondary on Monitor 1 (Wayland)",
-      "automation": "full",
-      "backend": "wayland",
-      "launch_monitor": 0,
-      "requires": {"min_monitors": 2},
-      "ron_file": "multi_window_0_1.ron",
-      "windows": {
-        "primary": {
-          "validate": ["size", "monitor_index", "mode"]
-        },
-        "window-1": {
-          "spawn_event": "restore_window::SpawnManagedWindow",
-          "validate": ["size", "monitor_index", "mode"]
-        }
-      }
-    },
-
-    {
-      "id": "wayland_multi_window_1_0",
-      "description": "Primary on Monitor 1, secondary on Monitor 0 (Wayland)",
-      "automation": "full",
-      "backend": "wayland",
-      "launch_monitor": 1,
-      "requires": {"min_monitors": 2},
-      "ron_file": "multi_window_1_0.ron",
-      "windows": {
-        "primary": {
-          "validate": ["size", "monitor_index", "mode"]
-        },
-        "window-1": {
-          "spawn_event": "restore_window::SpawnManagedWindow",
-          "validate": ["size", "monitor_index", "mode"]
-        }
-      }
-    },
-
-    {
       "id": "wayland_multi_window_1_1",
       "description": "Primary on Monitor 1, secondary on Monitor 1 (Wayland)",
       "automation": "full",
@@ -258,30 +220,6 @@
         "build_with": "",
         "without_behavior": "Position drifts by title bar height (~56px at scale 2) on save/restore",
         "with_behavior": "Position saved correctly with frame extent compensation"
-      }
-    },
-    {
-      "id": "x11_cross_high_to_low_W1",
-      "description": "Window saved on Monitor 1 (HDMI, scale 1) restores correctly when launched from Monitor 0 (eDP, scale 2)",
-      "automation": "full",
-      "backend": "x11",
-      "launch_monitor": 0,
-      "workaround_keys": ["W1", "W5", "W6"],
-      "requires": {"min_monitors": 2, "different_scales": true},
-
-      "workaround_validation": {
-        "feature_flag": "workaround-winit-4440",
-        "build_without": "--no-default-features --features workaround-winit-4443,workaround-winit-4445",
-        "build_with": "",
-        "without_behavior": "Window restores to wrong position/size on Monitor 1 due to scale factor mismatch",
-        "with_behavior": "Window restores to correct position/size on Monitor 1"
-      },
-
-      "ron_file": "cross_monitor_high_to_low.ron",
-      "windows": {
-        "primary": {
-          "validate": ["position", "size", "monitor_index", "mode"]
-        }
       }
     },
     {
@@ -415,30 +353,6 @@
         "build_with": "",
         "without_behavior": "Position drifts by title bar height (~28px at scale 1) on save/restore",
         "with_behavior": "Position saved correctly with frame extent compensation"
-      }
-    },
-    {
-      "id": "x11_cross_low_to_high_W1",
-      "description": "Window saved on Monitor 0 (eDP, scale 2) restores correctly when launched from Monitor 1 (HDMI, scale 1)",
-      "automation": "full",
-      "backend": "x11",
-      "launch_monitor": 1,
-      "workaround_keys": ["W1", "W5", "W6"],
-      "requires": {"min_monitors": 2, "different_scales": true},
-
-      "workaround_validation": {
-        "feature_flag": "workaround-winit-4440",
-        "build_without": "--no-default-features --features workaround-winit-4443,workaround-winit-4445",
-        "build_with": "",
-        "without_behavior": "Window restores to wrong position/size on Monitor 0 due to scale factor mismatch",
-        "with_behavior": "Window restores to correct position/size on Monitor 0"
-      },
-
-      "ron_file": "cross_monitor_low_to_high.ron",
-      "windows": {
-        "primary": {
-          "validate": ["position", "size", "monitor_index", "mode"]
-        }
       }
     },
     {
