@@ -157,11 +157,11 @@ fn hide_window_on_creation(add: On<Add, PrimaryWindow>, mut windows: Query<&mut 
     }
 }
 
-/// Observer: register a `ManagedWindow` name, panic on duplicates, and save initial state if
+/// Observer: register a `ManagedWindow` name, deduplicate if needed, and save initial state if
 /// needed.
 fn on_managed_window_added(
     add: On<Add, ManagedWindow>,
-    managed: Query<&ManagedWindow>,
+    mut managed: Query<&mut ManagedWindow>,
     mut registry: ResMut<ManagedWindowRegistry>,
     config: Res<RestoreWindowConfig>,
     monitors: Res<Monitors>,
@@ -169,10 +169,10 @@ fn on_managed_window_added(
     primary_query: Query<(), With<PrimaryWindow>>,
 ) {
     let entity = add.entity;
-    let Ok(managed_window) = managed.get(entity) else {
+    let Ok(mut managed_window) = managed.get_mut(entity) else {
         return;
     };
-    let name = &managed_window.window_name;
+    let name = managed_window.window_name.clone();
 
     // Primary window is managed automatically — reject explicit `ManagedWindow` on it
     if primary_query.get(entity).is_ok() {
@@ -184,18 +184,38 @@ fn on_managed_window_added(
         return;
     }
 
-    assert!(
-        registry.names.insert((*name).clone()),
-        "Duplicate ManagedWindow name: \"{name}\" is already registered"
+    let unique_name = if registry.names.contains(&name) {
+        debug_assert!(false, "Duplicate ManagedWindow name: \"{name}\"");
+        let mut suffix = 2;
+        loop {
+            let candidate = format!("{name}-{suffix}");
+            if !registry.names.contains(&candidate) {
+                break candidate;
+            }
+            suffix += 1;
+        }
+    } else {
+        name.clone()
+    };
+
+    if unique_name != name {
+        warn!(
+            "[on_managed_window_added] Duplicate ManagedWindow name: \"{name}\" — renamed to \"{unique_name}\" for entity {entity:?}"
+        );
+        managed_window.window_name = unique_name.clone();
+    }
+
+    registry.names.insert(unique_name.clone());
+    registry.entities.insert(entity, unique_name.clone());
+    debug!(
+        "[on_managed_window_added] Registered managed window \"{unique_name}\" on entity {entity:?}"
     );
-    registry.entities.insert(entity, (*name).clone());
-    debug!("[on_managed_window_added] Registered managed window \"{name}\" on entity {entity:?}");
 
     // If no saved state exists for this window, save its current position/size immediately
     let existing = state::load_all_states(&config.path);
     let already_saved = existing
         .as_ref()
-        .is_some_and(|s| s.contains_key(&WindowKey::Managed((*name).clone())));
+        .is_some_and(|s| s.contains_key(&WindowKey::Managed(unique_name.clone())));
 
     if !already_saved {
         if let Ok(window) = windows.get(entity) {
@@ -221,9 +241,9 @@ fn on_managed_window_added(
             };
 
             let mut states = existing.unwrap_or_default();
-            states.insert(WindowKey::Managed((*name).clone()), window_state);
+            states.insert(WindowKey::Managed(unique_name.clone()), window_state);
             state::save_all_states(&config.path, &states);
-            debug!("[on_managed_window_added] Saved initial state for \"{name}\"");
+            debug!("[on_managed_window_added] Saved initial state for \"{unique_name}\"");
         }
     }
 }

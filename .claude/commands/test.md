@@ -55,9 +55,10 @@ Parse output lines:
 - `PLATFORM=macos|linux|windows` — store as ${PLATFORM}
 - `CONFIG=tests/config/<platform>.json` — store as ${config_file}
 - `BUILD_DEFAULT=ok|failed`
-- `BUILD_NODEFAULT=ok|skipped|failed`
+- `BUILD_VARIANT_N=...` — each unique workaround feature flag combination
+- `BUILD_VARIANTS=N ok|skipped`
 
-If either build reports `failed`, STOP and report the error.
+If any build reports `failed`, STOP and report the error.
 </PreBuild>
 
 <LinuxEnvironmentCheck>
@@ -215,7 +216,11 @@ For each automated test:
 </RunTests>
 
 <HumanTestFlow>
-Human tests use `run_test.py --human-setup` which writes the RON, launches the app, waits for restore, prints instructions, then exits (leaving the app running).
+Human tests use `run_test.py --human-setup` which writes the RON, launches the app **without test mode** (keyboard/controls enabled for human interaction), waits for restore, prints instructions, then exits (leaving the app running).
+
+**IMPORTANT**: When manually relaunching via BRP MCP for human verification (e.g., to check if state was restored), do NOT pass env vars that disable controls. Specifically:
+- Do NOT set `BWM_TEST_MODE` — the human needs keyboard input
+- For X11 backend tests, still pass `WAYLAND_DISPLAY: ""` to ensure X11 mode
 
 1. Move editor/terminal to test's `launch_monitor`
 
