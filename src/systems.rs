@@ -1035,7 +1035,8 @@ enum RestoreStatus {
 }
 
 /// Get window position, using winit's `outer_position` on Linux with W5 workaround.
-const fn get_window_position(entity: Entity, window: &Window) -> Option<IVec2> {
+#[allow(clippy::missing_const_for_fn)] // Linux branch uses WINIT_WINDOWS thread-local
+fn get_window_position(entity: Entity, window: &Window) -> Option<IVec2> {
     #[cfg(all(target_os = "linux", feature = "workaround-winit-4443"))]
     {
         let _ = window;
