@@ -21,7 +21,6 @@ use bevy_window_manager::WindowManagerPlugin;
     clippy::expect_used,
     reason = "example code - panicking on missing config dir is acceptable"
 )]
-
 fn main() {
     // Construct a cross-platform config path manually
     let config_path = dirs::config_dir()

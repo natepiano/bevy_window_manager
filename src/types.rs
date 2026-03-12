@@ -405,7 +405,7 @@ impl SettleState {
 }
 
 /// Snapshot of compared values for change detection between frames.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SettleSnapshot {
     pub position: Option<IVec2>,
     pub size:     UVec2,

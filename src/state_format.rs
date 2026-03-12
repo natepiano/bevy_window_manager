@@ -146,6 +146,7 @@ pub fn encode(states: &HashMap<WindowKey, WindowState>) -> Result<String, ron::E
 }
 
 #[cfg(test)]
+#[allow(clippy::panic)]
 mod tests {
     use std::collections::HashMap;
 

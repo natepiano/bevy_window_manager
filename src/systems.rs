@@ -21,6 +21,7 @@ use bevy::winit::WINIT_WINDOWS;
 use super::state;
 use super::types::RestoreWindowConfig;
 use super::types::WindowState;
+use crate::ManagedWindow;
 use crate::Platform;
 use crate::WindowKey;
 use crate::monitors::CurrentMonitor;
@@ -788,6 +789,109 @@ pub fn restore_windows(
     }
 }
 
+/// Build a [`SettleSnapshot`] from the current window state, returning the snapshot
+/// and the actual scale factor (tracked separately since scale is informational).
+fn build_actual_snapshot(
+    window: &Window,
+    current_monitor: Option<&CurrentMonitor>,
+    platform: Platform,
+) -> (SettleSnapshot, f64) {
+    let position = if platform.position_available() {
+        match window.position {
+            bevy::window::WindowPosition::At(p) => Some(IVec2::new(p.x, p.y)),
+            _ => None,
+        }
+    } else {
+        None
+    };
+    let size = UVec2::new(
+        window.resolution.physical_width(),
+        window.resolution.physical_height(),
+    );
+    (
+        SettleSnapshot {
+            position,
+            size,
+            mode: window.mode,
+            monitor: current_monitor.map_or(0, |cm| cm.monitor.index),
+        },
+        f64::from(window.resolution.scale_factor()),
+    )
+}
+
+/// Check whether actual window state matches the target for settle purposes.
+///
+/// Fullscreen modes skip position and size comparison — the window fills the
+/// monitor so the stored position/size are irrelevant. On macOS, borderless
+/// fullscreen reports position offset by the menu bar height; on X11 (W6),
+/// frame vs client coords differ. The physical size can also differ when
+/// scales differ between backends (e.g. Wayland scale 1 vs `XWayland` scale 2).
+fn check_settle_matches(
+    target: &TargetPosition,
+    target_position: Option<IVec2>,
+    target_size: UVec2,
+    target_mode: WindowMode,
+    target_monitor: usize,
+    actual: &SettleSnapshot,
+    platform: Platform,
+) -> (bool, bool, bool, bool) {
+    let is_fullscreen = target.mode.is_fullscreen();
+    let pos_match = if is_fullscreen {
+        true
+    } else if platform.position_reliable_for_settle() {
+        target_position == actual.position
+    } else {
+        true // X11 W6: target is frame coords, actual is client area — skip
+    };
+    let size_match = is_fullscreen || target_size == actual.size;
+    let mode_match = platform.modes_match(target_mode, actual.mode);
+    let monitor_match = target_monitor == actual.monitor;
+    (pos_match, size_match, mode_match, monitor_match)
+}
+
+/// Detect whether the settle snapshot changed from the previous frame and reset the
+/// stability timer if so. Returns `true` if the caller should skip further checks
+/// this frame (snapshot just changed and we haven't timed out yet).
+fn detect_settle_change(
+    settle: &mut SettleState,
+    snapshot: SettleSnapshot,
+    key: &WindowKey,
+    total_elapsed_ms: f32,
+    total_timed_out: bool,
+) -> bool {
+    let changed = settle.last_snapshot.as_ref() != Some(&snapshot);
+    if changed {
+        if settle.last_snapshot.is_some() {
+            debug!(
+                "[check_restore_settling] [{key}] {total_elapsed_ms:.0}ms: values changed, \
+                 resetting stability timer"
+            );
+        }
+        settle.stability_timer.reset();
+        settle.last_snapshot = Some(snapshot);
+        // Don't check stability this frame — we just reset
+        !total_timed_out
+    } else {
+        false
+    }
+}
+
+/// Resolve the [`WindowKey`] for an entity — `Primary` if it has the `PrimaryWindow`
+/// marker, otherwise the `ManagedWindow` name (falling back to `Primary`).
+fn resolve_window_key(
+    entity: Entity,
+    primary_q: &Query<(), With<PrimaryWindow>>,
+    managed_q: &Query<&ManagedWindow>,
+) -> WindowKey {
+    if primary_q.get(entity).is_ok() {
+        WindowKey::Primary
+    } else if let Ok(managed) = managed_q.get(entity) {
+        WindowKey::Managed(managed.window_name.clone())
+    } else {
+        WindowKey::Primary
+    }
+}
+
 /// Check settling windows each frame using a two-timer approach.
 ///
 /// - **Stability timer** (200ms): resets whenever any compared value changes. If values stay stable
@@ -814,56 +918,24 @@ pub fn check_restore_settling(
     platform: Res<Platform>,
 ) {
     for (entity, mut target, window, current_monitor) in &mut windows {
-        if target.settle_state.is_none() {
-            continue;
-        }
-
         // Read target fields before borrowing settle_state mutably
         let target_mode = target.mode.to_window_mode(target.target_monitor_index);
         let target_size = target.size();
         let target_monitor = target.target_monitor_index;
         let expected_scale = target.target_scale;
 
-        let target_position = if platform.position_available() {
-            target.position
-        } else {
-            None
-        };
-
-        let key = if primary_q.get(entity).is_ok() {
-            WindowKey::Primary
-        } else if let Ok(managed) = managed_q.get(entity) {
-            WindowKey::Managed(managed.window_name.clone())
-        } else {
-            WindowKey::Primary
-        };
-
-        let actual_position = if platform.position_available() {
-            match window.position {
-                bevy::window::WindowPosition::At(p) => Some(IVec2::new(p.x, p.y)),
-                _ => None,
-            }
-        } else {
-            None
-        };
-        let actual_size = UVec2::new(
-            window.resolution.physical_width(),
-            window.resolution.physical_height(),
-        );
-        let actual_mode = window.mode;
-        let actual_monitor = current_monitor.map_or(0, |cm| cm.monitor.index);
-        let actual_scale = f64::from(window.resolution.scale_factor());
-
-        // Build snapshot for change detection (excludes scale — it's informational)
-        let current_snapshot = SettleSnapshot {
-            position: actual_position,
-            size:     actual_size,
-            mode:     actual_mode,
-            monitor:  actual_monitor,
-        };
+        let target_position = platform
+            .position_available()
+            .then_some(target.position)
+            .flatten();
+        let key = resolve_window_key(entity, &primary_q, &managed_q);
+        let (current_snapshot, actual_scale) =
+            build_actual_snapshot(window, current_monitor, *platform);
 
         // Now borrow settle_state mutably for timer ticking and change detection
-        let settle = target.settle_state.as_mut().expect("checked above");
+        let Some(settle) = target.settle_state.as_mut() else {
+            continue;
+        };
         settle.total_timeout.tick(time.delta());
         settle.stability_timer.tick(time.delta());
 
@@ -871,49 +943,34 @@ pub fn check_restore_settling(
         let stability_elapsed_ms = settle.stability_timer.elapsed_secs() * 1000.0;
         let total_timed_out = settle.total_timeout.is_finished();
 
-        // Detect change from last frame and reset stability timer if anything changed
-        let changed = settle.last_snapshot.as_ref() != Some(&current_snapshot);
-        if changed {
-            if settle.last_snapshot.is_some() {
-                debug!(
-                    "[check_restore_settling] [{key}] {total_elapsed_ms:.0}ms: values changed, \
-                     resetting stability timer"
-                );
-            }
-            settle.stability_timer.reset();
-            settle.last_snapshot = Some(current_snapshot);
-            // Don't check stability this frame — we just reset
-            if !total_timed_out {
-                continue;
-            }
+        if detect_settle_change(
+            settle,
+            current_snapshot,
+            &key,
+            total_elapsed_ms,
+            total_timed_out,
+        ) {
+            continue;
         }
-
         let stable = settle.stability_timer.is_finished();
-
-        // Fullscreen: skip position and size comparison — the window fills the
-        // monitor so the stored position/size are irrelevant. On macOS, borderless
-        // fullscreen reports position offset by the menu bar height; on X11 (W6),
-        // frame vs client coords differ. The physical size can also differ when
-        // scales differ between backends (e.g. Wayland scale 1 vs XWayland scale 2).
-        let pos_match = if target.mode.is_fullscreen() {
-            true
-        } else if platform.position_reliable_for_settle() {
-            target_position == actual_position
-        } else {
-            true // X11 W6: target is frame coords, actual is client area — skip
-        };
-        let size_match = target.mode.is_fullscreen() || target_size == actual_size;
-        let mode_match = platform.modes_match(target_mode, actual_mode);
-        let monitor_match = target_monitor == actual_monitor;
+        let (pos_match, size_match, mode_match, monitor_match) = check_settle_matches(
+            &target,
+            target_position,
+            target_size,
+            target_mode,
+            target_monitor,
+            &current_snapshot,
+            *platform,
+        );
         let all_match = pos_match && size_match && mode_match && monitor_match;
-
         debug!(
             "[check_restore_settling] [{key}] {total_elapsed_ms:.0}ms (stable: {stability_elapsed_ms:.0}ms): \
              pos={pos_match} size={size_match} mode={mode_match} monitor={monitor_match} | \
-             size: {target_size} vs {actual_size}, \
-             mode: {target_mode:?} vs {actual_mode:?}, \
-             monitor: {target_monitor} vs {actual_monitor}, \
-             scale: {expected_scale} vs {actual_scale}"
+             size: {target_size} vs {}, \
+             mode: {target_mode:?} vs {:?}, \
+             monitor: {target_monitor} vs {}, \
+             scale: {expected_scale} vs {actual_scale}",
+            current_snapshot.size, current_snapshot.mode, current_snapshot.monitor,
         );
 
         if stable && all_match {
@@ -921,25 +978,31 @@ pub fn check_restore_settling(
                 "[check_restore_settling] [{key}] Settled after {total_elapsed_ms:.0}ms \
                  (stable for {stability_elapsed_ms:.0}ms)"
             );
-            commands.entity(entity).trigger(|entity| WindowRestored {
-                entity,
-                window_id: key,
-                position: target_position,
-                size: target_size,
-                mode: target_mode,
-                monitor_index: target_monitor,
-            });
-            commands.entity(entity).remove::<TargetPosition>();
-            commands.entity(entity).remove::<X11FrameCompensated>();
+            commands
+                .entity(entity)
+                .trigger(|entity| WindowRestored {
+                    entity,
+                    window_id: key,
+                    position: target_position,
+                    size: target_size,
+                    mode: target_mode,
+                    monitor_index: target_monitor,
+                })
+                .remove::<TargetPosition>()
+                .remove::<X11FrameCompensated>();
         } else if total_timed_out {
             warn!(
                 "[check_restore_settling] [{key}] Settle timeout after {total_elapsed_ms:.0}ms — \
                  mismatch remains: \
-                 position: {target_position:?} vs {actual_position:?}, \
-                 size: {target_size} vs {actual_size}, \
-                 mode: {target_mode:?} vs {actual_mode:?}, \
-                 monitor: {target_monitor} vs {actual_monitor}, \
-                 scale: {expected_scale} vs {actual_scale}"
+                 position: {target_position:?} vs {:?}, \
+                 size: {target_size} vs {}, \
+                 mode: {target_mode:?} vs {:?}, \
+                 monitor: {target_monitor} vs {}, \
+                 scale: {expected_scale} vs {actual_scale}",
+                current_snapshot.position,
+                current_snapshot.size,
+                current_snapshot.mode,
+                current_snapshot.monitor,
             );
             commands
                 .entity(entity)
@@ -947,18 +1010,18 @@ pub fn check_restore_settling(
                     entity,
                     window_id: key,
                     expected_position: target_position,
-                    actual_position,
+                    actual_position: current_snapshot.position,
                     expected_size: target_size,
-                    actual_size,
+                    actual_size: current_snapshot.size,
                     expected_mode: target_mode,
-                    actual_mode,
+                    actual_mode: current_snapshot.mode,
                     expected_monitor: target_monitor,
-                    actual_monitor,
+                    actual_monitor: current_snapshot.monitor,
                     expected_scale,
                     actual_scale,
-                });
-            commands.entity(entity).remove::<TargetPosition>();
-            commands.entity(entity).remove::<X11FrameCompensated>();
+                })
+                .remove::<TargetPosition>()
+                .remove::<X11FrameCompensated>();
         }
     }
 }
@@ -1002,11 +1065,12 @@ const fn get_window_position(entity: Entity, window: &Window) -> Option<IVec2> {
 /// 4. `monitors.first()` — last resort fallback
 ///
 /// All platforms: computes `effective_mode` (handles macOS green button fullscreen)
+#[allow(clippy::type_complexity)]
 pub fn update_current_monitor(
     mut commands: Commands,
     windows: Query<
         (Entity, &Window, Option<&CurrentMonitor>),
-        Or<(With<PrimaryWindow>, With<crate::ManagedWindow>)>,
+        Or<(With<PrimaryWindow>, With<ManagedWindow>)>,
     >,
     monitors: Res<Monitors>,
     _non_send: NonSendMarker,
@@ -1163,18 +1227,16 @@ fn apply_window_geometry(
             );
         }
         window.position = WindowPosition::At(pos);
+    } else if let Some(r) = ratio {
+        debug!(
+            "[try_apply_restore] size={}x{} only ({strategy}, ratio={r}, no position)",
+            size.x, size.y
+        );
     } else {
-        if let Some(r) = ratio {
-            debug!(
-                "[try_apply_restore] size={}x{} only ({strategy}, ratio={r}, no position)",
-                size.x, size.y
-            );
-        } else {
-            debug!(
-                "[try_apply_restore] size={}x{} only ({strategy}, no position)",
-                size.x, size.y
-            );
-        }
+        debug!(
+            "[try_apply_restore] size={}x{} only ({strategy}, no position)",
+            size.x, size.y
+        );
     }
     window.resolution.set_physical_resolution(size.x, size.y);
 }

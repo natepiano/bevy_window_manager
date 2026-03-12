@@ -354,6 +354,10 @@ fn on_secondary_window_removed(
 // --- Comparison Display ---
 
 /// Build comparison spans (restored vs current) for a window and add them as `TextSpan` children.
+#[expect(
+    clippy::too_many_lines,
+    reason = "UI builder — splitting would scatter tightly-coupled formatting logic"
+)]
 fn build_comparison_spans(
     cb: &mut ChildSpawnerCommands,
     restored_state: Option<&CachedRestoredState>,
@@ -490,7 +494,7 @@ fn build_comparison_spans(
             ),
             DEFAULT_COLOR,
         );
-        if let Some(ref m) = mismatch_state {
+        if let Some(m) = mismatch_state {
             let exp_scale = format!("{}", m.expected_scale);
             let act_scale = format!("{}", m.actual_scale);
             add_comparison_row_5(
@@ -627,6 +631,10 @@ fn add_comparison_row(
 
 /// Add a 5-column comparison row: label + restored + current + expected + actual.
 /// Expected/actual columns use warning color when they differ.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "UI helper — columns are inherently separate values"
+)]
 fn add_comparison_row_5(
     cb: &mut ChildSpawnerCommands,
     font: &TextFont,
@@ -680,6 +688,10 @@ fn add_span(cb: &mut ChildSpawnerCommands, font: &TextFont, text: &str, color: C
 
 // --- Primary Window Display ---
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Bevy system — each param is a distinct system resource"
+)]
 fn update_primary_display(
     primary_display: Single<Entity, With<PrimaryDisplay>>,
     window_query: Single<(Entity, &Window, &CurrentMonitor), With<PrimaryWindow>>,
@@ -748,7 +760,7 @@ fn update_primary_display(
         // Managed windows list
         let mut managed_lines = Vec::new();
         for (mw, managed, current_monitor) in &managed_q {
-            let mon = current_monitor.map_or(*monitors_res.first(), |cm| cm.monitor);
+            let mon = current_monitor.map_or_else(|| *monitors_res.first(), |cm| cm.monitor);
             let pos = match mw.position {
                 WindowPosition::At(p) => format!("({}, {})", p.x, p.y),
                 _ => "Automatic".to_string(),
@@ -778,6 +790,10 @@ fn update_primary_display(
 
 // --- Secondary Window Displays ---
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Bevy system — each param is a distinct system resource"
+)]
 fn update_secondary_displays(
     mut displays: Query<(Entity, &SecondaryDisplay)>,
     windows: Query<(&Window, Option<&CurrentMonitor>)>,
@@ -793,7 +809,7 @@ fn update_secondary_displays(
         let Ok((window, current_monitor)) = windows.get(display.0) else {
             continue;
         };
-        let monitor_info = current_monitor.copied().unwrap_or(CurrentMonitor {
+        let monitor_info = current_monitor.copied().unwrap_or_else(|| CurrentMonitor {
             monitor:        *monitors_res.first(),
             effective_mode: window.mode,
         });
@@ -950,7 +966,7 @@ fn handle_window_mode_input(
         return;
     };
 
-    let monitor = current_monitor.copied().unwrap_or(CurrentMonitor {
+    let monitor = current_monitor.copied().unwrap_or_else(|| CurrentMonitor {
         monitor:        *monitors_res.first(),
         effective_mode: window.mode,
     });
@@ -967,6 +983,8 @@ fn handle_window_mode_input(
     //    but the transition hasn't completed so `effective_mode` still reads `Windowed`.
     let is_fullscreen = !matches!(window.mode, WindowMode::Windowed);
     let restore_complete = restored_states.states.contains_key(&entity);
+    #[allow(clippy::suspicious_operation_groupings)]
+    // intentional: compare cached mode vs effective
     if !is_fullscreen && restore_complete && window.mode != monitor.effective_mode {
         window.mode = monitor.effective_mode;
     }
@@ -1271,7 +1289,7 @@ fn on_set_borderless_fullscreen(
     let Some((mut window, current_monitor)) = windows.iter_mut().find(|(w, _)| w.focused) else {
         return;
     };
-    let monitor = current_monitor.copied().unwrap_or(CurrentMonitor {
+    let monitor = current_monitor.copied().unwrap_or_else(|| CurrentMonitor {
         monitor:        *monitors_res.first(),
         effective_mode: window.mode,
     });
@@ -1295,7 +1313,7 @@ fn on_set_exclusive_fullscreen(
     let Some((mut window, current_monitor)) = windows.iter_mut().find(|(w, _)| w.focused) else {
         return;
     };
-    let monitor = current_monitor.copied().unwrap_or(CurrentMonitor {
+    let monitor = current_monitor.copied().unwrap_or_else(|| CurrentMonitor {
         monitor:        *monitors_res.first(),
         effective_mode: window.mode,
     });
