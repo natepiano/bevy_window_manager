@@ -13,27 +13,26 @@ use crate::types::WindowState;
 /// If the saved monitor no longer exists, falls back to monitor 0 and drops saved position
 /// because the coordinates referred to the missing monitor.
 #[must_use]
-pub(crate) fn resolve_target_monitor_and_position<'a>(
+pub fn resolve_target_monitor_and_position(
     saved_monitor_index: usize,
     saved_position: Option<(i32, i32)>,
-    monitors: &'a Monitors,
-) -> (&'a MonitorInfo, Option<(i32, i32)>, bool) {
-    if let Some(info) = monitors.by_index(saved_monitor_index) {
-        (info, saved_position, false)
-    } else {
-        (monitors.first(), None, true)
-    }
+    monitors: &Monitors,
+) -> (&MonitorInfo, Option<(i32, i32)>, bool) {
+    monitors.by_index(saved_monitor_index).map_or_else(
+        || (monitors.first(), None, true),
+        |info| (info, saved_position, false),
+    )
 }
 
 /// Compute a `TargetPosition` from saved state and a resolved target monitor.
 #[must_use]
-pub(crate) fn compute_target_position(
+pub fn compute_target_position(
     saved_state: &WindowState,
     target_info: &MonitorInfo,
     fallback_position: Option<(i32, i32)>,
     decoration: UVec2,
     starting_scale: f64,
-    platform: &Platform,
+    platform: Platform,
 ) -> TargetPosition {
     let width = saved_state.width;
     let height = saved_state.height;
@@ -77,7 +76,7 @@ fn clamp_position_to_monitor(
     target_info: &MonitorInfo,
     outer_width: u32,
     outer_height: u32,
-    platform: &Platform,
+    platform: Platform,
 ) -> IVec2 {
     if platform.should_clamp_position() {
         let mon_right = target_info.position.x + target_info.size.x as i32;

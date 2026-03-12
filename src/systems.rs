@@ -182,7 +182,7 @@ pub fn load_target_position(
         fallback_position,
         winit_info.decoration(),
         starting_scale,
-        &platform,
+        *platform,
     );
 
     debug!(
@@ -773,7 +773,7 @@ pub fn restore_windows(
         }
 
         if matches!(
-            try_apply_restore(&target, &mut window, &platform),
+            try_apply_restore(&target, &mut window, *platform),
             RestoreStatus::Complete
         ) {
             // Restore applied — start settle timer to wait for compositor/winit to
@@ -1023,14 +1023,11 @@ pub fn update_current_monitor(
             None
         };
 
-        let (monitor_info, source) = if let Some(info) = winit_result {
-            (info, "winit")
-        } else if let Some(info) = position_result {
-            (info, "position")
-        } else if let Some(cm) = existing {
-            (cm.monitor, "existing")
-        } else {
-            (*monitors.first(), "fallback")
+        let (monitor_info, source) = match (winit_result, position_result, existing) {
+            (Some(info), _, _) => (info, "winit"),
+            (_, Some(info), _) => (info, "position"),
+            (_, _, Some(cm)) => (cm.monitor, "existing"),
+            _ => (*monitors.first(), "fallback"),
         };
 
         // Compute effective mode
@@ -1042,7 +1039,7 @@ pub fn update_current_monitor(
         };
 
         // Only insert if changed to avoid unnecessary change detection triggers
-        let changed = existing.map_or(true, |cm| {
+        let changed = existing.is_none_or(|cm| {
             cm.monitor.index != new_current.monitor.index
                 || cm.effective_mode != new_current.effective_mode
         });
@@ -1117,7 +1114,7 @@ fn compute_effective_mode(
 }
 
 /// Apply fullscreen mode, handling Wayland limitations.
-fn apply_fullscreen_restore(target: &TargetPosition, window: &mut Window, platform: &Platform) {
+fn apply_fullscreen_restore(target: &TargetPosition, window: &mut Window, platform: Platform) {
     let monitor_index = target.target_monitor_index;
 
     // On Wayland, exclusive fullscreen is not supported by winit, so restore as
@@ -1166,7 +1163,6 @@ fn apply_window_geometry(
             );
         }
         window.position = WindowPosition::At(pos);
-        window.resolution.set_physical_resolution(size.x, size.y);
     } else {
         if let Some(r) = ratio {
             debug!(
@@ -1179,15 +1175,15 @@ fn apply_window_geometry(
                 size.x, size.y
             );
         }
-        window.resolution.set_physical_resolution(size.x, size.y);
     }
+    window.resolution.set_physical_resolution(size.x, size.y);
 }
 
 /// Try to apply a pending window restore.
 fn try_apply_restore(
     target: &TargetPosition,
     window: &mut Window,
-    platform: &Platform,
+    platform: Platform,
 ) -> RestoreStatus {
     // Handle fullscreen modes - use saved monitor index from TargetPosition
     if target.mode.is_fullscreen() {
@@ -1201,6 +1197,7 @@ fn try_apply_restore(
             window.position,
         );
         apply_fullscreen_restore(target, window, platform);
+
         window.visible = true;
         return RestoreStatus::Complete;
     }

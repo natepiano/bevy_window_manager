@@ -314,6 +314,7 @@ fn on_persistence_changed(
 }
 
 /// Observer: hide a managed window on creation and load its saved state.
+#[allow(clippy::too_many_arguments)]
 fn on_managed_window_load(
     add: On<Add, ManagedWindow>,
     mut commands: Commands,
@@ -381,13 +382,12 @@ fn on_managed_window_load(
 
     restore_managed_window(
         entity,
-        name,
         &saved_state,
         &monitors,
         &winit_info,
         &mut commands,
         primary_scale,
-        &platform,
+        *platform,
     );
 }
 
@@ -400,13 +400,12 @@ fn on_managed_window_load(
 /// preventing the physical size from being doubled on high-DPI displays.
 fn restore_managed_window(
     entity: Entity,
-    _window_name: &str,
     saved_state: &types::WindowState,
     monitors: &Monitors,
     winit_info: &types::WinitInfo,
     commands: &mut Commands,
     primary_scale: f64,
-    platform: &Platform,
+    platform: Platform,
 ) {
     let (target_info, fallback_position, used_fallback) =
         restore_plan::resolve_target_monitor_and_position(

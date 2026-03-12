@@ -65,6 +65,7 @@ pub fn save_all_states(path: &Path, states: &HashMap<WindowKey, WindowState>) {
 }
 
 #[cfg(test)]
+#[allow(clippy::panic)]
 mod tests {
     use std::fs;
 
