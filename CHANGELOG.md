@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Multi-window save/restore via `ManagedWindow` component with `ManagedWindowPersistence` resource to control closed-window behavior.
 - `WindowRestored` entity event triggered when a window's saved state has been fully applied, allowing dependent crates to react to the restored size, position, and mode.
+- `WindowRestoreMismatch` entity event triggered when restore settles but the final window state does not match the target, allowing dependent crates to detect and handle partial or failed restores.
 
 ### Changed
 
