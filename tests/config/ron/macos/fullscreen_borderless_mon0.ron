@@ -1,12 +1,13 @@
 (
-    version: 1,
+    version: 2,
     entries: [
         (
             key: Primary,
             state: (
                 position: Some((0, 0)),
-                width: 3456,
-                height: 2234,
+                logical_width: 1728,
+                logical_height: 1117,
+                monitor_scale: 2.0,
                 monitor_index: 0,
                 mode: BorderlessFullscreen,
                 app_name: "restore_window",

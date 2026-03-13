@@ -25,7 +25,8 @@
 //! | Format | Description |
 //! |--------|-------------|
 //! | Legacy single-window | Bare `WindowState` (no version field, pre-multi-window) |
-//! | v1 | `PersistedState { version: 1, entries }` with [`WindowKey`] enum |
+//! | v1 | `PersistedState { version: 1, entries }` with `width`/`height` (physical) |
+//! | v2 | `PersistedState { version: 2, entries }` with `logical_width`/`logical_height` + `monitor_scale` |
 
 use std::collections::HashMap;
 use std::fmt;
@@ -38,7 +39,7 @@ use crate::state::PRIMARY_WINDOW_KEY;
 use crate::types::WindowState;
 
 /// Current persisted state format version.
-pub const CURRENT_STATE_VERSION: u8 = 1;
+pub const CURRENT_STATE_VERSION: u8 = 2;
 
 /// Typed identifier for persisted window state.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, Reflect)]
@@ -70,17 +71,23 @@ pub struct PersistedState {
     pub entries: Vec<PersistedEntry>,
 }
 
+/// Minimal version probe — just extract the version number from any versioned format.
+#[derive(Deserialize)]
+struct VersionProbe {
+    version: u8,
+}
+
 /// Decode persisted state text into typed runtime state.
 ///
 /// Tries versioned formats first (dispatching by the `version` field),
 /// then falls back to legacy unversioned formats. See the module-level
 /// docs for the full list of supported formats.
 pub fn decode(contents: &str) -> Option<HashMap<WindowKey, WindowState>> {
-    // Versioned format — dispatch by version number.
-    if let Ok(persisted) = ron::from_str::<PersistedState>(contents) {
-        return match persisted.version {
-            1 => decode_v1(persisted),
-            // Future versions: add arms here, e.g. `2 => decode_v2(persisted),`
+    // Probe the version field without requiring any particular entry shape.
+    if let Ok(probe) = ron::from_str::<VersionProbe>(contents) {
+        return match probe.version {
+            1 => decode_v1(contents),
+            2 => decode_v2(contents),
             unsupported => {
                 warn!(
                     "[decode] Unsupported persisted state version {unsupported} \
@@ -97,13 +104,78 @@ pub fn decode(contents: &str) -> Option<HashMap<WindowKey, WindowState>> {
     decode_legacy_single_window(contents)
 }
 
-fn decode_legacy_single_window(contents: &str) -> Option<HashMap<WindowKey, WindowState>> {
-    let state = ron::from_str::<WindowState>(contents).ok()?;
-    debug!("[decode] Migrated legacy single-window format to v1");
-    Some(HashMap::from([(WindowKey::Primary, state)]))
+/// v1 window state layout (used `width`/`height` field names).
+/// Used only for deserializing v1 and legacy files.
+#[derive(Debug, Clone, Deserialize)]
+struct WindowStateV1 {
+    position:      Option<(i32, i32)>,
+    width:         u32,
+    height:        u32,
+    monitor_index: usize,
+    mode:          crate::types::SavedWindowMode,
+    #[serde(default)]
+    app_name:      String,
 }
 
-fn decode_v1(persisted: PersistedState) -> Option<HashMap<WindowKey, WindowState>> {
+impl WindowStateV1 {
+    /// Convert to current `WindowState`, treating v1 `width`/`height` as logical.
+    fn into_current(self) -> WindowState {
+        WindowState {
+            position:       self.position,
+            logical_width:  self.width,
+            logical_height: self.height,
+            monitor_scale:  1.0,
+            monitor_index:  self.monitor_index,
+            mode:           self.mode,
+            app_name:       self.app_name,
+        }
+    }
+}
+
+/// v1 persisted entry (uses `WindowStateV1`).
+#[derive(Debug, Clone, Deserialize)]
+struct PersistedEntryV1 {
+    key:   WindowKey,
+    state: WindowStateV1,
+}
+
+/// v1 persisted state wrapper.
+#[derive(Debug, Clone, Deserialize)]
+struct PersistedStateV1 {
+    #[allow(dead_code)]
+    version: u8,
+    entries: Vec<PersistedEntryV1>,
+}
+
+fn decode_legacy_single_window(contents: &str) -> Option<HashMap<WindowKey, WindowState>> {
+    let state = ron::from_str::<WindowStateV1>(contents).ok()?;
+    debug!("[decode] Migrated legacy single-window format to v2");
+    Some(HashMap::from([(WindowKey::Primary, state.into_current())]))
+}
+
+fn decode_v1(contents: &str) -> Option<HashMap<WindowKey, WindowState>> {
+    let v1 = ron::from_str::<PersistedStateV1>(contents).ok()?;
+
+    let mut states = HashMap::with_capacity(v1.entries.len());
+    for entry in v1.entries {
+        if states
+            .insert(entry.key.clone(), entry.state.into_current())
+            .is_some()
+        {
+            warn!(
+                "[decode] Invalid persisted state: duplicate key \"{}\"",
+                entry.key
+            );
+            return None;
+        }
+    }
+
+    debug!("[decode] Migrated v1 state to v2");
+    Some(states)
+}
+
+fn decode_v2(contents: &str) -> Option<HashMap<WindowKey, WindowState>> {
+    let persisted = ron::from_str::<PersistedState>(contents).ok()?;
     let mut states = HashMap::with_capacity(persisted.entries.len());
     for entry in persisted.entries {
         if states.insert(entry.key.clone(), entry.state).is_some() {
@@ -120,10 +192,9 @@ fn decode_v1(persisted: PersistedState) -> Option<HashMap<WindowKey, WindowState
 
 /// Header comment prepended to the RON file to document the coordinate contract.
 const RON_HEADER: &str = "\
-// All spatial values are in physical pixels (not logical).
 // Position: window content area top-left in physical monitor coordinates.
-// Width/Height: content area size in physical pixels (excludes decoration).
-// Monitor scale factor is NOT stored — it is looked up at runtime.
+// logical_width/logical_height: content area size in logical pixels (excludes decoration).
+// monitor_scale: scale factor at save time (informational, not used during restore).
 ";
 
 /// Encode typed runtime state into persisted v1 text.
@@ -164,17 +235,18 @@ mod tests {
 
     fn sample_state() -> WindowState {
         WindowState {
-            position:      Some((10, 20)),
-            width:         800,
-            height:        600,
-            monitor_index: 1,
-            mode:          SavedWindowMode::Windowed,
-            app_name:      "test-app".to_string(),
+            position:       Some((10, 20)),
+            logical_width:  800,
+            logical_height: 600,
+            monitor_scale:  1.0,
+            monitor_index:  1,
+            mode:           SavedWindowMode::Windowed,
+            app_name:       "test-app".to_string(),
         }
     }
 
     #[test]
-    fn decode_v1_distinguishes_primary_and_managed_primary() {
+    fn decode_v2_distinguishes_primary_and_managed_primary() {
         let persisted = PersistedState {
             version: CURRENT_STATE_VERSION,
             entries: vec![
@@ -198,7 +270,7 @@ mod tests {
             };
 
         let decoded = decode(&contents);
-        assert!(decoded.is_some(), "expected v1 decode to succeed");
+        assert!(decoded.is_some(), "expected v2 decode to succeed");
         let decoded = decoded.unwrap_or_default();
         assert!(decoded.contains_key(&WindowKey::Primary));
         assert!(decoded.contains_key(&WindowKey::Managed("primary".to_string())));
@@ -206,14 +278,19 @@ mod tests {
     }
 
     #[test]
-    fn decode_legacy_single_window_migrates_to_v1() {
-        let contents =
-            match ron::ser::to_string_pretty(&sample_state(), ron::ser::PrettyConfig::default()) {
-                Ok(contents) => contents,
-                Err(error) => panic!("failed to serialize legacy single-window state: {error}"),
-            };
+    fn decode_legacy_single_window_migrates_to_v2() {
+        // Legacy format uses `width`/`height` field names (pre-multi-window era)
+        let legacy_ron = "\
+(
+    position: Some((10, 20)),
+    width: 800,
+    height: 600,
+    monitor_index: 1,
+    mode: Windowed,
+    app_name: \"test-app\",
+)";
 
-        let decoded = decode(&contents);
+        let decoded = decode(legacy_ron);
         assert!(
             decoded.is_some(),
             "expected legacy single-window decode to succeed"
@@ -221,11 +298,44 @@ mod tests {
         let decoded = decoded.unwrap_or_default();
         assert!(decoded.contains_key(&WindowKey::Primary));
         assert_eq!(decoded.len(), 1);
-        assert_eq!(decoded[&WindowKey::Primary].position, Some((10, 20)));
+        let state = &decoded[&WindowKey::Primary];
+        assert_eq!(state.position, Some((10, 20)));
+        assert_eq!(state.logical_width, 800);
+        assert_eq!(state.logical_height, 600);
+        assert_eq!(state.monitor_scale, 1.0);
     }
 
     #[test]
-    fn decode_v1_rejects_duplicate_keys() {
+    fn decode_v1_migrates_to_v2() {
+        let v1_ron = "\
+(
+    version: 1,
+    entries: [
+        (
+            key: Primary,
+            state: (
+                position: Some((10, 20)),
+                width: 800,
+                height: 600,
+                monitor_index: 1,
+                mode: Windowed,
+                app_name: \"test-app\",
+            ),
+        ),
+    ],
+)";
+
+        let decoded = decode(v1_ron);
+        assert!(decoded.is_some(), "expected v1 decode to succeed");
+        let decoded = decoded.unwrap_or_default();
+        let state = &decoded[&WindowKey::Primary];
+        assert_eq!(state.logical_width, 800);
+        assert_eq!(state.logical_height, 600);
+        assert_eq!(state.monitor_scale, 1.0);
+    }
+
+    #[test]
+    fn decode_v2_rejects_duplicate_keys() {
         let persisted = PersistedState {
             version: CURRENT_STATE_VERSION,
             entries: vec![
@@ -308,8 +418,9 @@ mod tests {
             assert_eq!(decoded.len(), 1);
             let state = &decoded[&WindowKey::Primary];
             assert_eq!(state.position, Some((200, 200)));
-            assert_eq!(state.width, 1600);
-            assert_eq!(state.height, 1200);
+            assert_eq!(state.logical_width, 1600);
+            assert_eq!(state.logical_height, 1200);
+            assert_eq!(state.monitor_scale, 1.0);
             assert_eq!(state.monitor_index, 0);
             assert_eq!(state.mode, SavedWindowMode::Windowed);
             assert_eq!(state.app_name, "restore_window");
@@ -325,8 +436,8 @@ mod tests {
             let decoded = decoded.unwrap_or_default();
             let state = &decoded[&WindowKey::Primary];
             assert_eq!(state.position, Some((0, 0)));
-            assert_eq!(state.width, 3456);
-            assert_eq!(state.height, 2234);
+            assert_eq!(state.logical_width, 3456);
+            assert_eq!(state.logical_height, 2234);
             assert_eq!(state.mode, SavedWindowMode::BorderlessFullscreen);
         }
 
@@ -340,8 +451,8 @@ mod tests {
             let decoded = decoded.unwrap_or_default();
             let state = &decoded[&WindowKey::Primary];
             assert_eq!(state.position, Some((0, 0)));
-            assert_eq!(state.width, 1920);
-            assert_eq!(state.height, 1200);
+            assert_eq!(state.logical_width, 1920);
+            assert_eq!(state.logical_height, 1200);
             assert_eq!(
                 state.mode,
                 SavedWindowMode::Fullscreen {
@@ -356,7 +467,7 @@ mod tests {
     }
 
     #[test]
-    fn encode_sets_version_1() {
+    fn encode_sets_version_2() {
         let states = HashMap::from([
             (WindowKey::Primary, sample_state()),
             (WindowKey::Managed("inspector".to_string()), sample_state()),
@@ -367,12 +478,48 @@ mod tests {
             Err(error) => panic!("failed to encode state: {error}"),
         };
         let decoded = ron::from_str::<PersistedState>(&encoded);
-        assert!(decoded.is_ok(), "encoded text should parse as v1");
+        assert!(decoded.is_ok(), "encoded text should parse as v2");
         let decoded = decoded.unwrap_or(PersistedState {
             version: 0,
             entries: Vec::new(),
         });
         assert_eq!(decoded.version, CURRENT_STATE_VERSION);
         assert_eq!(decoded.entries.len(), 2);
+    }
+
+    #[test]
+    fn encode_then_decode_roundtrip() {
+        let states = HashMap::from([
+            (WindowKey::Primary, sample_state()),
+            (
+                WindowKey::Managed("inspector".to_string()),
+                WindowState {
+                    position:       Some((100, 200)),
+                    logical_width:  1024,
+                    logical_height: 768,
+                    monitor_scale:  2.0,
+                    monitor_index:  0,
+                    mode:           SavedWindowMode::Windowed,
+                    app_name:       "test-app".to_string(),
+                },
+            ),
+        ]);
+
+        let encoded = match encode(&states) {
+            Ok(encoded) => encoded,
+            Err(error) => panic!("failed to encode state: {error}"),
+        };
+        let decoded = decode(&encoded);
+        assert!(decoded.is_some(), "roundtrip decode should succeed");
+        let decoded = decoded.unwrap_or_default();
+        assert_eq!(decoded.len(), 2);
+        let primary = &decoded[&WindowKey::Primary];
+        assert_eq!(primary.logical_width, 800);
+        assert_eq!(primary.logical_height, 600);
+        assert_eq!(primary.monitor_scale, 1.0);
+        let inspector = &decoded[&WindowKey::Managed("inspector".to_string())];
+        assert_eq!(inspector.logical_width, 1024);
+        assert_eq!(inspector.logical_height, 768);
+        assert_eq!(inspector.monitor_scale, 2.0);
     }
 }

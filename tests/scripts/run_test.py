@@ -320,8 +320,8 @@ def parse_ron_values(content: str) -> dict[str, RonWindowValues]:
     re_managed = re.compile(r'key: Managed\("([^"]+)"\)')
     re_position = re.compile(r"position: Some\(\((-?\d+),\s*(-?\d+)\)\)")
     re_position_none = re.compile(r"position: None")
-    re_width = re.compile(r"width: (\d+)")
-    re_height = re.compile(r"height: (\d+)")
+    re_width = re.compile(r"logical_width: (\d+)")
+    re_height = re.compile(r"logical_height: (\d+)")
     re_monitor = re.compile(r"monitor_index: (\d+)")
     re_mode = re.compile(r"mode: (Windowed|BorderlessFullscreen|Fullscreen)")
 
@@ -673,8 +673,11 @@ def validate_window(
         elif field == "size":
             actual_w = json_str(extract_from_entity(entity, COMP_WINDOW, "resolution", "physical_width"))
             actual_h = json_str(extract_from_entity(entity, COMP_WINDOW, "resolution", "physical_height"))
-            exp_w = ron_values.get("width", "")
-            exp_h = ron_values.get("height", "")
+            scale = float(json_str(extract_from_entity(entity, COMP_WINDOW, "resolution", "scale_factor")))
+            logical_w = ron_values.get("width", "")
+            logical_h = ron_values.get("height", "")
+            exp_w = str(int(float(logical_w) * scale)) if logical_w else ""
+            exp_h = str(int(float(logical_h) * scale)) if logical_h else ""
             _check_field_pair(key, "size", exp_w, exp_h, actual_w, actual_h, prefix)
 
         elif field == "mode":
@@ -855,8 +858,9 @@ def apply_mutations(
         })
 
         primary_vals = ron_values.get("primary", RonWindowValues())
-        primary_vals["width"] = str(new_w)
-        primary_vals["height"] = str(new_h)
+        scale_f = float(json_str(scale))
+        primary_vals["width"] = str(int(new_w / scale_f))
+        primary_vals["height"] = str(int(new_h / scale_f))
 
 
 def verify_mutations(ron_values: dict[str, RonWindowValues], backend: str = "native") -> None:
@@ -867,11 +871,14 @@ def verify_mutations(ron_values: dict[str, RonWindowValues], backend: str = "nat
 
     primary_vals = ron_values.get("primary", RonWindowValues())
 
-    # Verify size
+    # Verify size (ron_values stores logical, BRP reports physical)
     actual_w = json_str(extract_from_entity(primary_entity, COMP_WINDOW, "resolution", "physical_width"))
     actual_h = json_str(extract_from_entity(primary_entity, COMP_WINDOW, "resolution", "physical_height"))
-    exp_w = primary_vals.get("width", "")
-    exp_h = primary_vals.get("height", "")
+    scale = float(json_str(extract_from_entity(primary_entity, COMP_WINDOW, "resolution", "scale_factor")))
+    logical_w = primary_vals.get("width", "")
+    logical_h = primary_vals.get("height", "")
+    exp_w = str(int(float(logical_w) * scale)) if logical_w else ""
+    exp_h = str(int(float(logical_h) * scale)) if logical_h else ""
     _check_field_pair("primary", "mutation_size", exp_w, exp_h, actual_w, actual_h)
 
     # Verify position if set
@@ -1018,10 +1025,20 @@ def _extract_video_modes(
     env_vars[f"{prefix}DEPTH"] = depth
     env_vars[f"{prefix}REFRESH"] = refresh
 
+    # Compute logical video mode dimensions (physical / monitor scale)
+    scale_key = prefix.replace("VIDEO_MODE_", "") + "SCALE"
+    scale_val = float(env_vars.get(scale_key, "1") or "1")
+    logical_w = str(int(float(phys_w) / scale_val))
+    logical_h = str(int(float(phys_h) / scale_val))
+    env_vars[f"{prefix}LOGICAL_WIDTH"] = logical_w
+    env_vars[f"{prefix}LOGICAL_HEIGHT"] = logical_h
+
     print(f"export {prefix}WIDTH={phys_w}")
     print(f"export {prefix}HEIGHT={phys_h}")
     print(f"export {prefix}DEPTH={depth}")
     print(f"export {prefix}REFRESH={refresh}")
+    print(f"export {prefix}LOGICAL_WIDTH={logical_w}")
+    print(f"export {prefix}LOGICAL_HEIGHT={logical_h}")
 
 
 def run_discovery(

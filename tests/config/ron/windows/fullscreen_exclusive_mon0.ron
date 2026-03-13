@@ -1,5 +1,5 @@
 (
-    version: 1,
+    version: 2,
     entries: [
         (
             key: Primary,
@@ -7,8 +7,9 @@
                 // Exclusive fullscreen targeting Monitor 0
                 // Tests W3 workaround (DX12/DXGI crash on startup)
                 position: Some((0, 0)),
-                width: ${MONITOR_0_VIDEO_MODE_WIDTH},
-                height: ${MONITOR_0_VIDEO_MODE_HEIGHT},
+                logical_width: ${MONITOR_0_VIDEO_MODE_LOGICAL_WIDTH},
+                logical_height: ${MONITOR_0_VIDEO_MODE_LOGICAL_HEIGHT},
+                monitor_scale: 1.0,
                 monitor_index: 0,
                 mode: Fullscreen(
                     video_mode: Some((

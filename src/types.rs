@@ -45,8 +45,10 @@ pub struct WindowRestored {
     pub window_id:     WindowKey,
     /// Target position that was applied (None on Wayland).
     pub position:      Option<IVec2>,
-    /// Target size that was applied (content area).
+    /// Target physical size that was applied (content area).
     pub size:          UVec2,
+    /// Target logical size that was applied (content area).
+    pub logical_size:  UVec2,
     /// Window mode that was applied.
     pub mode:          WindowMode,
     /// Monitor index the window was restored to.
@@ -83,30 +85,34 @@ pub struct WindowRestored {
 #[derive(EntityEvent, Debug, Clone, Reflect)]
 pub struct WindowRestoreMismatch {
     /// The window entity this event targets.
-    pub entity:            Entity,
+    pub entity:                Entity,
     /// Identifier for this window (primary or managed name).
-    pub window_id:         WindowKey,
+    pub window_id:             WindowKey,
     /// Target position from `TargetPosition` (None on Wayland).
-    pub expected_position: Option<IVec2>,
+    pub expected_position:     Option<IVec2>,
     /// Actual position from `Window.position` (None on Wayland).
-    pub actual_position:   Option<IVec2>,
-    /// Target size from `TargetPosition`.
-    pub expected_size:     UVec2,
+    pub actual_position:       Option<IVec2>,
+    /// Target physical size from `TargetPosition`.
+    pub expected_size:         UVec2,
     /// Actual physical size from `Window.resolution`.
-    pub actual_size:       UVec2,
+    pub actual_size:           UVec2,
+    /// Expected logical size from `TargetPosition`.
+    pub expected_logical_size: UVec2,
+    /// Actual logical size from `Window.resolution.width()`/`height()`.
+    pub actual_logical_size:   UVec2,
     /// Target window mode from `TargetPosition`.
-    pub expected_mode:     WindowMode,
+    pub expected_mode:         WindowMode,
     /// Actual window mode from `Window.mode`.
-    pub actual_mode:       WindowMode,
+    pub actual_mode:           WindowMode,
     /// Target monitor index from `TargetPosition`.
-    pub expected_monitor:  usize,
+    pub expected_monitor:      usize,
     /// Actual monitor index from `CurrentMonitor` (winit `current_monitor()`).
-    pub actual_monitor:    usize,
+    pub actual_monitor:        usize,
     /// Target scale factor from `TargetPosition.target_scale`.
-    pub expected_scale:    f64,
+    pub expected_scale:        f64,
     /// Actual scale factor from `Window.resolution.scale_factor()`.
     /// Lags behind monitor changes; updates only on winit `ScaleFactorChanged`.
-    pub actual_scale:      f64,
+    pub actual_scale:          f64,
 }
 
 /// Threshold for considering two scale factors equal.
@@ -342,11 +348,17 @@ pub struct TargetPosition {
     /// None on Wayland where clients can't access window position.
     pub position:                 Option<IVec2>,
     /// Target width in physical pixels (content area, excluding window decoration).
-    /// Copied directly from `WindowState.width`. Applied via `set_physical_resolution()`.
+    /// Computed from `logical_width * target_scale`. Applied via `set_physical_resolution()`.
     pub width:                    u32,
     /// Target height in physical pixels (content area, excluding window decoration).
-    /// Copied directly from `WindowState.height`. Applied via `set_physical_resolution()`.
+    /// Computed from `logical_height * target_scale`. Applied via `set_physical_resolution()`.
     pub height:                   u32,
+    /// Target width in logical pixels, from `WindowState.logical_width`.
+    /// Used for event reporting.
+    pub logical_width:            u32,
+    /// Target height in logical pixels, from `WindowState.logical_height`.
+    /// Used for event reporting.
+    pub logical_height:           u32,
     /// Scale factor of the target monitor.
     pub target_scale:             f64,
     /// Scale factor of the monitor where the window starts (keyboard focus monitor).
@@ -418,9 +430,15 @@ impl TargetPosition {
     #[must_use]
     pub const fn position(&self) -> Option<IVec2> { self.position }
 
-    /// Get the target size as a `UVec2`.
+    /// Get the target physical size as a `UVec2`.
     #[must_use]
     pub const fn size(&self) -> UVec2 { UVec2::new(self.width, self.height) }
+
+    /// Get the target logical size as a `UVec2`.
+    #[must_use]
+    pub const fn logical_size(&self) -> UVec2 {
+        UVec2::new(self.logical_width, self.logical_height)
+    }
 
     /// Scale ratio between starting and target monitors.
     #[must_use]
@@ -467,26 +485,37 @@ pub struct RestoreWindowConfig {
 
 /// Saved window state persisted to the RON file.
 ///
-/// All spatial values are in **physical pixels** (not logical). The monitor's scale factor
-/// is not stored — it is looked up at runtime from the `Monitors` resource.
+/// Size values (`logical_width`/`logical_height`) are in **logical pixels** — they represent
+/// the user's visual intent and are independent of scale factor. Position remains in
+/// **physical pixels** (monitor coordinates for winit).
 ///
-/// On save, `width`/`height` come from `Window::physical_width()`/`physical_height()`.
-/// On restore, they are applied via `WindowResolution::set_physical_resolution()`.
+/// On save, `logical_width`/`logical_height` come from `Window::width()`/`height()` (cast to
+/// `u32`). On restore, they are converted to physical pixels using the target monitor's scale
+/// factor in [`compute_target_position`](crate::restore_plan::compute_target_position).
 /// Position is applied via `Window.position = WindowPosition::At(pos)` (physical).
+///
+/// `monitor_scale` records the scale factor of the monitor at save time. It is informational
+/// only — restore uses the target monitor's live scale factor, not this saved value.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WindowState {
     /// Top-left corner of the window content area in physical monitor coordinates.
     /// `None` on Wayland where clients cannot access window position.
-    pub position:      Option<(i32, i32)>,
-    /// Content area width in physical pixels (excludes window decoration).
-    pub width:         u32,
-    /// Content area height in physical pixels (excludes window decoration).
-    pub height:        u32,
-    pub monitor_index: usize,
-    pub mode:          SavedWindowMode,
+    pub position:       Option<(i32, i32)>,
+    /// Content area width in logical pixels (excludes window decoration).
+    pub logical_width:  u32,
+    /// Content area height in logical pixels (excludes window decoration).
+    pub logical_height: u32,
+    /// Scale factor of the monitor at save time (informational, not used during restore).
+    #[serde(default = "default_monitor_scale")]
+    pub monitor_scale:  f64,
+    pub monitor_index:  usize,
+    pub mode:           SavedWindowMode,
     #[serde(default)]
-    pub app_name:      String,
+    pub app_name:       String,
 }
+
+/// Default monitor scale for deserialization of legacy files missing the field.
+const fn default_monitor_scale() -> f64 { 1.0 }
 
 /// Marks a window entity as managed by the window manager plugin.
 ///

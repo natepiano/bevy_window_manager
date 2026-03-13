@@ -155,8 +155,13 @@ pub fn load_target_position(
     };
 
     debug!(
-        "[load_target_position] Loaded state: position={:?} size={}x{} monitor_index={} mode={:?}",
-        state.position, state.width, state.height, state.monitor_index, state.mode
+        "[load_target_position] Loaded state: position={:?} logical_size={}x{} monitor_scale={} monitor_index={} mode={:?}",
+        state.position,
+        state.logical_width,
+        state.logical_height,
+        state.monitor_scale,
+        state.monitor_index,
+        state.mode
     );
 
     // Get starting monitor from WinitInfo
@@ -385,11 +390,11 @@ pub fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
 /// Cached window state for change detection comparison.
 #[derive(Default)]
 pub struct CachedWindowState {
-    position:      Option<IVec2>,
-    width:         u32,
-    height:        u32,
-    mode:          Option<SavedWindowMode>,
-    monitor_index: Option<usize>,
+    position:       Option<IVec2>,
+    logical_width:  u32,
+    logical_height: u32,
+    mode:           Option<SavedWindowMode>,
+    monitor_index:  Option<usize>,
 }
 
 /// Build state from all currently-active windows and write it to the state file.
@@ -443,7 +448,7 @@ pub fn save_active_window_state(
 
         let pos = get_window_position(entity, window);
 
-        let (monitor_index, _monitor_scale) = existing_monitor.map_or_else(
+        let (monitor_index, monitor_scale) = existing_monitor.map_or_else(
             || {
                 let p = monitors.first();
                 (p.index, p.scale)
@@ -452,13 +457,13 @@ pub fn save_active_window_state(
         );
         let mode: SavedWindowMode =
             existing_monitor.map_or_else(|| (&window.mode).into(), |m| (&m.effective_mode).into());
-
         states.insert(
             key,
             WindowState {
                 position: pos.map(|p| (p.x, p.y)),
-                width: window.resolution.physical_width(),
-                height: window.resolution.physical_height(),
+                logical_width: window.resolution.width() as u32,
+                logical_height: window.resolution.height() as u32,
+                monitor_scale,
                 monitor_index,
                 mode,
                 app_name: app_name.clone(),
@@ -528,10 +533,10 @@ pub fn save_window_state(
         // Get window position for saving state.
         let pos = get_window_position(window_entity, window);
 
-        let width = window.resolution.physical_width();
-        let height = window.resolution.physical_height();
-        let logical_w = window.resolution.width();
-        let logical_h = window.resolution.height();
+        let physical_w = window.resolution.physical_width();
+        let physical_h = window.resolution.physical_height();
+        let logical_w = window.resolution.width() as u32;
+        let logical_h = window.resolution.height() as u32;
         let res_scale = window.resolution.scale_factor();
 
         // Read monitor and effective mode from `CurrentMonitor` (maintained by
@@ -550,7 +555,7 @@ pub fn save_window_state(
 
         // Only save if position, size, or mode actually changed
         let position_changed = entry.position != pos;
-        let size_changed = entry.width != width || entry.height != height;
+        let size_changed = entry.logical_width != logical_w || entry.logical_height != logical_h;
         let mode_changed = entry.mode.as_ref() != Some(&mode);
         let monitor_changed = entry.monitor_index != Some(monitor_index);
 
@@ -559,8 +564,7 @@ pub fn save_window_state(
         }
 
         debug!(
-            "[save_window_state] [{key}] SAVE DETAIL: pos={pos:?} physical={}x{} logical={:.0}x{:.0} res_scale={res_scale} monitor={monitor_index} mode={mode:?}",
-            width, height, logical_w, logical_h
+            "[save_window_state] [{key}] SAVE DETAIL: pos={pos:?} physical={physical_w}x{physical_h} logical={logical_w}x{logical_h} res_scale={res_scale} monitor={monitor_index} mode={mode:?}",
         );
 
         // Log monitor transitions with detailed info
@@ -577,16 +581,15 @@ pub fn save_window_state(
 
         // Update cache
         entry.position = pos;
-        entry.width = width;
-        entry.height = height;
+        entry.logical_width = logical_w;
+        entry.logical_height = logical_h;
         entry.mode = Some(mode.clone());
         entry.monitor_index = Some(monitor_index);
 
         any_changed = true;
 
         debug!(
-            "[save_window_state] [{key}] pos={:?} size={}x{} monitor={} scale={} mode={:?}",
-            pos, width, height, monitor_index, monitor_scale, mode
+            "[save_window_state] [{key}] pos={pos:?} logical={logical_w}x{logical_h} physical={physical_w}x{physical_h} monitor={monitor_index} scale={monitor_scale} mode={mode:?}",
         );
     }
 
@@ -620,15 +623,18 @@ pub fn save_window_state(
                 };
 
                 if let Some(mode) = &entry.mode {
+                    let monitor_index = entry.monitor_index.unwrap_or(0);
+                    let monitor_scale = monitors.by_index(monitor_index).map_or(1.0, |m| m.scale);
                     states.insert(
                         key,
                         WindowState {
-                            position:      entry.position.map(|p| (p.x, p.y)),
-                            width:         entry.width,
-                            height:        entry.height,
-                            monitor_index: entry.monitor_index.unwrap_or(0),
-                            mode:          mode.clone(),
-                            app_name:      app_name.clone(),
+                            position: entry.position.map(|p| (p.x, p.y)),
+                            logical_width: entry.logical_width,
+                            logical_height: entry.logical_height,
+                            monitor_scale,
+                            monitor_index,
+                            mode: mode.clone(),
+                            app_name: app_name.clone(),
                         },
                     );
                 }
@@ -921,6 +927,7 @@ pub fn check_restore_settling(
         // Read target fields before borrowing settle_state mutably
         let target_mode = target.mode.to_window_mode(target.target_monitor_index);
         let target_size = target.size();
+        let target_logical_size = target.logical_size();
         let target_monitor = target.target_monitor_index;
         let expected_scale = target.target_scale;
 
@@ -985,6 +992,7 @@ pub fn check_restore_settling(
                     window_id: key,
                     position: target_position,
                     size: target_size,
+                    logical_size: target_logical_size,
                     mode: target_mode,
                     monitor_index: target_monitor,
                 })
@@ -1004,6 +1012,10 @@ pub fn check_restore_settling(
                 current_snapshot.mode,
                 current_snapshot.monitor,
             );
+            let actual_logical_size = UVec2::new(
+                window.resolution.width() as u32,
+                window.resolution.height() as u32,
+            );
             commands
                 .entity(entity)
                 .trigger(|entity| WindowRestoreMismatch {
@@ -1013,6 +1025,8 @@ pub fn check_restore_settling(
                     actual_position: current_snapshot.position,
                     expected_size: target_size,
                     actual_size: current_snapshot.size,
+                    expected_logical_size: target_logical_size,
+                    actual_logical_size,
                     expected_mode: target_mode,
                     actual_mode: current_snapshot.mode,
                     expected_monitor: target_monitor,

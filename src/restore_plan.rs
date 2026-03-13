@@ -34,9 +34,14 @@ pub fn compute_target_position(
     starting_scale: f64,
     platform: Platform,
 ) -> TargetPosition {
-    let width = saved_state.width;
-    let height = saved_state.height;
+    let logical_width = saved_state.logical_width;
+    let logical_height = saved_state.logical_height;
     let target_scale = target_info.scale;
+
+    // Convert logical → physical using the target monitor's scale factor.
+    // This is the single conversion point for size values.
+    let width = (f64::from(logical_width) * target_scale) as u32;
+    let height = (f64::from(logical_height) * target_scale) as u32;
 
     let outer_width = width + decoration.x;
     let outer_height = height + decoration.y;
@@ -48,6 +53,8 @@ pub fn compute_target_position(
         position,
         width,
         height,
+        logical_width,
+        logical_height,
         target_scale,
         starting_scale,
         monitor_scale_strategy: platform.scale_strategy(starting_scale, target_scale),

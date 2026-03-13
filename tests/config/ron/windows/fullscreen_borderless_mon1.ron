@@ -1,13 +1,14 @@
 (
-    version: 1,
+    version: 2,
     entries: [
         (
             key: Primary,
             state: (
                 // BorderlessFullscreen targeting Monitor 1
                 position: Some((${MONITOR_1_POS_X}, ${MONITOR_1_POS_Y})),
-                width: ${MONITOR_1_WIDTH},
-                height: ${MONITOR_1_HEIGHT},
+                logical_width: ${MONITOR_1_WIDTH},
+                logical_height: ${MONITOR_1_HEIGHT},
+                monitor_scale: 1.0,
                 monitor_index: 1,
                 mode: BorderlessFullscreen,
                 app_name: "restore_window",

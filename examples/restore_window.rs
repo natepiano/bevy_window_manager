@@ -208,16 +208,18 @@ struct WindowsSettledCount {
 /// Cached mismatch state per window for display.
 #[derive(Clone)]
 struct CachedMismatchState {
-    expected_position: Option<IVec2>,
-    actual_position:   Option<IVec2>,
-    expected_size:     UVec2,
-    actual_size:       UVec2,
-    expected_mode:     WindowMode,
-    actual_mode:       WindowMode,
-    expected_monitor:  usize,
-    actual_monitor:    usize,
-    expected_scale:    f64,
-    actual_scale:      f64,
+    expected_position:     Option<IVec2>,
+    actual_position:       Option<IVec2>,
+    expected_size:         UVec2,
+    actual_size:           UVec2,
+    expected_logical_size: UVec2,
+    actual_logical_size:   UVec2,
+    expected_mode:         WindowMode,
+    actual_mode:           WindowMode,
+    expected_monitor:      usize,
+    actual_monitor:        usize,
+    expected_scale:        f64,
+    actual_scale:          f64,
 }
 
 /// Per-entity mismatch states for display.
@@ -235,11 +237,13 @@ struct RestoredStates {
 
 /// State cached from a `WindowRestored` event for display comparison.
 struct CachedRestoredState {
-    position:      Option<IVec2>,
-    width:         u32,
-    height:        u32,
-    monitor_index: usize,
-    mode:          WindowMode,
+    position:       Option<IVec2>,
+    width:          u32,
+    height:         u32,
+    logical_width:  u32,
+    logical_height: u32,
+    monitor_index:  usize,
+    mode:           WindowMode,
 }
 
 // --- Constants ---
@@ -390,6 +394,7 @@ fn build_comparison_spans(
             .position
             .map_or_else(|| "None".to_string(), |p| format!("({}, {})", p.x, p.y));
         let file_size_phys = format!("{}x{}", state.width, state.height);
+        let file_size_log = format!("{}x{}", state.logical_width, state.logical_height);
         let file_monitor = format!("{}", state.monitor_index);
         let file_mode = format!("{:?}", state.mode);
 
@@ -485,15 +490,32 @@ fn build_comparison_spans(
         }
 
         // Logical size and scale
-        add_span(
-            cb,
-            font,
-            &format!(
-                "{:<LABEL_WIDTH$}{:<col1_width$}{current_size_log}\n",
-                "Size (logical):", ""
-            ),
-            DEFAULT_COLOR,
-        );
+        if let Some(m) = mismatch_state {
+            let exp_log = format!(
+                "{}x{}",
+                m.expected_logical_size.x, m.expected_logical_size.y
+            );
+            let act_log = format!("{}x{}", m.actual_logical_size.x, m.actual_logical_size.y);
+            add_comparison_row_5(
+                cb,
+                font,
+                "Size (logical):",
+                &file_size_log,
+                &current_size_log,
+                &exp_log,
+                &act_log,
+                col1_width,
+            );
+        } else {
+            add_comparison_row(
+                cb,
+                font,
+                "Size (logical):",
+                &file_size_log,
+                &current_size_log,
+                col1_width,
+            );
+        }
         if let Some(m) = mismatch_state {
             let exp_scale = format!("{}", m.expected_scale);
             let act_scale = format!("{}", m.actual_scale);
@@ -1384,18 +1406,26 @@ fn on_window_restored(
 ) {
     let event = trigger.event();
     info!(
-        "[on_window_restored] Restore complete: window_id={} entity={:?} position={:?} size={} mode={:?} monitor={}",
-        event.window_id, event.entity, event.position, event.size, event.mode, event.monitor_index
+        "[on_window_restored] Restore complete: window_id={} entity={:?} position={:?} physical={} logical={} mode={:?} monitor={}",
+        event.window_id,
+        event.entity,
+        event.position,
+        event.size,
+        event.logical_size,
+        event.mode,
+        event.monitor_index
     );
 
     restored_states.states.insert(
         event.entity,
         CachedRestoredState {
-            position:      event.position,
-            width:         event.size.x,
-            height:        event.size.y,
-            monitor_index: event.monitor_index,
-            mode:          event.mode,
+            position:       event.position,
+            width:          event.size.x,
+            height:         event.size.y,
+            logical_width:  event.logical_size.x,
+            logical_height: event.logical_size.y,
+            monitor_index:  event.monitor_index,
+            mode:           event.mode,
         },
     );
 
@@ -1433,27 +1463,31 @@ fn on_window_restore_mismatch(
     restored_states.states.insert(
         event.entity,
         CachedRestoredState {
-            position:      event.expected_position,
-            width:         event.expected_size.x,
-            height:        event.expected_size.y,
-            monitor_index: event.expected_monitor,
-            mode:          event.expected_mode,
+            position:       event.expected_position,
+            width:          event.expected_size.x,
+            height:         event.expected_size.y,
+            logical_width:  event.expected_logical_size.x,
+            logical_height: event.expected_logical_size.y,
+            monitor_index:  event.expected_monitor,
+            mode:           event.expected_mode,
         },
     );
 
     mismatch_states.states.insert(
         event.entity,
         CachedMismatchState {
-            expected_position: event.expected_position,
-            actual_position:   event.actual_position,
-            expected_size:     event.expected_size,
-            actual_size:       event.actual_size,
-            expected_mode:     event.expected_mode,
-            actual_mode:       event.actual_mode,
-            expected_monitor:  event.expected_monitor,
-            actual_monitor:    event.actual_monitor,
-            expected_scale:    event.expected_scale,
-            actual_scale:      event.actual_scale,
+            expected_position:     event.expected_position,
+            actual_position:       event.actual_position,
+            expected_size:         event.expected_size,
+            actual_size:           event.actual_size,
+            expected_logical_size: event.expected_logical_size,
+            actual_logical_size:   event.actual_logical_size,
+            expected_mode:         event.expected_mode,
+            actual_mode:           event.actual_mode,
+            expected_monitor:      event.expected_monitor,
+            actual_monitor:        event.actual_monitor,
+            expected_scale:        event.expected_scale,
+            actual_scale:          event.actual_scale,
         },
     );
 

@@ -79,17 +79,18 @@ mod tests {
 
     fn sample_state() -> WindowState {
         WindowState {
-            position:      Some((10, 20)),
-            width:         800,
-            height:        600,
-            monitor_index: 0,
-            mode:          SavedWindowMode::Windowed,
-            app_name:      "test-app".to_string(),
+            position:       Some((10, 20)),
+            logical_width:  800,
+            logical_height: 600,
+            monitor_scale:  1.0,
+            monitor_index:  0,
+            mode:           SavedWindowMode::Windowed,
+            app_name:       "test-app".to_string(),
         }
     }
 
     #[test]
-    fn save_then_load_roundtrip_v1() {
+    fn save_then_load_roundtrip_v2() {
         let file = match NamedTempFile::new() {
             Ok(file) => file,
             Err(error) => panic!("failed to create temp file: {error}"),
@@ -110,17 +111,22 @@ mod tests {
     }
 
     #[test]
-    fn legacy_single_window_read_then_save_rewrites_v1() {
+    fn legacy_single_window_read_then_save_rewrites_as_v2() {
         let file = match NamedTempFile::new() {
             Ok(file) => file,
             Err(error) => panic!("failed to create temp file: {error}"),
         };
         let path = file.path();
-        let legacy_contents =
-            match ron::ser::to_string_pretty(&sample_state(), ron::ser::PrettyConfig::default()) {
-                Ok(contents) => contents,
-                Err(error) => panic!("failed to serialize legacy state: {error}"),
-            };
+        // Legacy format uses `width`/`height` field names (pre-multi-window era)
+        let legacy_contents = "\
+(
+    position: Some((10, 20)),
+    width: 800,
+    height: 600,
+    monitor_index: 0,
+    mode: Windowed,
+    app_name: \"test-app\",
+)";
 
         if let Err(error) = fs::write(path, legacy_contents) {
             panic!("failed to write legacy content: {error}");
@@ -135,8 +141,12 @@ mod tests {
         assert!(contents.is_ok(), "expected rewritten file to be readable");
         let contents = contents.unwrap_or_default();
         assert!(
-            contents.contains("version: 1"),
-            "expected rewritten file to contain v1 version marker"
+            contents.contains("version: 2"),
+            "expected rewritten file to contain v2 version marker"
+        );
+        assert!(
+            contents.contains("logical_width: 800"),
+            "expected rewritten file to contain logical_width"
         );
     }
 }

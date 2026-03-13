@@ -230,8 +230,9 @@ fn on_managed_window_added(
         };
         let window_state = types::WindowState {
             position,
-            width: window.physical_width(),
-            height: window.physical_height(),
+            logical_width: window.width() as u32,
+            logical_height: window.height() as u32,
+            monitor_scale: monitor.scale,
             monitor_index: monitor.index,
             mode: SavedWindowMode::Windowed,
             app_name: String::new(),
@@ -352,10 +353,11 @@ fn on_managed_window_load(
     };
 
     debug!(
-        "[on_managed_window_load] Loaded state for \"{name}\": position={:?} size={}x{} monitor={} mode={:?}",
+        "[on_managed_window_load] Loaded state for \"{name}\": position={:?} logical_size={}x{} monitor_scale={} monitor={} mode={:?}",
         saved_state.position,
-        saved_state.width,
-        saved_state.height,
+        saved_state.logical_width,
+        saved_state.logical_height,
+        saved_state.monitor_scale,
         saved_state.monitor_index,
         saved_state.mode
     );
@@ -421,8 +423,6 @@ fn restore_managed_window(
     }
 
     let decoration = winit_info.decoration();
-    let outer_width = saved_state.width + decoration.x;
-    let outer_height = saved_state.height + decoration.y;
 
     // The window is created on the focused window's monitor (the primary window's monitor)
     // without explicit positioning. Its starting scale matches the primary monitor, not the
@@ -437,12 +437,12 @@ fn restore_managed_window(
     );
 
     debug!(
-        "[restore_managed_window] saved_pos={:?} clamped_pos={:?} target_scale={} outer={}x{} size={}x{} monitor={} mon_pos=({},{}) mon_size=({},{})",
+        "[restore_managed_window] saved_pos={:?} clamped_pos={:?} target_scale={} logical={}x{} physical={}x{} monitor={} mon_pos=({},{}) mon_size=({},{})",
         saved_state.position,
         target.position,
         target.target_scale,
-        outer_width,
-        outer_height,
+        target.logical_width,
+        target.logical_height,
         target.width,
         target.height,
         target.target_monitor_index,
