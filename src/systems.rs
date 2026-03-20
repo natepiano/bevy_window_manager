@@ -156,7 +156,7 @@ pub fn load_target_position(
 
     debug!(
         "[load_target_position] Loaded state: position={:?} logical_size={}x{} monitor_scale={} monitor_index={} mode={:?}",
-        state.position,
+        state.logical_position,
         state.logical_width,
         state.logical_height,
         state.monitor_scale,
@@ -172,7 +172,7 @@ pub fn load_target_position(
     let (target_info, fallback_position, used_fallback) =
         restore_plan::resolve_target_monitor_and_position(
             state.monitor_index,
-            state.position,
+            state.logical_position,
             &monitors,
         );
     if used_fallback {
@@ -457,10 +457,15 @@ pub fn save_active_window_state(
         );
         let mode: SavedWindowMode =
             existing_monitor.map_or_else(|| (&window.mode).into(), |m| (&m.effective_mode).into());
+        let logical_position = pos.map(|p| {
+            let lx = (p.x as f64 / monitor_scale).round() as i32;
+            let ly = (p.y as f64 / monitor_scale).round() as i32;
+            (lx, ly)
+        });
         states.insert(
             key,
             WindowState {
-                position: pos.map(|p| (p.x, p.y)),
+                logical_position,
                 logical_width: window.resolution.width() as u32,
                 logical_height: window.resolution.height() as u32,
                 monitor_scale,
@@ -625,10 +630,15 @@ pub fn save_window_state(
                 if let Some(mode) = &entry.mode {
                     let monitor_index = entry.monitor_index.unwrap_or(0);
                     let monitor_scale = monitors.by_index(monitor_index).map_or(1.0, |m| m.scale);
+                    let logical_position = entry.position.map(|p| {
+                        let lx = (p.x as f64 / monitor_scale).round() as i32;
+                        let ly = (p.y as f64 / monitor_scale).round() as i32;
+                        (lx, ly)
+                    });
                     states.insert(
                         key,
                         WindowState {
-                            position: entry.position.map(|p| (p.x, p.y)),
+                            logical_position,
                             logical_width: entry.logical_width,
                             logical_height: entry.logical_height,
                             monitor_scale,

@@ -4,7 +4,7 @@
         (
             key: Primary,
             state: (
-                position: Some((${MONITOR_1_POS_X}, ${MONITOR_1_POS_Y})),
+                logical_position: Some((${MONITOR_1_POS_X}, ${MONITOR_1_POS_Y})),
                 logical_width: 1200,
                 logical_height: 800,
                 monitor_scale: 1.0,
@@ -16,7 +16,7 @@
         (
             key: Managed("window-1"),
             state: (
-                position: Some((200, 200)),
+                logical_position: Some((200, 200)),
                 logical_width: 1200,
                 logical_height: 800,
                 monitor_scale: 1.0,

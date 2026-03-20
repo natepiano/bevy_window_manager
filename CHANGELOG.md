@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- State file format bumped to v2: window position and size now stored as logical pixels instead of physical pixels, preserving visual intent across monitors with different scale factors. Automatic migration from v1 and legacy formats.
+
 ## [0.18.3] - 2026-03-12
 
 ### Added

@@ -485,33 +485,30 @@ pub struct RestoreWindowConfig {
 
 /// Saved window state persisted to the RON file.
 ///
-/// Size values (`logical_width`/`logical_height`) are in **logical pixels** — they represent
-/// the user's visual intent and are independent of scale factor. Position remains in
-/// **physical pixels** (monitor coordinates for winit).
-///
-/// On save, `logical_width`/`logical_height` come from `Window::width()`/`height()` (cast to
-/// `u32`). On restore, they are converted to physical pixels using the target monitor's scale
-/// factor in [`compute_target_position`](crate::restore_plan::compute_target_position).
-/// Position is applied via `Window.position = WindowPosition::At(pos)` (physical).
+/// All spatial values are in **logical pixels** — they represent the user's visual intent
+/// and are independent of scale factor. On restore, both position and size are converted
+/// to physical pixels using the target monitor's scale factor in
+/// [`compute_target_position`](crate::restore_plan::compute_target_position).
 ///
 /// `monitor_scale` records the scale factor of the monitor at save time. It is informational
 /// only — restore uses the target monitor's live scale factor, not this saved value.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WindowState {
-    /// Top-left corner of the window content area in physical monitor coordinates.
+    /// Top-left corner of the window content area in logical pixels.
     /// `None` on Wayland where clients cannot access window position.
-    pub position:       Option<(i32, i32)>,
+    #[serde(alias = "position")]
+    pub logical_position: Option<(i32, i32)>,
     /// Content area width in logical pixels (excludes window decoration).
-    pub logical_width:  u32,
+    pub logical_width:    u32,
     /// Content area height in logical pixels (excludes window decoration).
-    pub logical_height: u32,
+    pub logical_height:   u32,
     /// Scale factor of the monitor at save time (informational, not used during restore).
     #[serde(default = "default_monitor_scale")]
-    pub monitor_scale:  f64,
-    pub monitor_index:  usize,
-    pub mode:           SavedWindowMode,
+    pub monitor_scale:    f64,
+    pub monitor_index:    usize,
+    pub mode:             SavedWindowMode,
     #[serde(default)]
-    pub app_name:       String,
+    pub app_name:         String,
 }
 
 /// Default monitor scale for deserialization of legacy files missing the field.

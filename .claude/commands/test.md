@@ -155,10 +155,12 @@ If `SINGLE_MONITOR_MODE` is true, filter using <SingleMonitorFiltering/> rules.
 
 ---
 
-**Test execution order** (same as test.md — by launch_monitor, human tests last):
+**Test execution order** — group by `launch_monitor`, human tests last:
 
-**macOS/Windows**: Move editor → run monitor 0 tests → move editor → run monitor 1 tests → human tests.
-**Linux**: Move terminal → Wayland mon0 → Wayland mon1 → X11 mon0 → X11 mon1 → human tests.
+**macOS/Windows**: Move editor to monitor 0 → run all `launch_monitor: 0` tests → move editor to monitor 1 → run all `launch_monitor: 1` tests → human tests.
+**Linux**: Move terminal to monitor 0 → Wayland mon0 tests → move terminal to monitor 1 → Wayland mon1 tests → move terminal to monitor 0 → X11 mon0 tests → move terminal to monitor 1 → X11 mon1 tests → human tests.
+
+**CRITICAL**: The Bevy app launches on whichever monitor has focus (where the editor/terminal is). Before running a group of tests, you MUST move the editor/terminal TO the group's `launch_monitor` using the platform-specific move script (<MacOSZedMove/>, <LinuxTerminalMove/>, or <WindowsZedMove/>). If you skip this step, tests that depend on launch monitor (especially cross-monitor and workaround validation tests) will produce incorrect results.
 
 ---
 

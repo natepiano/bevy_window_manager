@@ -79,13 +79,13 @@ mod tests {
 
     fn sample_state() -> WindowState {
         WindowState {
-            position:       Some((10, 20)),
-            logical_width:  800,
-            logical_height: 600,
-            monitor_scale:  1.0,
-            monitor_index:  0,
-            mode:           SavedWindowMode::Windowed,
-            app_name:       "test-app".to_string(),
+            logical_position: Some((10, 20)),
+            logical_width:    800,
+            logical_height:   600,
+            monitor_scale:    1.0,
+            monitor_index:    0,
+            mode:             SavedWindowMode::Windowed,
+            app_name:         "test-app".to_string(),
         }
     }
 

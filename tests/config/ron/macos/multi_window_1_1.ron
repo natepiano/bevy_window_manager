@@ -4,7 +4,7 @@
         (
             key: Primary,
             state: (
-                position: Some((-716, -1340)),
+                logical_position: Some((-716, -1340)),
                 logical_width: 900,
                 logical_height: 500,
                 monitor_scale: 1.0,
@@ -16,7 +16,7 @@
         (
             key: Managed("window-1"),
             state: (
-                position: Some((-516, -1240)),
+                logical_position: Some((-516, -1240)),
                 logical_width: 1200,
                 logical_height: 800,
                 monitor_scale: 1.0,

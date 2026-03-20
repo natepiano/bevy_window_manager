@@ -6,7 +6,7 @@
             state: (
                 // Saved on Monitor 0 (high-DPI), launched from Monitor 1 (low-DPI)
                 // Tests CompensateSizeOnly strategy
-                position: Some((200, 200)),
+                logical_position: Some((200, 200)),
                 logical_width: 1400,
                 logical_height: 1000,
                 monitor_scale: 1.0,

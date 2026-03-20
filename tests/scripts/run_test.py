@@ -318,8 +318,8 @@ def parse_ron_values(content: str) -> dict[str, RonWindowValues]:
     current_key = ""
 
     re_managed = re.compile(r'key: Managed\("([^"]+)"\)')
-    re_position = re.compile(r"position: Some\(\((-?\d+),\s*(-?\d+)\)\)")
-    re_position_none = re.compile(r"position: None")
+    re_position = re.compile(r"logical_position: Some\(\((-?\d+),\s*(-?\d+)\)\)")
+    re_position_none = re.compile(r"logical_position: None")
     re_width = re.compile(r"logical_width: (\d+)")
     re_height = re.compile(r"logical_height: (\d+)")
     re_monitor = re.compile(r"monitor_index: (\d+)")
@@ -666,8 +666,11 @@ def validate_window(
             if backend == "wayland":
                 continue
             actual_x, actual_y = extract_position_at(entity, COMP_WINDOW)
-            exp_x = ron_values.get("pos_x", "")
-            exp_y = ron_values.get("pos_y", "")
+            scale = float(json_str(extract_from_entity(entity, COMP_WINDOW, "resolution", "scale_factor")))
+            logical_x = ron_values.get("pos_x", "")
+            logical_y = ron_values.get("pos_y", "")
+            exp_x = str(int(float(logical_x) * scale)) if logical_x else ""
+            exp_y = str(int(float(logical_y) * scale)) if logical_y else ""
             _check_field_pair(key, "position", exp_x, exp_y, actual_x, actual_y, prefix)
 
         elif field == "size":
@@ -825,20 +828,23 @@ def apply_mutations(
     if "position_offset" in mutation:
         offset = mutation["position_offset"]
         primary_vals = ron_values.get("primary", RonWindowValues())
-        ron_x = int(primary_vals.get("pos_x", "0") or "0")
-        ron_y = int(primary_vals.get("pos_y", "0") or "0")
-        new_x = ron_x + offset[0]
-        new_y = ron_y + offset[1]
+        scale = float(json_str(extract_from_entity(entity, COMP_WINDOW, "resolution", "scale_factor")))
+        logical_x = int(primary_vals.get("pos_x", "0") or "0")
+        logical_y = int(primary_vals.get("pos_y", "0") or "0")
+        # Convert logical to physical, apply physical offset, set via BRP
+        physical_x = int(float(logical_x) * scale) + offset[0]
+        physical_y = int(float(logical_y) * scale) + offset[1]
 
         _ = brp.call("world.mutate_components", {
             "entity": entity_id,
             "component": COMP_WINDOW,
             "path": ".position",
-            "value": {"At": [new_x, new_y]},
+            "value": {"At": [physical_x, physical_y]},
         })
 
-        primary_vals["pos_x"] = str(new_x)
-        primary_vals["pos_y"] = str(new_y)
+        # Store logical values for validation
+        primary_vals["pos_x"] = str(int(physical_x / scale))
+        primary_vals["pos_y"] = str(int(physical_y / scale))
 
     if "size" in mutation:
         new_w = mutation["size"][0]
@@ -887,10 +893,12 @@ def verify_mutations(ron_values: dict[str, RonWindowValues], backend: str = "nat
     # We update ron_values with the actual readback so the relaunch comparison
     # checks position stability (no drift) rather than exact match against the
     # value we set.
-    exp_px = primary_vals.get("pos_x", "")
-    if exp_px:
+    logical_px = primary_vals.get("pos_x", "")
+    if logical_px:
         actual_x, actual_y = extract_position_at(primary_entity, COMP_WINDOW)
-        exp_py = primary_vals.get("pos_y", "")
+        logical_py = primary_vals.get("pos_y", "")
+        exp_px = str(int(float(logical_px) * scale)) if logical_px else ""
+        exp_py = str(int(float(logical_py) * scale)) if logical_py else ""
         if backend == "x11":
             # W6 bug: readback is offset by title bar — just record actual for
             # relaunch stability check, don't fail on mutation readback
@@ -898,9 +906,9 @@ def verify_mutations(ron_values: dict[str, RonWindowValues], backend: str = "nat
                       f"x11_readback=[{actual_x},{actual_y}] (W6 offset expected)")
         else:
             _check_field_pair("primary", "mutation_position", exp_px, exp_py, actual_x, actual_y)
-        # Update expected values to actual readback for relaunch stability check
-        primary_vals["pos_x"] = actual_x
-        primary_vals["pos_y"] = actual_y
+        # Update expected values to actual readback (converted to logical) for relaunch stability check
+        primary_vals["pos_x"] = str(int(int(actual_x) / scale)) if actual_x else ""
+        primary_vals["pos_y"] = str(int(int(actual_y) / scale)) if actual_y else ""
 
 
 # =============================================================================

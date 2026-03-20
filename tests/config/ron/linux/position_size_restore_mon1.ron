@@ -5,7 +5,7 @@
             key: Primary,
             state: (
                 // Monitor 1 (HDMI) at (0, 0), scale 1
-                position: Some((200, 200)),
+                logical_position: Some((200, 200)),
                 logical_width: 800,
                 logical_height: 600,
                 monitor_scale: 1.0,

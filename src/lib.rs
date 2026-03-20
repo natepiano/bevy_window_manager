@@ -224,12 +224,16 @@ fn on_managed_window_added(
             },
             _ => *monitors.first(),
         };
-        let position = match window.position {
-            bevy::window::WindowPosition::At(pos) => Some((pos.x, pos.y)),
+        let logical_position = match window.position {
+            bevy::window::WindowPosition::At(pos) => {
+                let lx = (pos.x as f64 / monitor.scale).round() as i32;
+                let ly = (pos.y as f64 / monitor.scale).round() as i32;
+                Some((lx, ly))
+            },
             _ => None,
         };
         let window_state = types::WindowState {
-            position,
+            logical_position,
             logical_width: window.width() as u32,
             logical_height: window.height() as u32,
             monitor_scale: monitor.scale,
@@ -354,7 +358,7 @@ fn on_managed_window_load(
 
     debug!(
         "[on_managed_window_load] Loaded state for \"{name}\": position={:?} logical_size={}x{} monitor_scale={} monitor={} mode={:?}",
-        saved_state.position,
+        saved_state.logical_position,
         saved_state.logical_width,
         saved_state.logical_height,
         saved_state.monitor_scale,
@@ -412,7 +416,7 @@ fn restore_managed_window(
     let (target_info, fallback_position, used_fallback) =
         restore_plan::resolve_target_monitor_and_position(
             saved_state.monitor_index,
-            saved_state.position,
+            saved_state.logical_position,
             monitors,
         );
     if used_fallback {
@@ -438,7 +442,7 @@ fn restore_managed_window(
 
     debug!(
         "[restore_managed_window] saved_pos={:?} clamped_pos={:?} target_scale={} logical={}x{} physical={}x{} monitor={} mon_pos=({},{}) mon_size=({},{})",
-        saved_state.position,
+        saved_state.logical_position,
         target.position,
         target.target_scale,
         target.logical_width,

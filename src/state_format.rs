@@ -118,16 +118,16 @@ struct WindowStateV1 {
 }
 
 impl WindowStateV1 {
-    /// Convert to current `WindowState`, treating v1 `width`/`height` as logical.
+    /// Convert to current `WindowState`, treating v1 values as logical (assumes scale 1.0).
     fn into_current(self) -> WindowState {
         WindowState {
-            position:       self.position,
-            logical_width:  self.width,
-            logical_height: self.height,
-            monitor_scale:  1.0,
-            monitor_index:  self.monitor_index,
-            mode:           self.mode,
-            app_name:       self.app_name,
+            logical_position: self.position,
+            logical_width:    self.width,
+            logical_height:   self.height,
+            monitor_scale:    1.0,
+            monitor_index:    self.monitor_index,
+            mode:             self.mode,
+            app_name:         self.app_name,
         }
     }
 }
@@ -192,8 +192,7 @@ fn decode_v2(contents: &str) -> Option<HashMap<WindowKey, WindowState>> {
 
 /// Header comment prepended to the RON file to document the coordinate contract.
 const RON_HEADER: &str = "\
-// Position: window content area top-left in physical monitor coordinates.
-// logical_width/logical_height: content area size in logical pixels (excludes decoration).
+// All spatial values (position, size) are in logical pixels.
 // monitor_scale: scale factor at save time (informational, not used during restore).
 ";
 
@@ -235,13 +234,13 @@ mod tests {
 
     fn sample_state() -> WindowState {
         WindowState {
-            position:       Some((10, 20)),
-            logical_width:  800,
-            logical_height: 600,
-            monitor_scale:  1.0,
-            monitor_index:  1,
-            mode:           SavedWindowMode::Windowed,
-            app_name:       "test-app".to_string(),
+            logical_position: Some((10, 20)),
+            logical_width:    800,
+            logical_height:   600,
+            monitor_scale:    1.0,
+            monitor_index:    1,
+            mode:             SavedWindowMode::Windowed,
+            app_name:         "test-app".to_string(),
         }
     }
 
@@ -257,7 +256,7 @@ mod tests {
                 PersistedEntry {
                     key:   WindowKey::Managed("primary".to_string()),
                     state: WindowState {
-                        position: Some((30, 40)),
+                        logical_position: Some((30, 40)),
                         ..sample_state()
                     },
                 },
@@ -299,7 +298,7 @@ mod tests {
         assert!(decoded.contains_key(&WindowKey::Primary));
         assert_eq!(decoded.len(), 1);
         let state = &decoded[&WindowKey::Primary];
-        assert_eq!(state.position, Some((10, 20)));
+        assert_eq!(state.logical_position, Some((10, 20)));
         assert_eq!(state.logical_width, 800);
         assert_eq!(state.logical_height, 600);
         assert_eq!(state.monitor_scale, 1.0);
@@ -417,7 +416,7 @@ mod tests {
             let decoded = decoded.unwrap_or_default();
             assert_eq!(decoded.len(), 1);
             let state = &decoded[&WindowKey::Primary];
-            assert_eq!(state.position, Some((200, 200)));
+            assert_eq!(state.logical_position, Some((200, 200)));
             assert_eq!(state.logical_width, 1600);
             assert_eq!(state.logical_height, 1200);
             assert_eq!(state.monitor_scale, 1.0);
@@ -435,7 +434,7 @@ mod tests {
             );
             let decoded = decoded.unwrap_or_default();
             let state = &decoded[&WindowKey::Primary];
-            assert_eq!(state.position, Some((0, 0)));
+            assert_eq!(state.logical_position, Some((0, 0)));
             assert_eq!(state.logical_width, 3456);
             assert_eq!(state.logical_height, 2234);
             assert_eq!(state.mode, SavedWindowMode::BorderlessFullscreen);
@@ -450,7 +449,7 @@ mod tests {
             );
             let decoded = decoded.unwrap_or_default();
             let state = &decoded[&WindowKey::Primary];
-            assert_eq!(state.position, Some((0, 0)));
+            assert_eq!(state.logical_position, Some((0, 0)));
             assert_eq!(state.logical_width, 1920);
             assert_eq!(state.logical_height, 1200);
             assert_eq!(
@@ -494,13 +493,13 @@ mod tests {
             (
                 WindowKey::Managed("inspector".to_string()),
                 WindowState {
-                    position:       Some((100, 200)),
-                    logical_width:  1024,
-                    logical_height: 768,
-                    monitor_scale:  2.0,
-                    monitor_index:  0,
-                    mode:           SavedWindowMode::Windowed,
-                    app_name:       "test-app".to_string(),
+                    logical_position: Some((100, 200)),
+                    logical_width:    1024,
+                    logical_height:   768,
+                    monitor_scale:    2.0,
+                    monitor_index:    0,
+                    mode:             SavedWindowMode::Windowed,
+                    app_name:         "test-app".to_string(),
                 },
             ),
         ]);

@@ -4,7 +4,7 @@
         (
             key: Primary,
             state: (
-                position: Some((0, 0)),
+                logical_position: Some((0, 0)),
                 logical_width: 1728,
                 logical_height: 1117,
                 monitor_scale: 2.0,

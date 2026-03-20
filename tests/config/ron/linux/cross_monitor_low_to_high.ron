@@ -6,7 +6,7 @@
             state: (
                 // X11 cross-monitor: saved on Monitor 0 (eDP, scale 2, pos 1512,2880), launched from Monitor 1 (HDMI, scale 1)
                 // Tests position/size restoration when crossing from low DPI to high DPI
-                position: Some((1712, 3080)),
+                logical_position: Some((1712, 3080)),
                 logical_width: 1000,
                 logical_height: 700,
                 monitor_scale: 1.0,
