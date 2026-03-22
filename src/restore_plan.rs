@@ -47,8 +47,8 @@ pub fn compute_target_position(
     let outer_height = height + decoration.y;
     let position = fallback_position.map(|(x, y)| {
         // Convert logical position to physical using the target monitor's scale factor.
-        let physical_x = (x as f64 * target_scale).round() as i32;
-        let physical_y = (y as f64 * target_scale).round() as i32;
+        let physical_x = (f64::from(x) * target_scale).round() as i32;
+        let physical_y = (f64::from(y) * target_scale).round() as i32;
         clamp_position_to_monitor(
             physical_x,
             physical_y,

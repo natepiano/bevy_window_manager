@@ -458,8 +458,8 @@ pub fn save_active_window_state(
         let mode: SavedWindowMode =
             existing_monitor.map_or_else(|| (&window.mode).into(), |m| (&m.effective_mode).into());
         let logical_position = pos.map(|p| {
-            let lx = (p.x as f64 / monitor_scale).round() as i32;
-            let ly = (p.y as f64 / monitor_scale).round() as i32;
+            let lx = (f64::from(p.x) / monitor_scale).round() as i32;
+            let ly = (f64::from(p.y) / monitor_scale).round() as i32;
             (lx, ly)
         });
         states.insert(
@@ -631,8 +631,8 @@ pub fn save_window_state(
                     let monitor_index = entry.monitor_index.unwrap_or(0);
                     let monitor_scale = monitors.by_index(monitor_index).map_or(1.0, |m| m.scale);
                     let logical_position = entry.position.map(|p| {
-                        let lx = (p.x as f64 / monitor_scale).round() as i32;
-                        let ly = (p.y as f64 / monitor_scale).round() as i32;
+                        let lx = (f64::from(p.x) / monitor_scale).round() as i32;
+                        let ly = (f64::from(p.y) / monitor_scale).round() as i32;
                         (lx, ly)
                     });
                     states.insert(
@@ -990,64 +990,137 @@ pub fn check_restore_settling(
             current_snapshot.size, current_snapshot.mode, current_snapshot.monitor,
         );
 
+        let settle_target = SettleTarget {
+            position:     target_position,
+            size:         target_size,
+            logical_size: target_logical_size,
+            mode:         target_mode,
+            monitor:      target_monitor,
+            scale:        expected_scale,
+        };
         if stable && all_match {
-            info!(
-                "[check_restore_settling] [{key}] Settled after {total_elapsed_ms:.0}ms \
-                 (stable for {stability_elapsed_ms:.0}ms)"
+            emit_settle_success(
+                &mut commands,
+                entity,
+                key,
+                &settle_target,
+                total_elapsed_ms,
+                stability_elapsed_ms,
             );
-            commands
-                .entity(entity)
-                .trigger(|entity| WindowRestored {
-                    entity,
-                    window_id: key,
-                    position: target_position,
-                    size: target_size,
-                    logical_size: target_logical_size,
-                    mode: target_mode,
-                    monitor_index: target_monitor,
-                })
-                .remove::<TargetPosition>()
-                .remove::<X11FrameCompensated>();
         } else if total_timed_out {
-            warn!(
-                "[check_restore_settling] [{key}] Settle timeout after {total_elapsed_ms:.0}ms — \
-                 mismatch remains: \
-                 position: {target_position:?} vs {:?}, \
-                 size: {target_size} vs {}, \
-                 mode: {target_mode:?} vs {:?}, \
-                 monitor: {target_monitor} vs {}, \
-                 scale: {expected_scale} vs {actual_scale}",
-                current_snapshot.position,
-                current_snapshot.size,
-                current_snapshot.mode,
-                current_snapshot.monitor,
+            let settle_actual = SettleActual {
+                snapshot:     current_snapshot,
+                scale:        actual_scale,
+                logical_size: UVec2::new(
+                    window.resolution.width() as u32,
+                    window.resolution.height() as u32,
+                ),
+            };
+            emit_settle_mismatch(
+                &mut commands,
+                entity,
+                key,
+                &settle_target,
+                &settle_actual,
+                total_elapsed_ms,
             );
-            let actual_logical_size = UVec2::new(
-                window.resolution.width() as u32,
-                window.resolution.height() as u32,
-            );
-            commands
-                .entity(entity)
-                .trigger(|entity| WindowRestoreMismatch {
-                    entity,
-                    window_id: key,
-                    expected_position: target_position,
-                    actual_position: current_snapshot.position,
-                    expected_size: target_size,
-                    actual_size: current_snapshot.size,
-                    expected_logical_size: target_logical_size,
-                    actual_logical_size,
-                    expected_mode: target_mode,
-                    actual_mode: current_snapshot.mode,
-                    expected_monitor: target_monitor,
-                    actual_monitor: current_snapshot.monitor,
-                    expected_scale,
-                    actual_scale,
-                })
-                .remove::<TargetPosition>()
-                .remove::<X11FrameCompensated>();
         }
     }
+}
+
+/// Bundled actual values for settle mismatch reporting.
+struct SettleActual {
+    snapshot:     SettleSnapshot,
+    scale:        f64,
+    logical_size: UVec2,
+}
+
+/// Extracted target values for settle resolution, avoiding too-many-arguments.
+struct SettleTarget {
+    position:     Option<IVec2>,
+    size:         UVec2,
+    logical_size: UVec2,
+    mode:         WindowMode,
+    monitor:      usize,
+    scale:        f64,
+}
+
+/// Emit `WindowRestored` and clean up `TargetPosition` when settle succeeds.
+fn emit_settle_success(
+    commands: &mut Commands,
+    entity: Entity,
+    key: WindowKey,
+    target: &SettleTarget,
+    total_elapsed_ms: f32,
+    stability_elapsed_ms: f32,
+) {
+    info!(
+        "[check_restore_settling] [{key}] Settled after {total_elapsed_ms:.0}ms \
+         (stable for {stability_elapsed_ms:.0}ms)"
+    );
+    commands
+        .entity(entity)
+        .trigger(|entity| WindowRestored {
+            entity,
+            window_id: key,
+            position: target.position,
+            size: target.size,
+            logical_size: target.logical_size,
+            mode: target.mode,
+            monitor_index: target.monitor,
+        })
+        .remove::<TargetPosition>()
+        .remove::<X11FrameCompensated>();
+}
+
+/// Emit `WindowRestoreMismatch` and clean up `TargetPosition` when settle times out.
+fn emit_settle_mismatch(
+    commands: &mut Commands,
+    entity: Entity,
+    key: WindowKey,
+    target: &SettleTarget,
+    actual: &SettleActual,
+    total_elapsed_ms: f32,
+) {
+    warn!(
+        "[check_restore_settling] [{key}] Settle timeout after {total_elapsed_ms:.0}ms — \
+         mismatch remains: \
+         position: {:?} vs {:?}, \
+         size: {} vs {}, \
+         mode: {:?} vs {:?}, \
+         monitor: {} vs {}, \
+         scale: {} vs {}",
+        target.position,
+        actual.snapshot.position,
+        target.size,
+        actual.snapshot.size,
+        target.mode,
+        actual.snapshot.mode,
+        target.monitor,
+        actual.snapshot.monitor,
+        target.scale,
+        actual.scale,
+    );
+    commands
+        .entity(entity)
+        .trigger(|entity| WindowRestoreMismatch {
+            entity,
+            window_id: key,
+            expected_position: target.position,
+            actual_position: actual.snapshot.position,
+            expected_size: target.size,
+            actual_size: actual.snapshot.size,
+            expected_logical_size: target.logical_size,
+            actual_logical_size: actual.logical_size,
+            expected_mode: target.mode,
+            actual_mode: actual.snapshot.mode,
+            expected_monitor: target.monitor,
+            actual_monitor: actual.snapshot.monitor,
+            expected_scale: target.scale,
+            actual_scale: actual.scale,
+        })
+        .remove::<TargetPosition>()
+        .remove::<X11FrameCompensated>();
 }
 
 /// Result of attempting to apply a window restore.

@@ -301,7 +301,7 @@ mod tests {
         assert_eq!(state.logical_position, Some((10, 20)));
         assert_eq!(state.logical_width, 800);
         assert_eq!(state.logical_height, 600);
-        assert_eq!(state.monitor_scale, 1.0);
+        assert!((state.monitor_scale - 1.0).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -330,7 +330,7 @@ mod tests {
         let state = &decoded[&WindowKey::Primary];
         assert_eq!(state.logical_width, 800);
         assert_eq!(state.logical_height, 600);
-        assert_eq!(state.monitor_scale, 1.0);
+        assert!((state.monitor_scale - 1.0).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -419,7 +419,7 @@ mod tests {
             assert_eq!(state.logical_position, Some((200, 200)));
             assert_eq!(state.logical_width, 1600);
             assert_eq!(state.logical_height, 1200);
-            assert_eq!(state.monitor_scale, 1.0);
+            assert!((state.monitor_scale - 1.0).abs() < f64::EPSILON);
             assert_eq!(state.monitor_index, 0);
             assert_eq!(state.mode, SavedWindowMode::Windowed);
             assert_eq!(state.app_name, "restore_window");
@@ -515,10 +515,10 @@ mod tests {
         let primary = &decoded[&WindowKey::Primary];
         assert_eq!(primary.logical_width, 800);
         assert_eq!(primary.logical_height, 600);
-        assert_eq!(primary.monitor_scale, 1.0);
+        assert!((primary.monitor_scale - 1.0).abs() < f64::EPSILON);
         let inspector = &decoded[&WindowKey::Managed("inspector".to_string())];
         assert_eq!(inspector.logical_width, 1024);
         assert_eq!(inspector.logical_height, 768);
-        assert_eq!(inspector.monitor_scale, 2.0);
+        assert!((inspector.monitor_scale - 2.0).abs() < f64::EPSILON);
     }
 }

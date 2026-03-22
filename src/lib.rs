@@ -226,8 +226,8 @@ fn on_managed_window_added(
         };
         let logical_position = match window.position {
             bevy::window::WindowPosition::At(pos) => {
-                let lx = (pos.x as f64 / monitor.scale).round() as i32;
-                let ly = (pos.y as f64 / monitor.scale).round() as i32;
+                let lx = (f64::from(pos.x) / monitor.scale).round() as i32;
+                let ly = (f64::from(pos.y) / monitor.scale).round() as i32;
                 Some((lx, ly))
             },
             _ => None,
