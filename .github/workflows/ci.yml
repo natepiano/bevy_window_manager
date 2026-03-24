@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - main
+      - enhance/logical-size-storage
   workflow_dispatch:
 
 env:
