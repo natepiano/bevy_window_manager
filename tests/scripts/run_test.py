@@ -306,10 +306,24 @@ brp = BrpClient()
 
 
 def substitute_ron(template: str, env_vars: dict[str, str]) -> str:
-    content = template
-    for key, val in env_vars.items():
-        content = content.replace(f"${{{key}}}", val)
-    return content
+    def _replacer(match: re.Match[str]) -> str:
+        expr = match.group(1)
+        # Support ${VAR+N} and ${VAR-N} arithmetic
+        arith = re.match(r"^(\w+)([+-])(\d+)$", expr)
+        if arith:
+            var_name = arith.group(1)
+            op = arith.group(2)
+            offset = int(arith.group(3))
+            val = env_vars.get(var_name)
+            if val is not None:
+                result = int(val) + offset if op == "+" else int(val) - offset
+                return str(result)
+            return match.group(0)
+        val = env_vars.get(expr)
+        if val is not None:
+            return val
+        return match.group(0)
+    return re.sub(r"\$\{([^}]+)\}", _replacer, template)
 
 
 def parse_ron_values(content: str) -> dict[str, RonWindowValues]:
@@ -1060,6 +1074,23 @@ def resolve_backend(backend: str, test: TestEntry) -> str:
     return backend
 
 
+def _swap_x11_env_vars(env_vars: dict[str, str]) -> None:
+    """Swap MONITOR_* env vars with their X11 counterparts for X11 tests.
+
+    Replaces POS, LOGICAL_POS, and SCALE with X11-discovered values so that
+    RON template substitution and validation use X11 coordinates.
+    """
+    suffixes = ["_POS_X", "_POS_Y", "_LOGICAL_POS_X", "_LOGICAL_POS_Y", "_SCALE"]
+    i = 0
+    while f"MONITOR_{i}_SCALE" in env_vars:
+        for suffix in suffixes:
+            x11_key = f"MONITOR_{i}_X11{suffix}"
+            base_key = f"MONITOR_{i}{suffix}"
+            if x11_key in env_vars:
+                env_vars[base_key] = env_vars[x11_key]
+        i += 1
+
+
 def setup_test(
     config: PlatformConfig,
     test_id: str,
@@ -1076,6 +1107,12 @@ def setup_test(
     test = find_test(config, test_id)
     resolved_backend = resolve_backend(backend, test)
     env_vars = load_env_file(env_file) if env_file else {}
+
+    # For X11 backend, swap monitor positions and scales with X11-discovered values
+    # so that RON template substitution and validation use X11 coordinates.
+    if resolved_backend == "x11":
+        _swap_x11_env_vars(env_vars)
+
     write_ron(test["ron_file"], ron_dir, ron_path, env_vars)
     return test, resolved_backend, env_vars
 
@@ -1242,6 +1279,22 @@ def run_discovery(
                 x11_scale = json_str(x11_list[i].get("scale"))
                 env_vars[f"MONITOR_{i}_X11_SCALE"] = x11_scale
                 print(f"export MONITOR_{i}_X11_SCALE={x11_scale}")
+
+                x11_pos = json_list(x11_list[i].get("position"))
+                x11_pos_x = json_str(x11_pos[0]) if len(x11_pos) > 0 else "0"
+                x11_pos_y = json_str(x11_pos[1]) if len(x11_pos) > 1 else "0"
+                x11_scale_f = float(x11_scale) if x11_scale else 1.0
+                x11_lpos_x = str(round(float(x11_pos_x) / x11_scale_f)) if x11_scale_f != 0 else x11_pos_x
+                x11_lpos_y = str(round(float(x11_pos_y) / x11_scale_f)) if x11_scale_f != 0 else x11_pos_y
+
+                env_vars[f"MONITOR_{i}_X11_POS_X"] = x11_pos_x
+                env_vars[f"MONITOR_{i}_X11_POS_Y"] = x11_pos_y
+                env_vars[f"MONITOR_{i}_X11_LOGICAL_POS_X"] = x11_lpos_x
+                env_vars[f"MONITOR_{i}_X11_LOGICAL_POS_Y"] = x11_lpos_y
+                print(f"export MONITOR_{i}_X11_POS_X={x11_pos_x}")
+                print(f"export MONITOR_{i}_X11_POS_Y={x11_pos_y}")
+                print(f"export MONITOR_{i}_X11_LOGICAL_POS_X={x11_lpos_x}")
+                print(f"export MONITOR_{i}_X11_LOGICAL_POS_Y={x11_lpos_y}")
 
             x11_query = brp.call("world.query", {
                 "data": {"components": [COMP_MONITOR]},

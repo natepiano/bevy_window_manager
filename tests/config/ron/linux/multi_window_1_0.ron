@@ -17,8 +17,8 @@
         (
             key: Managed("window-1"),
             state: (
-                // Secondary window on Monitor 0 (eDP)
-                logical_position: Some((1712, 3080)),
+                // Secondary window on Monitor 0 (eDP) — 200px offset
+                logical_position: Some((${MONITOR_0_LOGICAL_POS_X+200}, ${MONITOR_0_LOGICAL_POS_Y+200})),
                 logical_width: 1200,
                 logical_height: 800,
                 monitor_scale: 1.0,

@@ -4,8 +4,8 @@
         (
             key: Primary,
             state: (
-                // Monitor 0 (eDP) at position (1512, 2880), size 3456x2160, scale 2
-                logical_position: Some((1712, 3080)),
+                // Monitor 0 (eDP) — 200px offset from monitor origin
+                logical_position: Some((${MONITOR_0_LOGICAL_POS_X+200}, ${MONITOR_0_LOGICAL_POS_Y+200})),
                 logical_width: 1000,
                 logical_height: 700,
                 monitor_scale: 1.0,
@@ -17,8 +17,8 @@
         (
             key: Managed("window-1"),
             state: (
-                // Secondary window also on Monitor 0
-                logical_position: Some((2012, 3280)),
+                // Secondary window also on Monitor 0 — offset from origin (must fit within monitor)
+                logical_position: Some((${MONITOR_0_LOGICAL_POS_X+400}, ${MONITOR_0_LOGICAL_POS_Y+200})),
                 logical_width: 1200,
                 logical_height: 800,
                 monitor_scale: 1.0,

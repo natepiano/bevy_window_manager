@@ -5,7 +5,6 @@
             key: Primary,
             state: (
                 // Wayland: position not available, only size is tested
-                // Monitor 0 (eDP) at (1512, 2880), scale 2
                 logical_position: None,
                 logical_width: 1000,
                 logical_height: 700,
