@@ -411,6 +411,16 @@ def write_env_file(path: str, env: dict[str, str]) -> None:
 # =============================================================================
 
 
+def _stderr_has_panic(path: str) -> bool:
+    """Check if a stderr log file contains a Rust panic."""
+    try:
+        with open(path) as f:
+            content = f.read()
+        return "panicked at" in content
+    except OSError:
+        return False
+
+
 def kill_stale_apps() -> None:
     if sys.platform == "win32":
         _ = subprocess.run(["taskkill", "/F", "/IM", "restore_window.exe"], capture_output=True)
@@ -445,23 +455,27 @@ _ = signal.signal(signal.SIGINT, _handle_signal)
 def wait_for_restore() -> str:
     """Poll for `WindowRestoredReceived` or `WindowRestoreMismatchReceived`.
 
-    Returns "restored" or "mismatch" depending on which resource appeared first.
+    Returns "restored", "mismatch", or "crashed" depending on outcome.
     """
     for _ in range(MAX_POLLS):
+        if app_process is not None and app_process.poll() is not None:
+            return "crashed"
         try:
             result = brp.call("world.get_resources", {"resource": RES_RESTORED})
             value = json_get(result, "result", "value")
             if value is not None:
                 return "restored"
         except (URLError, OSError):
-            pass
+            if app_process is not None and app_process.poll() is not None:
+                return "crashed"
         try:
             result = brp.call("world.get_resources", {"resource": RES_MISMATCH})
             value = json_get(result, "result", "value")
             if value is not None:
                 return "mismatch"
         except (URLError, OSError):
-            pass
+            if app_process is not None and app_process.poll() is not None:
+                return "crashed"
         time.sleep(POLL_INTERVAL)
     die("Neither WindowRestoredReceived nor WindowRestoreMismatchReceived found within timeout")
 
@@ -515,6 +529,7 @@ def launch_app(
             env=env,
         )
         print(f"# App stderr: {debug_stderr_path}", flush=True)
+        stderr_path = debug_stderr_path
 
     brp.wait_ready()
     restore_result = ""
@@ -600,6 +615,46 @@ def extract_position_at(entity: JsonDict, component: str) -> tuple[str, str]:
 # =============================================================================
 
 
+def _monitor_scale(entity: JsonDict, env_vars: dict[str, str]) -> float:
+    """Get the scale factor for the monitor the window is currently on.
+
+    Uses the actual monitor index from BRP + discovery env vars, which is
+    always correct.  Falls back to the window's reported scale_factor when
+    env vars aren't available (e.g. no discovery env file).
+    """
+    idx = json_str(extract_from_entity(entity, COMP_CURRENT_MONITOR, "monitor", "index"))
+    if idx and f"MONITOR_{idx}_SCALE" in env_vars:
+        return float(env_vars[f"MONITOR_{idx}_SCALE"])
+    return float(json_str(extract_from_entity(entity, COMP_WINDOW, "resolution", "scale_factor")))
+
+
+def _rust_round(x: float) -> int:
+    """Round like Rust's f64::round() — half away from zero (not banker's rounding)."""
+    if x >= 0:
+        return int(x + 0.5)
+    return -int(-x + 0.5)
+
+
+def _logical_to_physical_pos(logical: int, scale: float) -> int:
+    """Convert logical position to physical. Matches Rust: (logical * scale).round() as i32."""
+    return _rust_round(float(logical) * scale)
+
+
+def _physical_to_logical_pos(physical: int, scale: float) -> int:
+    """Convert physical position to logical. Matches Rust: (physical / scale).round() as i32."""
+    return _rust_round(float(physical) / scale)
+
+
+def _logical_to_physical_size(logical: int, scale: float) -> int:
+    """Convert logical size to physical. Matches Rust: (logical * scale) as u32 (truncation)."""
+    return int(float(logical) * scale)
+
+
+def _physical_to_logical_size(physical: int, scale: float) -> int:
+    """Convert physical size to logical. Matches Bevy: (physical as f32 / scale) as u32 (truncation)."""
+    return int(float(physical) / scale)
+
+
 def _check_field(
     key: str,
     field: str,
@@ -660,27 +715,28 @@ def validate_window(
     prefix: str = "",
     expected_mode_override: str = "",
     backend: str = "native",
+    env_vars: dict[str, str] | None = None,
 ) -> None:
     for field in validate_fields:
         if field == "position":
             if backend == "wayland":
                 continue
             actual_x, actual_y = extract_position_at(entity, COMP_WINDOW)
-            scale = float(json_str(extract_from_entity(entity, COMP_WINDOW, "resolution", "scale_factor")))
+            scale = _monitor_scale(entity, env_vars or {})
             logical_x = ron_values.get("pos_x", "")
             logical_y = ron_values.get("pos_y", "")
-            exp_x = str(int(float(logical_x) * scale)) if logical_x else ""
-            exp_y = str(int(float(logical_y) * scale)) if logical_y else ""
+            exp_x = str(_logical_to_physical_pos(int(logical_x), scale)) if logical_x else ""
+            exp_y = str(_logical_to_physical_pos(int(logical_y), scale)) if logical_y else ""
             _check_field_pair(key, "position", exp_x, exp_y, actual_x, actual_y, prefix)
 
         elif field == "size":
             actual_w = json_str(extract_from_entity(entity, COMP_WINDOW, "resolution", "physical_width"))
             actual_h = json_str(extract_from_entity(entity, COMP_WINDOW, "resolution", "physical_height"))
-            scale = float(json_str(extract_from_entity(entity, COMP_WINDOW, "resolution", "scale_factor")))
+            scale = _monitor_scale(entity, env_vars or {})
             logical_w = ron_values.get("width", "")
             logical_h = ron_values.get("height", "")
-            exp_w = str(int(float(logical_w) * scale)) if logical_w else ""
-            exp_h = str(int(float(logical_h) * scale)) if logical_h else ""
+            exp_w = str(_logical_to_physical_size(int(logical_w), scale)) if logical_w else ""
+            exp_h = str(_logical_to_physical_size(int(logical_h), scale)) if logical_h else ""
             _check_field_pair(key, "size", exp_w, exp_h, actual_w, actual_h, prefix)
 
         elif field == "mode":
@@ -771,6 +827,7 @@ def validate_all_windows(
     ron_values: dict[str, RonWindowValues],
     prefix: str = "",
     backend: str = "native",
+    env_vars: dict[str, str] | None = None,
 ) -> None:
     triggered_events: set[str] = set()
     managed_entities: list[JsonDict] = []
@@ -809,6 +866,7 @@ def validate_all_windows(
             prefix=prefix,
             expected_mode_override=expected_mode_override,
             backend=backend,
+            env_vars=env_vars,
         )
 
 
@@ -821,19 +879,20 @@ def apply_mutations(
     test: TestEntry,
     entity: JsonDict,
     ron_values: dict[str, RonWindowValues],
+    env_vars: dict[str, str] | None = None,
 ) -> None:
     entity_id = entity.get("entity")
     mutation = test.get("mutation", {})
+    scale = _monitor_scale(entity, env_vars or {})
 
     if "position_offset" in mutation:
         offset = mutation["position_offset"]
         primary_vals = ron_values.get("primary", RonWindowValues())
-        scale = float(json_str(extract_from_entity(entity, COMP_WINDOW, "resolution", "scale_factor")))
         logical_x = int(primary_vals.get("pos_x", "0") or "0")
         logical_y = int(primary_vals.get("pos_y", "0") or "0")
         # Convert logical to physical, apply physical offset, set via BRP
-        physical_x = int(float(logical_x) * scale) + offset[0]
-        physical_y = int(float(logical_y) * scale) + offset[1]
+        physical_x = _logical_to_physical_pos(logical_x, scale) + offset[0]
+        physical_y = _logical_to_physical_pos(logical_y, scale) + offset[1]
 
         _ = brp.call("world.mutate_components", {
             "entity": entity_id,
@@ -842,14 +901,16 @@ def apply_mutations(
             "value": {"At": [physical_x, physical_y]},
         })
 
-        # Store logical values for validation
-        primary_vals["pos_x"] = str(int(physical_x / scale))
-        primary_vals["pos_y"] = str(int(physical_y / scale))
+        # Store logical values for relaunch validation
+        primary_vals["pos_x"] = str(_physical_to_logical_pos(physical_x, scale))
+        primary_vals["pos_y"] = str(_physical_to_logical_pos(physical_y, scale))
+        # Store physical values for immediate mutation verification
+        primary_vals["mutation_physical_x"] = str(physical_x)
+        primary_vals["mutation_physical_y"] = str(physical_y)
 
     if "size" in mutation:
         new_w = mutation["size"][0]
         new_h = mutation["size"][1]
-        scale = extract_from_entity(entity, COMP_WINDOW, "resolution", "scale_factor")
 
         _ = brp.call("world.mutate_components", {
             "entity": entity_id,
@@ -864,12 +925,18 @@ def apply_mutations(
         })
 
         primary_vals = ron_values.get("primary", RonWindowValues())
-        scale_f = float(json_str(scale))
-        primary_vals["width"] = str(int(new_w / scale_f))
-        primary_vals["height"] = str(int(new_h / scale_f))
+        primary_vals["width"] = str(_physical_to_logical_size(new_w, scale))
+        primary_vals["height"] = str(_physical_to_logical_size(new_h, scale))
+        # Store physical values for immediate mutation verification
+        primary_vals["mutation_physical_w"] = str(new_w)
+        primary_vals["mutation_physical_h"] = str(new_h)
 
 
-def verify_mutations(ron_values: dict[str, RonWindowValues], backend: str = "native") -> None:
+def verify_mutations(
+    ron_values: dict[str, RonWindowValues],
+    backend: str = "native",
+    env_vars: dict[str, str] | None = None,
+) -> None:
     primary_entity = resolve_primary_entity()
     if primary_entity is None:
         fail_line("primary", "mutation_query", "primary window not found")
@@ -880,11 +947,15 @@ def verify_mutations(ron_values: dict[str, RonWindowValues], backend: str = "nat
     # Verify size (ron_values stores logical, BRP reports physical)
     actual_w = json_str(extract_from_entity(primary_entity, COMP_WINDOW, "resolution", "physical_width"))
     actual_h = json_str(extract_from_entity(primary_entity, COMP_WINDOW, "resolution", "physical_height"))
-    scale = float(json_str(extract_from_entity(primary_entity, COMP_WINDOW, "resolution", "scale_factor")))
-    logical_w = primary_vals.get("width", "")
-    logical_h = primary_vals.get("height", "")
-    exp_w = str(int(float(logical_w) * scale)) if logical_w else ""
-    exp_h = str(int(float(logical_h) * scale)) if logical_h else ""
+    scale = _monitor_scale(primary_entity, env_vars or {})
+    # Use stored physical values if available (avoids round-trip rounding errors)
+    exp_w = primary_vals.get("mutation_physical_w", "")
+    exp_h = primary_vals.get("mutation_physical_h", "")
+    if not exp_w:
+        logical_w = primary_vals.get("width", "")
+        logical_h = primary_vals.get("height", "")
+        exp_w = str(_logical_to_physical_size(int(logical_w), scale)) if logical_w else ""
+        exp_h = str(_logical_to_physical_size(int(logical_h), scale)) if logical_h else ""
     _check_field_pair("primary", "mutation_size", exp_w, exp_h, actual_w, actual_h)
 
     # Verify position if set
@@ -896,9 +967,13 @@ def verify_mutations(ron_values: dict[str, RonWindowValues], backend: str = "nat
     logical_px = primary_vals.get("pos_x", "")
     if logical_px:
         actual_x, actual_y = extract_position_at(primary_entity, COMP_WINDOW)
-        logical_py = primary_vals.get("pos_y", "")
-        exp_px = str(int(float(logical_px) * scale)) if logical_px else ""
-        exp_py = str(int(float(logical_py) * scale)) if logical_py else ""
+        # Use stored physical values if available (avoids round-trip rounding errors)
+        exp_px = primary_vals.get("mutation_physical_x", "")
+        exp_py = primary_vals.get("mutation_physical_y", "")
+        if not exp_px:
+            logical_py = primary_vals.get("pos_y", "")
+            exp_px = str(_logical_to_physical_pos(int(logical_px), scale)) if logical_px else ""
+            exp_py = str(_logical_to_physical_pos(int(logical_py), scale)) if logical_py else ""
         if backend == "x11":
             # W6 bug: readback is offset by title bar — just record actual for
             # relaunch stability check, don't fail on mutation readback
@@ -907,8 +982,8 @@ def verify_mutations(ron_values: dict[str, RonWindowValues], backend: str = "nat
         else:
             _check_field_pair("primary", "mutation_position", exp_px, exp_py, actual_x, actual_y)
         # Update expected values to actual readback (converted to logical) for relaunch stability check
-        primary_vals["pos_x"] = str(int(int(actual_x) / scale)) if actual_x else ""
-        primary_vals["pos_y"] = str(int(int(actual_y) / scale)) if actual_y else ""
+        primary_vals["pos_x"] = str(_physical_to_logical_pos(int(actual_x), scale)) if actual_x else ""
+        primary_vals["pos_y"] = str(_physical_to_logical_pos(int(actual_y), scale)) if actual_y else ""
 
 
 # =============================================================================
@@ -1091,14 +1166,22 @@ def run_discovery(
         size_w = json_str(size[0]) if len(size) > 0 else "0"
         size_h = json_str(size[1]) if len(size) > 1 else "0"
 
+        scale_f = float(scale) if scale else 1.0
+        logical_pos_x = str(round(float(pos_x) / scale_f)) if scale_f != 0 else pos_x
+        logical_pos_y = str(round(float(pos_y) / scale_f)) if scale_f != 0 else pos_y
+
         env_vars[f"MONITOR_{i}_POS_X"] = pos_x
         env_vars[f"MONITOR_{i}_POS_Y"] = pos_y
+        env_vars[f"MONITOR_{i}_LOGICAL_POS_X"] = logical_pos_x
+        env_vars[f"MONITOR_{i}_LOGICAL_POS_Y"] = logical_pos_y
         env_vars[f"MONITOR_{i}_WIDTH"] = size_w
         env_vars[f"MONITOR_{i}_HEIGHT"] = size_h
         env_vars[f"MONITOR_{i}_SCALE"] = scale
 
         print(f"export MONITOR_{i}_POS_X={pos_x}")
         print(f"export MONITOR_{i}_POS_Y={pos_y}")
+        print(f"export MONITOR_{i}_LOGICAL_POS_X={logical_pos_x}")
+        print(f"export MONITOR_{i}_LOGICAL_POS_Y={logical_pos_y}")
         print(f"export MONITOR_{i}_WIDTH={size_w}")
         print(f"export MONITOR_{i}_HEIGHT={size_h}")
         print(f"export MONITOR_{i}_SCALE={scale}")
@@ -1320,7 +1403,7 @@ def run_test(
     no_shutdown: bool = False,
 ) -> None:
     global app_process
-    test, resolved_backend, _ = setup_test(config, test_id, ron_dir, ron_path, env_file, backend)
+    test, resolved_backend, env_vars = setup_test(config, test_id, ron_dir, ron_path, env_file, backend)
 
     # Parse expected values from written RON
     ron_content = Path(ron_path).read_text()
@@ -1351,17 +1434,25 @@ def run_test(
         shutdown_app()
         _ = launch_app(feature_flags, resolved_backend)
 
-    # Exit code only test
+    # Exit code only test — check for panics in stderr
     if has_exit_code:
-        pass_line("primary", "exit_code", "expected=0 actual=0")
-        if no_shutdown:
+        # Give the app a moment for any deferred panics to appear in stderr
+        time.sleep(2)
+        panicked = _stderr_has_panic(stderr_path) if stderr_path else False
+        if panicked:
+            fail_line("primary", "exit_code", "expected=no_panic actual=panic_detected")
+        else:
+            pass_line("primary", "exit_code", "expected=no_panic actual=no_panic")
+        if app_process is not None and app_process.poll() is not None:
+            app_process = None
+        elif no_shutdown:
             app_process = None
         else:
             shutdown_app()
         sys.exit(1 if fail_count > 0 else 0)
 
     # Initial validation
-    validate_all_windows(windows, ron_values, prefix="", backend=resolved_backend)
+    validate_all_windows(windows, ron_values, prefix="", backend=resolved_backend, env_vars=env_vars)
 
     # Persistence setup (set mode before shutdown)
     if has_persistence:
@@ -1379,9 +1470,9 @@ def run_test(
         if primary_entity is None:
             fail_line("primary", "mutation_query", "primary window not found")
         else:
-            apply_mutations(test, primary_entity, ron_values)
+            apply_mutations(test, primary_entity, ron_values, env_vars=env_vars)
             time.sleep(0.5)
-            verify_mutations(ron_values, backend=resolved_backend)
+            verify_mutations(ron_values, backend=resolved_backend, env_vars=env_vars)
 
     # Shutdown
     if no_shutdown and not has_mutation and not has_persistence:
@@ -1407,7 +1498,7 @@ def run_test(
         _, relaunch_result = launch_app(feature_flags, resolved_backend, test_mode=use_test_mode)
         if relaunch_result == "mismatch":
             fail_line("restore", "relaunch_event", "WindowRestoreMismatch fired on relaunch")
-        validate_all_windows(windows, ron_values, prefix="relaunch ", backend=resolved_backend)
+        validate_all_windows(windows, ron_values, prefix="relaunch ", backend=resolved_backend, env_vars=env_vars)
         if no_shutdown:
             app_process = None
         else:

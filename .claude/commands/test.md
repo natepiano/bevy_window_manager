@@ -22,6 +22,11 @@ Tests reference these tracked issues via `workaround_keys` in the JSON configs:
 
 **Arguments**: $ARGUMENTS
 
+<PythonCommand>
+On **Windows**, use `python` (not `${PYTHON}`). On **macOS/Linux**, use `${PYTHON}`.
+Detect the platform once at the start and store as `${PYTHON}` for all subsequent commands.
+</PythonCommand>
+
 <CriticalRules>
 **STOP AND CONSULT USER IF:**
 - Any test fails for any reason
@@ -48,7 +53,7 @@ Parse optional user flags first:
 - `single-monitor` → forced_single_monitor=true
 
 ```bash
-python3 tests/scripts/run_test.py --prebuild
+${PYTHON} tests/scripts/run_test.py --prebuild
 ```
 
 Parse output lines:
@@ -83,7 +88,7 @@ Extract: platform, example_ron_path, test_ron_dir, tests array.
 Run discovery via the script:
 
 ```bash
-python3 tests/scripts/run_test.py --discover \
+${PYTHON} tests/scripts/run_test.py --discover \
   --config "${config_file}" \
   --backend "${discover_backend}" \
   --env-file /tmp/claude/discovery.env
@@ -173,7 +178,7 @@ For each automated test:
 
    **Phase 1 (WITHOUT workaround)**:
    ```bash
-   python3 tests/scripts/run_test.py \
+   ${PYTHON} tests/scripts/run_test.py \
      --config "${config_file}" \
      --test-id "${test_id}" \
      --feature-flags=${workaround_validation.build_without} \
@@ -184,7 +189,7 @@ For each automated test:
 
    **Phase 2 (WITH workaround)**:
    ```bash
-   python3 tests/scripts/run_test.py \
+   ${PYTHON} tests/scripts/run_test.py \
      --config "${config_file}" \
      --test-id "${test_id}" \
      --feature-flags=${workaround_validation.build_with} \
@@ -200,7 +205,7 @@ For each automated test:
 
 4. **Otherwise (normal test)** — single run:
    ```bash
-   python3 tests/scripts/run_test.py \
+   ${PYTHON} tests/scripts/run_test.py \
      --config "${config_file}" \
      --test-id "${test_id}" \
      --backend "${backend}" \
@@ -230,7 +235,7 @@ Human tests use `run_test.py --human-setup` which writes the RON, launches the a
 
    **Phase 1 (WITHOUT workaround)**:
    ```bash
-   python3 tests/scripts/run_test.py --human-setup \
+   ${PYTHON} tests/scripts/run_test.py --human-setup \
      --config "${config_file}" \
      --test-id "${test_id}" \
      --feature-flags=${workaround_validation.build_without} \
@@ -244,7 +249,7 @@ Human tests use `run_test.py --human-setup` which writes the RON, launches the a
 
    **Phase 2 (WITH workaround)**:
    ```bash
-   python3 tests/scripts/run_test.py --human-setup \
+   ${PYTHON} tests/scripts/run_test.py --human-setup \
      --config "${config_file}" \
      --test-id "${test_id}" \
      --feature-flags=${workaround_validation.build_with} \
@@ -255,7 +260,7 @@ Human tests use `run_test.py --human-setup` which writes the RON, launches the a
 
 3. **Otherwise (non-workaround human test)** — single run:
    ```bash
-   python3 tests/scripts/run_test.py --human-setup \
+   ${PYTHON} tests/scripts/run_test.py --human-setup \
      --config "${config_file}" \
      --test-id "${test_id}" \
      --backend "${backend}" \

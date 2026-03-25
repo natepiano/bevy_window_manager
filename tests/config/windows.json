@@ -26,20 +26,11 @@
     },
 
     {
-      "id": "cross_high_to_low_W1",
+      "id": "cross_high_to_low",
       "description": "Window on low-DPI monitor restores correctly when launched from high-DPI monitor",
       "automation": "full",
       "launch_monitor": 0,
       "requires": {"min_monitors": 2, "different_scales": true},
-      "workaround_keys": ["W1"],
-
-      "workaround_validation": {
-        "feature_flag": "workaround-winit-4440",
-        "build_without": "--no-default-features",
-        "build_with": "",
-        "without_behavior": "Window restores to wrong size on Monitor 1 due to scale factor mismatch",
-        "with_behavior": "Window restores to correct size on Monitor 1"
-      },
 
       "ron_file": "cross_monitor_high_to_low.ron",
 
@@ -128,14 +119,6 @@
       "automation": "full",
       "launch_monitor": 0,
       "workaround_keys": ["W3"],
-
-      "workaround_validation": {
-        "feature_flag": "workaround-winit-3124",
-        "build_without": "--no-default-features --features workaround-winit-4341,workaround-winit-4440",
-        "build_with": "",
-        "without_behavior": "App crashes on startup (DXGI flip model issue with exclusive fullscreen)",
-        "with_behavior": "App starts correctly with brief windowed flash before entering fullscreen"
-      },
 
       "ron_file": "fullscreen_exclusive_mon0.ron",
 

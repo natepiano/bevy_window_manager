@@ -5,7 +5,7 @@
             key: Primary,
             state: (
                 // Fullscreen (exclusive) targeting Monitor 1 (HDMI, scale 1)
-                logical_position: Some((${MONITOR_1_POS_X}, ${MONITOR_1_POS_Y})),
+                logical_position: Some((${MONITOR_1_LOGICAL_POS_X}, ${MONITOR_1_LOGICAL_POS_Y})),
                 logical_width: ${MONITOR_1_VIDEO_MODE_LOGICAL_WIDTH},
                 logical_height: ${MONITOR_1_VIDEO_MODE_LOGICAL_HEIGHT},
                 monitor_scale: 1.0,
