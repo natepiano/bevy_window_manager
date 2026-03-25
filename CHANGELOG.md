@@ -4,11 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.19.0] - 2026-03-25
+
+### Added
+
+- `logical_size` field on `WindowRestored` event for the target logical size (content area).
+- `expected_logical_size` and `actual_logical_size` fields on `WindowRestoreMismatch` event.
+- `logical_width`, `logical_height` fields and `logical_size()` method on `TargetPosition` component.
+- `monitor_scale` field on `WindowState` recording the scale factor at save time (informational only).
 
 ### Changed
 
-- State file format bumped to v2: window position and size now stored as logical pixels instead of physical pixels, preserving visual intent across monitors with different scale factors. Automatic migration from v1 and legacy formats.
+- **Breaking:** State file format bumped to v2: window position and size now stored as logical pixels instead of physical pixels, preserving visual intent across monitors with different scale factors. Automatic migration from v1 and legacy formats.
+- **Breaking:** `WindowState` fields renamed: `position` → `logical_position`, `width` → `logical_width`, `height` → `logical_height`. Deserialization accepts the old `position` name via serde alias.
 
 ## [0.18.3] - 2026-03-12
 
