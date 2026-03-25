@@ -115,20 +115,25 @@ See `examples/restore_window.rs` for a complete interactive example.
 
 ### State File Format
 
-The state file now uses a versioned v1 schema:
+The state file uses a versioned v2 schema:
 
-- `version: 1`
+- `version: 2`
 - `entries: [{ key, state }, ...]`
+
+All spatial values (position, size) are stored in **logical pixels**, making them independent
+of monitor scale factor. On restore, values are converted to physical pixels using the target
+monitor's live scale factor.
 
 `key` is typed (`Primary` or `Managed("<name>")`), so the primary window and a managed
 window named `"primary"` are distinct and unambiguous.
 
-Legacy state files are still accepted on read and rewritten as v1 on save.
+Legacy state files (unversioned and v1) are still accepted on read and migrated to v2 on save.
 
 ## Version Compatibility
 
 | bevy_window_manager | Bevy |
 |---------------------|------|
+| 0.19                | 0.18 |
 | 0.18                | 0.18 |
 | 0.17                | 0.17 |
 
@@ -177,7 +182,7 @@ In your `Cargo.toml`, you can selectively enable features:
 
 ```toml
 [dependencies]
-bevy_window_manager = { version = "0.18", default-features = false, features = ["workaround-winit-4341"] }
+bevy_window_manager = { version = "0.19", default-features = false, features = ["workaround-winit-4341"] }
 ```
 
 ## License
