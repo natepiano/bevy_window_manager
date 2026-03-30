@@ -32,6 +32,11 @@
 //!
 //! See `examples/custom_path.rs` for how to override the full path to the state file.
 
+#![allow(
+    clippy::redundant_pub_crate,
+    reason = "pub(super) is intentional for visibility documentation"
+)]
+
 #[cfg(target_os = "macos")]
 mod macos_tabbing_fix;
 mod monitors;

@@ -38,6 +38,7 @@ use bevy::window::WindowRef;
 use bevy::window::WindowScaleFactorChanged;
 use bevy::winit::WINIT_WINDOWS;
 use bevy_brp_extras::BrpExtrasPlugin;
+use bevy_kana::ToU32;
 use bevy_window_manager::CurrentMonitor;
 use bevy_window_manager::ManagedWindow;
 use bevy_window_manager::ManagedWindowPersistence;
@@ -387,8 +388,8 @@ fn build_comparison_spans(
         size_phys: format!("{}x{}", window.physical_width(), window.physical_height()),
         size_log:  format!(
             "{}x{}",
-            window.resolution.width() as u32,
-            window.resolution.height() as u32
+            window.resolution.width().to_u32(),
+            window.resolution.height().to_u32()
         ),
         scale:     format!("{scale}"),
         monitor:   format!("{}", monitor.index),
@@ -410,6 +411,10 @@ fn build_comparison_spans(
 }
 
 /// Render comparison rows when restore data is available.
+#[expect(
+    clippy::too_many_lines,
+    reason = "UI builder — splitting would scatter tightly-coupled formatting logic"
+)]
 fn build_restored_spans(
     cb: &mut ChildSpawnerCommands,
     state: &CachedRestoredState,
@@ -807,8 +812,8 @@ fn update_primary_display(
                 managed.window_name,
                 mw.physical_width(),
                 mw.physical_height(),
-                mw.resolution.width() as u32,
-                mw.resolution.height() as u32,
+                mw.resolution.width().to_u32(),
+                mw.resolution.height().to_u32(),
                 mw.resolution.scale_factor(),
                 mon.index,
             ));
