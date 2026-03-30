@@ -1,6 +1,6 @@
 {
   "platform": "windows",
-  "example_ron_path": "%APPDATA%\\restore_window\\windows.ron",
+  "example_ron_path": "%APPDATA%\\bevy_window_manager\\restore_window.ron",
   "test_ron_dir": "tests/config/ron/windows",
 
   "tests": [

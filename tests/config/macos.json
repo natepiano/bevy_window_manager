@@ -1,6 +1,6 @@
 {
   "platform": "macos",
-  "example_ron_path": "~/Library/Application Support/restore_window/windows.ron",
+  "example_ron_path": "~/Library/Application Support/bevy_window_manager/restore_window.ron",
   "test_ron_dir": "tests/config/ron/macos",
 
   "tests": [

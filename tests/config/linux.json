@@ -1,6 +1,6 @@
 {
   "platform": "linux",
-  "example_ron_path": "~/.config/restore_window/windows.ron",
+  "example_ron_path": "~/.config/bevy_window_manager/restore_window.ron",
   "test_ron_dir": "tests/config/ron/linux",
 
   "tests": [
