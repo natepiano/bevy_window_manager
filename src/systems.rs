@@ -22,6 +22,7 @@ use super::state;
 use super::types::RestoreWindowConfig;
 use super::types::WindowState;
 use crate::ManagedWindow;
+use crate::ManagedWindowPersistence;
 use crate::Platform;
 use crate::WindowKey;
 use crate::monitors::CurrentMonitor;
@@ -406,7 +407,6 @@ pub struct CachedWindowState {
 ///
 /// `exclude_entity` allows callers (e.g., `On<Remove>` observers) to skip an entity
 /// whose component is still visible in the query but is being removed.
-#[allow(clippy::type_complexity)]
 pub fn save_active_window_state(
     config: &RestoreWindowConfig,
     monitors: &Monitors,
@@ -483,12 +483,7 @@ pub fn save_active_window_state(
 ///
 /// Handles both the primary window and any `ManagedWindow` entities. Uses
 /// `ManagedWindowPersistence` to decide whether closed windows keep their saved state.
-#[allow(
-    clippy::type_complexity,
-    clippy::too_many_lines,
-    clippy::too_many_arguments,
-    clippy::option_if_let_else
-)]
+#[allow(clippy::too_many_lines)]
 pub fn save_window_state(
     config: Res<RestoreWindowConfig>,
     monitors: Res<Monitors>,
@@ -603,11 +598,11 @@ pub fn save_window_state(
     }
 
     match *persistence {
-        crate::ManagedWindowPersistence::ActiveOnly => {
+        ManagedWindowPersistence::ActiveOnly => {
             // Build state from all active windows and write in one shot
             save_active_window_state(&config, &monitors, &all_windows, &primary_q, None);
         },
-        crate::ManagedWindowPersistence::RememberAll => {
+        ManagedWindowPersistence::RememberAll => {
             // Load existing file first to preserve closed windows, then merge cache
             let app_name = std::env::current_exe()
                 .ok()
@@ -663,7 +658,6 @@ pub fn save_window_state(
 /// at runtime would have their physical size set by `set_physical_resolution()` and
 /// then doubled by `create_windows` → `set_scale_factor_and_apply_to_physical_size()`
 /// which runs between frames.
-#[allow(clippy::too_many_arguments)]
 pub fn restore_windows(
     mut scale_changed_messages: MessageReader<WindowScaleFactorChanged>,
     mut windows: Query<(Entity, &mut TargetPosition, &mut Window), With<X11FrameCompensated>>,
@@ -1163,7 +1157,6 @@ fn get_window_position(entity: Entity, window: &Window) -> Option<IVec2> {
 /// 4. `monitors.first()` — last resort fallback
 ///
 /// All platforms: computes `effective_mode` (handles macOS green button fullscreen)
-#[allow(clippy::type_complexity)]
 pub fn update_current_monitor(
     mut commands: Commands,
     windows: Query<

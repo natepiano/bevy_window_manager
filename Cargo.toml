@@ -130,21 +130,31 @@ workaround-winit-4443 = []
 workaround-winit-4445 = []
 
 [lints.clippy]
-# Enable lint groups as errors (with lower priority so allows can override)
-all                      = { level = "deny", priority = -1 }
-cargo                    = { level = "deny", priority = -1 }
-cast_possible_truncation = "allow"
-# Screen dimensions are always within safe ranges for these casts
-cast_possible_wrap = "allow"
-cast_sign_loss     = "allow"
-expect_used        = "deny"
-# Allow specific lints that conflict with Bevy patterns
+# Groups
+all      = { level = "deny", priority = -1 }
+cargo    = { level = "deny", priority = -1 }
+nursery  = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+
+# Forbidden
+expect_used = "deny"
+panic       = "deny"
+unwrap_used = "deny"
+
+# Standard allows
 multiple_crate_versions = "allow"
-needless_pass_by_value  = "allow"
-nursery                 = { level = "deny", priority = -1 }
-panic                   = "deny"
-pedantic                = { level = "deny", priority = -1 }
-unwrap_used             = "deny"
+
+# Screen dimensions are always within safe ranges for these casts
+cast_possible_truncation = "allow"
+cast_possible_wrap       = "allow"
+cast_sign_loss           = "allow"
+
+# Bevy-specific allows
+needless_pass_by_value = "allow"
+option_if_let_else     = "allow"
+too_many_arguments     = "allow"
+type_complexity        = "allow"
+wildcard_imports       = "allow"
 
 [profile.dev.package."*"]
 opt-level = 3

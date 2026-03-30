@@ -250,7 +250,6 @@ fn on_managed_window_added(
 }
 
 /// Observer: unregister a `ManagedWindow` name when removed, and update state file if `ActiveOnly`.
-#[allow(clippy::type_complexity)]
 fn on_managed_window_removed(
     remove: On<Remove, ManagedWindow>,
     mut registry: ResMut<ManagedWindowRegistry>,
@@ -296,7 +295,6 @@ fn on_managed_window_removed(
 /// When `ManagedWindowPersistence` switches to `ActiveOnly`, immediately rebuild the state
 /// file from the currently-active windows so that any previously-remembered-but-closed
 /// window entries are pruned.
-#[allow(clippy::type_complexity)]
 fn on_persistence_changed(
     persistence: Res<ManagedWindowPersistence>,
     config: Res<RestoreWindowConfig>,
@@ -319,7 +317,6 @@ fn on_persistence_changed(
 }
 
 /// Observer: hide a managed window on creation and load its saved state.
-#[allow(clippy::too_many_arguments)]
 fn on_managed_window_load(
     add: On<Add, ManagedWindow>,
     mut commands: Commands,

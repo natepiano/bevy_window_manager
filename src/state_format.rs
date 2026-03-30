@@ -36,6 +36,7 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::state::PRIMARY_WINDOW_KEY;
+use crate::types::SavedWindowMode;
 use crate::types::WindowState;
 
 /// Current persisted state format version.
@@ -112,7 +113,7 @@ struct WindowStateV1 {
     width:         u32,
     height:        u32,
     monitor_index: usize,
-    mode:          crate::types::SavedWindowMode,
+    mode:          SavedWindowMode,
     #[serde(default)]
     app_name:      String,
 }
