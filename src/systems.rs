@@ -417,9 +417,9 @@ pub(super) fn save_active_window_state(
             Entity,
             &Window,
             Option<&CurrentMonitor>,
-            Option<&crate::ManagedWindow>,
+            Option<&ManagedWindow>,
         ),
-        Or<(With<PrimaryWindow>, With<crate::ManagedWindow>)>,
+        Or<(With<PrimaryWindow>, With<ManagedWindow>)>,
     >,
     primary_q: &Query<(), With<PrimaryWindow>>,
     exclude_entity: Option<Entity>,
@@ -481,24 +481,84 @@ pub(super) fn save_active_window_state(
     state::save_all_states(&config.path, &states);
 }
 
+/// Persist window states using the `RememberAll` strategy: load existing file,
+/// merge with cached entries, and save. Preserves entries for closed windows.
+fn persist_remember_all(
+    config: &RestoreWindowConfig,
+    monitors: &Monitors,
+    cached: &std::collections::HashMap<Entity, CachedWindowState>,
+    all_windows: &Query<
+        (
+            Entity,
+            &Window,
+            Option<&CurrentMonitor>,
+            Option<&ManagedWindow>,
+        ),
+        Or<(With<PrimaryWindow>, With<ManagedWindow>)>,
+    >,
+    primary_q: &Query<(), With<PrimaryWindow>>,
+) {
+    let app_name = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.file_stem().and_then(|s| s.to_str()).map(String::from))
+        .unwrap_or_default();
+
+    let mut states = state::load_all_states(&config.path).unwrap_or_default();
+
+    // Update with current window states from cache
+    for (entity, entry) in cached {
+        let key = if primary_q.get(*entity).is_ok() {
+            WindowKey::Primary
+        } else if let Ok((_, _, _, Some(managed))) = all_windows.get(*entity) {
+            WindowKey::Managed(managed.window_name.clone())
+        } else {
+            // Entity may have been despawned - skip stale cached entry
+            continue;
+        };
+
+        if let Some(mode) = &entry.mode {
+            let monitor_index = entry.monitor_index.unwrap_or(0);
+            let monitor_scale = monitors.by_index(monitor_index).map_or(1.0, |m| m.scale);
+            let logical_position = entry.position.map(|p| {
+                let lx = (f64::from(p.x) / monitor_scale).round().to_i32();
+                let ly = (f64::from(p.y) / monitor_scale).round().to_i32();
+                (lx, ly)
+            });
+            states.insert(
+                key,
+                WindowState {
+                    logical_position,
+                    logical_width: entry.logical_width,
+                    logical_height: entry.logical_height,
+                    monitor_scale,
+                    monitor_index,
+                    mode: mode.clone(),
+                    app_name: app_name.clone(),
+                },
+            );
+        }
+    }
+
+    state::save_all_states(&config.path, &states);
+}
+
 /// Save window state when position, size, or mode changes. Runs only when not restoring.
 ///
 /// Handles both the primary window and any `ManagedWindow` entities. Uses
 /// `ManagedWindowPersistence` to decide whether closed windows keep their saved state.
-#[allow(clippy::too_many_lines)]
 pub(super) fn save_window_state(
     config: Res<RestoreWindowConfig>,
     monitors: Res<Monitors>,
-    persistence: Res<crate::ManagedWindowPersistence>,
+    persistence: Res<ManagedWindowPersistence>,
     windows: Query<
         (
             Entity,
             &Window,
             Option<&CurrentMonitor>,
-            Option<&crate::ManagedWindow>,
+            Option<&ManagedWindow>,
         ),
         (
-            Or<(With<PrimaryWindow>, With<crate::ManagedWindow>)>,
+            Or<(With<PrimaryWindow>, With<ManagedWindow>)>,
             Or<(Changed<Window>, Changed<CurrentMonitor>)>,
         ),
     >,
@@ -507,9 +567,9 @@ pub(super) fn save_window_state(
             Entity,
             &Window,
             Option<&CurrentMonitor>,
-            Option<&crate::ManagedWindow>,
+            Option<&ManagedWindow>,
         ),
-        Or<(With<PrimaryWindow>, With<crate::ManagedWindow>)>,
+        Or<(With<PrimaryWindow>, With<ManagedWindow>)>,
     >,
     primary_q: Query<(), With<PrimaryWindow>>,
     mut cached: Local<std::collections::HashMap<Entity, CachedWindowState>>,
@@ -605,49 +665,7 @@ pub(super) fn save_window_state(
             save_active_window_state(&config, &monitors, &all_windows, &primary_q, None);
         },
         ManagedWindowPersistence::RememberAll => {
-            // Load existing file first to preserve closed windows, then merge cache
-            let app_name = std::env::current_exe()
-                .ok()
-                .and_then(|p| p.file_stem().and_then(|s| s.to_str()).map(String::from))
-                .unwrap_or_default();
-
-            let mut states = state::load_all_states(&config.path).unwrap_or_default();
-
-            // Update with current window states from cache
-            for (entity, entry) in &*cached {
-                let key = if primary_q.get(*entity).is_ok() {
-                    WindowKey::Primary
-                } else if let Ok((_, _, _, Some(managed))) = all_windows.get(*entity) {
-                    WindowKey::Managed(managed.window_name.clone())
-                } else {
-                    // Entity may have been despawned - skip stale cached entry
-                    continue;
-                };
-
-                if let Some(mode) = &entry.mode {
-                    let monitor_index = entry.monitor_index.unwrap_or(0);
-                    let monitor_scale = monitors.by_index(monitor_index).map_or(1.0, |m| m.scale);
-                    let logical_position = entry.position.map(|p| {
-                        let lx = (f64::from(p.x) / monitor_scale).round().to_i32();
-                        let ly = (f64::from(p.y) / monitor_scale).round().to_i32();
-                        (lx, ly)
-                    });
-                    states.insert(
-                        key,
-                        WindowState {
-                            logical_position,
-                            logical_width: entry.logical_width,
-                            logical_height: entry.logical_height,
-                            monitor_scale,
-                            monitor_index,
-                            mode: mode.clone(),
-                            app_name: app_name.clone(),
-                        },
-                    );
-                }
-            }
-
-            state::save_all_states(&config.path, &states);
+            persist_remember_all(&config, &monitors, &cached, &all_windows, &primary_q);
         },
     }
 }
@@ -926,7 +944,7 @@ pub(super) fn check_restore_settling(
         With<X11FrameCompensated>,
     >,
     primary_q: Query<(), With<PrimaryWindow>>,
-    managed_q: Query<&crate::ManagedWindow>,
+    managed_q: Query<&ManagedWindow>,
     platform: Res<Platform>,
 ) {
     for (entity, mut target, window, current_monitor) in &mut windows {

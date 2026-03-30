@@ -357,11 +357,17 @@ fn on_secondary_window_removed(
 
 // --- Comparison Display ---
 
+/// Formatted current window values for comparison display.
+struct CurrentValues {
+    position:  String,
+    size_phys: String,
+    size_log:  String,
+    scale:     String,
+    monitor:   String,
+    mode:      String,
+}
+
 /// Build comparison spans (restored vs current) for a window and add them as `TextSpan` children.
-#[expect(
-    clippy::too_many_lines,
-    reason = "UI builder — splitting would scatter tightly-coupled formatting logic"
-)]
 fn build_comparison_spans(
     cb: &mut ChildSpawnerCommands,
     restored_state: Option<&CachedRestoredState>,
@@ -373,248 +379,26 @@ fn build_comparison_spans(
     let effective_mode = monitor.effective_mode;
     let scale = window.resolution.scale_factor();
 
-    // Current values
-    let current_pos = match window.position {
-        WindowPosition::At(pos) => format!("({}, {})", pos.x, pos.y),
-        _ => "Automatic".to_string(),
+    let current = CurrentValues {
+        position:  match window.position {
+            WindowPosition::At(pos) => format!("({}, {})", pos.x, pos.y),
+            _ => "Automatic".to_string(),
+        },
+        size_phys: format!("{}x{}", window.physical_width(), window.physical_height()),
+        size_log:  format!(
+            "{}x{}",
+            window.resolution.width() as u32,
+            window.resolution.height() as u32
+        ),
+        scale:     format!("{scale}"),
+        monitor:   format!("{}", monitor.index),
+        mode:      format!("{effective_mode:?}"),
     };
-    let current_size_phys = format!("{}x{}", window.physical_width(), window.physical_height());
-    let current_size_log = format!(
-        "{}x{}",
-        window.resolution.width() as u32,
-        window.resolution.height() as u32
-    );
-    let current_scale = format!("{scale}");
-    let current_monitor = format!("{}", monitor.index);
-    let current_mode = format!("{effective_mode:?}");
 
     if let Some(state) = restored_state {
-        // Restored values from `WindowRestored` or `WindowRestoreMismatch` event
-        let file_pos = state
-            .position
-            .map_or_else(|| "None".to_string(), |p| format!("({}, {})", p.x, p.y));
-        let file_size_phys = format!("{}x{}", state.width, state.height);
-        let file_size_log = format!("{}x{}", state.logical_width, state.logical_height);
-        let file_monitor = format!("{}", state.monitor_index);
-        let file_mode = format!("{:?}", state.mode);
-
-        // Column width: fit the longest file value + 2 padding, minimum 16
-        let col1_width = [
-            file_pos.len(),
-            file_size_phys.len(),
-            file_monitor.len(),
-            file_mode.len(),
-        ]
-        .into_iter()
-        .max()
-        .unwrap_or(0)
-            + 2;
-        let col1_width = col1_width.max(16);
-
-        // Mismatch columns (expected/actual from the event)
-        let mm = mismatch_state.map(|m| {
-            let exp_pos = m
-                .expected_position
-                .map_or_else(|| "None".to_string(), |p| format!("({}, {})", p.x, p.y));
-            let act_pos = m
-                .actual_position
-                .map_or_else(|| "None".to_string(), |p| format!("({}, {})", p.x, p.y));
-            let exp_size = format!("{}x{}", m.expected_size.x, m.expected_size.y);
-            let act_size = format!("{}x{}", m.actual_size.x, m.actual_size.y);
-            let exp_monitor = format!("{}", m.expected_monitor);
-            let act_monitor = format!("{}", m.actual_monitor);
-            let exp_mode = format!("{:?}", m.expected_mode);
-            let act_mode = format!("{:?}", m.actual_mode);
-            (
-                exp_pos,
-                act_pos,
-                exp_size,
-                act_size,
-                exp_monitor,
-                act_monitor,
-                exp_mode,
-                act_mode,
-            )
-        });
-
-        if mm.is_some() {
-            let header = format!(
-                "{:LABEL_WIDTH$}{:<col1_width$}{:<col1_width$}{:<col1_width$}{}\n",
-                "", "Restored", "Current", "Expected", "Actual"
-            );
-            add_span(cb, font, &header, DEFAULT_COLOR);
-        } else {
-            let header = format!(
-                "{:LABEL_WIDTH$}{:<col1_width$}{}\n",
-                "", "Restored", "Current"
-            );
-            add_span(cb, font, &header, DEFAULT_COLOR);
-        }
-
-        // Rows with mismatch highlighting
-        if let Some((ref exp_pos, ref act_pos, ..)) = mm {
-            add_comparison_row_5(
-                cb,
-                font,
-                "Position:",
-                &file_pos,
-                &current_pos,
-                exp_pos,
-                act_pos,
-                col1_width,
-            );
-        } else {
-            add_comparison_row(cb, font, "Position:", &file_pos, &current_pos, col1_width);
-        }
-
-        if let Some((_, _, ref exp_size, ref act_size, ..)) = mm {
-            add_comparison_row_5(
-                cb,
-                font,
-                "Size (physical):",
-                &file_size_phys,
-                &current_size_phys,
-                exp_size,
-                act_size,
-                col1_width,
-            );
-        } else {
-            add_comparison_row(
-                cb,
-                font,
-                "Size (physical):",
-                &file_size_phys,
-                &current_size_phys,
-                col1_width,
-            );
-        }
-
-        // Logical size and scale
-        if let Some(m) = mismatch_state {
-            let exp_log = format!(
-                "{}x{}",
-                m.expected_logical_size.x, m.expected_logical_size.y
-            );
-            let act_log = format!("{}x{}", m.actual_logical_size.x, m.actual_logical_size.y);
-            add_comparison_row_5(
-                cb,
-                font,
-                "Size (logical):",
-                &file_size_log,
-                &current_size_log,
-                &exp_log,
-                &act_log,
-                col1_width,
-            );
-        } else {
-            add_comparison_row(
-                cb,
-                font,
-                "Size (logical):",
-                &file_size_log,
-                &current_size_log,
-                col1_width,
-            );
-        }
-        if let Some(m) = mismatch_state {
-            let exp_scale = format!("{}", m.expected_scale);
-            let act_scale = format!("{}", m.actual_scale);
-            add_comparison_row_5(
-                cb,
-                font,
-                "Scale:",
-                "",
-                &current_scale,
-                &exp_scale,
-                &act_scale,
-                col1_width,
-            );
-        } else {
-            add_span(
-                cb,
-                font,
-                &format!(
-                    "{:<LABEL_WIDTH$}{:<col1_width$}{current_scale}\n",
-                    "Scale:", ""
-                ),
-                DEFAULT_COLOR,
-            );
-        }
-
-        if let Some((.., ref exp_monitor, ref act_monitor, _, _)) = mm {
-            add_comparison_row_5(
-                cb,
-                font,
-                "Monitor:",
-                &file_monitor,
-                &current_monitor,
-                exp_monitor,
-                act_monitor,
-                col1_width,
-            );
-        } else {
-            add_comparison_row(
-                cb,
-                font,
-                "Monitor:",
-                &file_monitor,
-                &current_monitor,
-                col1_width,
-            );
-        }
-
-        if let Some((.., ref exp_mode, ref act_mode)) = mm {
-            add_comparison_row_5(
-                cb,
-                font,
-                "Mode:",
-                &file_mode,
-                &current_mode,
-                exp_mode,
-                act_mode,
-                col1_width,
-            );
-        } else {
-            add_comparison_row(cb, font, "Mode:", &file_mode, &current_mode, col1_width);
-        }
+        build_restored_spans(cb, state, mismatch_state, &current, font);
     } else {
-        add_span(cb, font, "State: No restore data\n\n", MISMATCH_COLOR);
-        add_span(
-            cb,
-            font,
-            &format!("{:<LABEL_WIDTH$}{current_pos}\n", "Position:"),
-            DEFAULT_COLOR,
-        );
-        add_span(
-            cb,
-            font,
-            &format!("{:<LABEL_WIDTH$}{current_size_phys}\n", "Size (physical):"),
-            DEFAULT_COLOR,
-        );
-        add_span(
-            cb,
-            font,
-            &format!("{:<LABEL_WIDTH$}{current_size_log}\n", "Size (logical):"),
-            DEFAULT_COLOR,
-        );
-        add_span(
-            cb,
-            font,
-            &format!("{:<LABEL_WIDTH$}{current_scale}\n", "Scale:"),
-            DEFAULT_COLOR,
-        );
-        add_span(
-            cb,
-            font,
-            &format!("{:<LABEL_WIDTH$}{current_monitor}\n", "Monitor:"),
-            DEFAULT_COLOR,
-        );
-        add_span(
-            cb,
-            font,
-            &format!("{:<LABEL_WIDTH$}{current_mode}\n", "Mode:"),
-            DEFAULT_COLOR,
-        );
+        build_current_only_spans(cb, &current, font);
     }
 
     add_span(
@@ -623,6 +407,241 @@ fn build_comparison_spans(
         &format!("\nEffective Mode: {effective_mode:?}\n"),
         DEFAULT_COLOR,
     );
+}
+
+/// Render comparison rows when restore data is available.
+fn build_restored_spans(
+    cb: &mut ChildSpawnerCommands,
+    state: &CachedRestoredState,
+    mismatch_state: Option<&CachedMismatchState>,
+    current: &CurrentValues,
+    font: &TextFont,
+) {
+    let file_pos = state
+        .position
+        .map_or_else(|| "None".to_string(), |p| format!("({}, {})", p.x, p.y));
+    let file_size_phys = format!("{}x{}", state.width, state.height);
+    let file_size_log = format!("{}x{}", state.logical_width, state.logical_height);
+    let file_monitor = format!("{}", state.monitor_index);
+    let file_mode = format!("{:?}", state.mode);
+
+    let col1_width = [
+        file_pos.len(),
+        file_size_phys.len(),
+        file_monitor.len(),
+        file_mode.len(),
+    ]
+    .into_iter()
+    .max()
+    .unwrap_or(0)
+        + 2;
+    let col1_width = col1_width.max(16);
+
+    // Header
+    if mismatch_state.is_some() {
+        let header = format!(
+            "{:LABEL_WIDTH$}{:<col1_width$}{:<col1_width$}{:<col1_width$}{}\n",
+            "", "Restored", "Current", "Expected", "Actual"
+        );
+        add_span(cb, font, &header, DEFAULT_COLOR);
+    } else {
+        let header = format!(
+            "{:LABEL_WIDTH$}{:<col1_width$}{}\n",
+            "", "Restored", "Current"
+        );
+        add_span(cb, font, &header, DEFAULT_COLOR);
+    }
+
+    // Position
+    let mm = mismatch_state.map(|m| {
+        let exp = m
+            .expected_position
+            .map_or_else(|| "None".to_string(), |p| format!("({}, {})", p.x, p.y));
+        let act = m
+            .actual_position
+            .map_or_else(|| "None".to_string(), |p| format!("({}, {})", p.x, p.y));
+        (exp, act)
+    });
+    add_row(
+        cb,
+        font,
+        "Position:",
+        &file_pos,
+        &current.position,
+        mm.as_ref(),
+        col1_width,
+    );
+
+    // Size (physical)
+    let mm = mismatch_state.map(|m| {
+        (
+            format!("{}x{}", m.expected_size.x, m.expected_size.y),
+            format!("{}x{}", m.actual_size.x, m.actual_size.y),
+        )
+    });
+    add_row(
+        cb,
+        font,
+        "Size (physical):",
+        &file_size_phys,
+        &current.size_phys,
+        mm.as_ref(),
+        col1_width,
+    );
+
+    // Size (logical)
+    let mm = mismatch_state.map(|m| {
+        (
+            format!(
+                "{}x{}",
+                m.expected_logical_size.x, m.expected_logical_size.y
+            ),
+            format!("{}x{}", m.actual_logical_size.x, m.actual_logical_size.y),
+        )
+    });
+    add_row(
+        cb,
+        font,
+        "Size (logical):",
+        &file_size_log,
+        &current.size_log,
+        mm.as_ref(),
+        col1_width,
+    );
+
+    // Scale (no file value; custom no-mismatch rendering)
+    if let Some(m) = mismatch_state {
+        let exp_scale = format!("{}", m.expected_scale);
+        let act_scale = format!("{}", m.actual_scale);
+        add_comparison_row_5(
+            cb,
+            font,
+            "Scale:",
+            "",
+            &current.scale,
+            &exp_scale,
+            &act_scale,
+            col1_width,
+        );
+    } else {
+        add_span(
+            cb,
+            font,
+            &format!(
+                "{:<LABEL_WIDTH$}{:<col1_width$}{}\n",
+                "Scale:", "", current.scale
+            ),
+            DEFAULT_COLOR,
+        );
+    }
+
+    // Monitor
+    let mm = mismatch_state.map(|m| {
+        (
+            format!("{}", m.expected_monitor),
+            format!("{}", m.actual_monitor),
+        )
+    });
+    add_row(
+        cb,
+        font,
+        "Monitor:",
+        &file_monitor,
+        &current.monitor,
+        mm.as_ref(),
+        col1_width,
+    );
+
+    // Mode
+    let mm = mismatch_state.map(|m| {
+        (
+            format!("{:?}", m.expected_mode),
+            format!("{:?}", m.actual_mode),
+        )
+    });
+    add_row(
+        cb,
+        font,
+        "Mode:",
+        &file_mode,
+        &current.mode,
+        mm.as_ref(),
+        col1_width,
+    );
+}
+
+/// Render current-only values when no restore data exists.
+fn build_current_only_spans(
+    cb: &mut ChildSpawnerCommands,
+    current: &CurrentValues,
+    font: &TextFont,
+) {
+    add_span(cb, font, "State: No restore data\n\n", MISMATCH_COLOR);
+    add_span(
+        cb,
+        font,
+        &format!("{:<LABEL_WIDTH$}{}\n", "Position:", current.position),
+        DEFAULT_COLOR,
+    );
+    add_span(
+        cb,
+        font,
+        &format!(
+            "{:<LABEL_WIDTH$}{}\n",
+            "Size (physical):", current.size_phys
+        ),
+        DEFAULT_COLOR,
+    );
+    add_span(
+        cb,
+        font,
+        &format!("{:<LABEL_WIDTH$}{}\n", "Size (logical):", current.size_log),
+        DEFAULT_COLOR,
+    );
+    add_span(
+        cb,
+        font,
+        &format!("{:<LABEL_WIDTH$}{}\n", "Scale:", current.scale),
+        DEFAULT_COLOR,
+    );
+    add_span(
+        cb,
+        font,
+        &format!("{:<LABEL_WIDTH$}{}\n", "Monitor:", current.monitor),
+        DEFAULT_COLOR,
+    );
+    add_span(
+        cb,
+        font,
+        &format!("{:<LABEL_WIDTH$}{}\n", "Mode:", current.mode),
+        DEFAULT_COLOR,
+    );
+}
+
+/// Add a comparison row, dispatching to 3-column or 5-column layout based on mismatch data.
+fn add_row(
+    cb: &mut ChildSpawnerCommands,
+    font: &TextFont,
+    label: &str,
+    file_val: &str,
+    current_val: &str,
+    mismatch: Option<&(String, String)>,
+    col_width: usize,
+) {
+    if let Some((expected, actual)) = mismatch {
+        add_comparison_row_5(
+            cb,
+            font,
+            label,
+            file_val,
+            current_val,
+            expected,
+            actual,
+            col_width,
+        );
+    } else {
+        add_comparison_row(cb, font, label, file_val, current_val, col_width);
+    }
 }
 
 /// Add a comparison row: label + file value (white) + current value (white or red if mismatch).
@@ -653,10 +672,6 @@ fn add_comparison_row(
 
 /// Add a 5-column comparison row: label + restored + current + expected + actual.
 /// Expected/actual columns use warning color when they differ.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "UI helper — columns are inherently separate values"
-)]
 fn add_comparison_row_5(
     cb: &mut ChildSpawnerCommands,
     font: &TextFont,
