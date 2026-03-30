@@ -17,6 +17,8 @@ use bevy::window::PrimaryWindow;
 use bevy::window::WindowMode;
 use bevy::window::WindowScaleFactorChanged;
 use bevy::winit::WINIT_WINDOWS;
+use bevy_kana::ToI32;
+use bevy_kana::ToU32;
 
 use super::state;
 use super::types::RestoreWindowConfig;
@@ -340,8 +342,8 @@ pub fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
         MonitorScaleStrategy::HigherToLower(_) => {
             // Compensate position because winit divides by launch scale
             let ratio = target.starting_scale / target.target_scale;
-            let comp_x = (f64::from(pos.x) * ratio) as i32;
-            let comp_y = (f64::from(pos.y) * ratio) as i32;
+            let comp_x = (f64::from(pos.x) * ratio).to_i32();
+            let comp_y = (f64::from(pos.y) * ratio).to_i32();
             debug!(
                 "[apply_initial_move] HigherToLower: compensating position {:?} -> ({}, {}) (ratio={})",
                 pos, comp_x, comp_y, ratio
@@ -458,16 +460,16 @@ pub fn save_active_window_state(
         let mode: SavedWindowMode =
             existing_monitor.map_or_else(|| (&window.mode).into(), |m| (&m.effective_mode).into());
         let logical_position = pos.map(|p| {
-            let lx = (f64::from(p.x) / monitor_scale).round() as i32;
-            let ly = (f64::from(p.y) / monitor_scale).round() as i32;
+            let lx = (f64::from(p.x) / monitor_scale).round().to_i32();
+            let ly = (f64::from(p.y) / monitor_scale).round().to_i32();
             (lx, ly)
         });
         states.insert(
             key,
             WindowState {
                 logical_position,
-                logical_width: window.resolution.width() as u32,
-                logical_height: window.resolution.height() as u32,
+                logical_width: window.resolution.width().to_u32(),
+                logical_height: window.resolution.height().to_u32(),
                 monitor_scale,
                 monitor_index,
                 mode,
@@ -535,8 +537,8 @@ pub fn save_window_state(
 
         let physical_w = window.resolution.physical_width();
         let physical_h = window.resolution.physical_height();
-        let logical_w = window.resolution.width() as u32;
-        let logical_h = window.resolution.height() as u32;
+        let logical_w = window.resolution.width().to_u32();
+        let logical_h = window.resolution.height().to_u32();
         let res_scale = window.resolution.scale_factor();
 
         // Read monitor and effective mode from `CurrentMonitor` (maintained by
@@ -626,8 +628,8 @@ pub fn save_window_state(
                     let monitor_index = entry.monitor_index.unwrap_or(0);
                     let monitor_scale = monitors.by_index(monitor_index).map_or(1.0, |m| m.scale);
                     let logical_position = entry.position.map(|p| {
-                        let lx = (f64::from(p.x) / monitor_scale).round() as i32;
-                        let ly = (f64::from(p.y) / monitor_scale).round() as i32;
+                        let lx = (f64::from(p.x) / monitor_scale).round().to_i32();
+                        let ly = (f64::from(p.y) / monitor_scale).round().to_i32();
                         (lx, ly)
                     });
                     states.insert(
@@ -1006,8 +1008,8 @@ pub fn check_restore_settling(
                 snapshot:     current_snapshot,
                 scale:        actual_scale,
                 logical_size: UVec2::new(
-                    window.resolution.width() as u32,
-                    window.resolution.height() as u32,
+                    window.resolution.width().to_u32(),
+                    window.resolution.height().to_u32(),
                 ),
             };
             emit_settle_mismatch(
@@ -1258,8 +1260,8 @@ fn compute_effective_mode(
     // Check if window spans full width and reaches bottom of monitor
     let full_width = window.physical_width() == monitor_info.size.x;
     let left_aligned = pos.x == monitor_info.position.x;
-    let reaches_bottom = pos.y + window.physical_height() as i32
-        == monitor_info.position.y + monitor_info.size.y as i32;
+    let reaches_bottom = pos.y + window.physical_height().to_i32()
+        == monitor_info.position.y + monitor_info.size.y.to_i32();
 
     if full_width && left_aligned && reaches_bottom {
         WindowMode::BorderlessFullscreen(MonitorSelection::Index(monitor_info.index))

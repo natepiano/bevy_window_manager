@@ -7,6 +7,7 @@ use bevy::prelude::*;
 use bevy::window::Monitor;
 use bevy::window::WindowMode;
 use bevy_diagnostic::FrameCount;
+use bevy_kana::ToI32;
 
 /// Plugin that manages the `Monitors` resource.
 pub struct MonitorPlugin;
@@ -77,9 +78,9 @@ impl Monitors {
     pub fn at(&self, x: i32, y: i32) -> Option<&MonitorInfo> {
         self.list.iter().find(|mon| {
             x >= mon.position.x
-                && x < mon.position.x + mon.size.x as i32
+                && x < mon.position.x + mon.size.x.to_i32()
                 && y >= mon.position.y
-                && y < mon.position.y + mon.size.y as i32
+                && y < mon.position.y + mon.size.y.to_i32()
         })
     }
 
@@ -115,8 +116,8 @@ impl Monitors {
     /// and to avoid Windows invisible border offset (winit #4107).
     #[must_use]
     pub fn monitor_for_window(&self, position: IVec2, width: u32, height: u32) -> &MonitorInfo {
-        let center_x = position.x + (width / 2) as i32;
-        let center_y = position.y + (height / 2) as i32;
+        let center_x = position.x + (width / 2).to_i32();
+        let center_y = position.y + (height / 2).to_i32();
         self.closest_to(center_x, center_y)
     }
 
@@ -143,8 +144,8 @@ impl Monitors {
         self.list
             .iter()
             .min_by_key(|mon| {
-                let right = mon.position.x + mon.size.x as i32;
-                let bottom = mon.position.y + mon.size.y as i32;
+                let right = mon.position.x + mon.size.x.to_i32();
+                let bottom = mon.position.y + mon.size.y.to_i32();
 
                 let dx = if x < mon.position.x {
                     mon.position.x - x

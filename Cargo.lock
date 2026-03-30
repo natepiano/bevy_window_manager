@@ -989,6 +989,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_kana"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30e3ee689bf79e2740e4edcee886c7296b756ae748c7a9213cf787e6b4f941c0"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
 name = "bevy_light"
 version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1663,6 +1672,7 @@ dependencies = [
  "bevy",
  "bevy_brp_extras",
  "bevy_diagnostic",
+ "bevy_kana",
  "dirs",
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",

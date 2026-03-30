@@ -50,6 +50,8 @@ use std::path::PathBuf;
 
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
+use bevy_kana::ToI32;
+use bevy_kana::ToU32;
 pub use monitors::CurrentMonitor;
 pub use monitors::MonitorInfo;
 use monitors::MonitorPlugin;
@@ -226,16 +228,16 @@ fn on_managed_window_added(
         };
         let logical_position = match window.position {
             bevy::window::WindowPosition::At(pos) => {
-                let lx = (f64::from(pos.x) / monitor.scale).round() as i32;
-                let ly = (f64::from(pos.y) / monitor.scale).round() as i32;
+                let lx = (f64::from(pos.x) / monitor.scale).round().to_i32();
+                let ly = (f64::from(pos.y) / monitor.scale).round().to_i32();
                 Some((lx, ly))
             },
             _ => None,
         };
         let window_state = types::WindowState {
             logical_position,
-            logical_width: window.width() as u32,
-            logical_height: window.height() as u32,
+            logical_width: window.width().to_u32(),
+            logical_height: window.height().to_u32(),
             monitor_scale: monitor.scale,
             monitor_index: monitor.index,
             mode: SavedWindowMode::Windowed,

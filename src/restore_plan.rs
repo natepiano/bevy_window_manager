@@ -1,6 +1,8 @@
 //! Shared restore target planning for primary and managed windows.
 
 use bevy::prelude::*;
+use bevy_kana::ToI32;
+use bevy_kana::ToU32;
 
 use crate::Platform;
 use crate::monitors::MonitorInfo;
@@ -40,15 +42,15 @@ pub fn compute_target_position(
 
     // Convert logical → physical using the target monitor's scale factor.
     // This is the single conversion point for size values.
-    let width = (f64::from(logical_width) * target_scale) as u32;
-    let height = (f64::from(logical_height) * target_scale) as u32;
+    let width = (f64::from(logical_width) * target_scale).to_u32();
+    let height = (f64::from(logical_height) * target_scale).to_u32();
 
     let outer_width = width + decoration.x;
     let outer_height = height + decoration.y;
     let position = fallback_position.map(|(x, y)| {
         // Convert logical position to physical using the target monitor's scale factor.
-        let physical_x = (f64::from(x) * target_scale).round() as i32;
-        let physical_y = (f64::from(y) * target_scale).round() as i32;
+        let physical_x = (f64::from(x) * target_scale).round().to_i32();
+        let physical_y = (f64::from(y) * target_scale).round().to_i32();
         clamp_position_to_monitor(
             physical_x,
             physical_y,
@@ -96,17 +98,17 @@ fn clamp_position_to_monitor(
     platform: Platform,
 ) -> IVec2 {
     if platform.should_clamp_position() {
-        let mon_right = target_info.position.x + target_info.size.x as i32;
-        let mon_bottom = target_info.position.y + target_info.size.y as i32;
+        let mon_right = target_info.position.x + target_info.size.x.to_i32();
+        let mon_bottom = target_info.position.y + target_info.size.y.to_i32();
 
         let mut x = saved_x;
         let mut y = saved_y;
 
-        if x + outer_width as i32 > mon_right {
-            x = mon_right - outer_width as i32;
+        if x + outer_width.to_i32() > mon_right {
+            x = mon_right - outer_width.to_i32();
         }
-        if y + outer_height as i32 > mon_bottom {
-            y = mon_bottom - outer_height as i32;
+        if y + outer_height.to_i32() > mon_bottom {
+            y = mon_bottom - outer_height.to_i32();
         }
         x = x.max(target_info.position.x);
         y = y.max(target_info.position.y);

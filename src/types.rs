@@ -7,6 +7,8 @@ use bevy::window::MonitorSelection;
 use bevy::window::VideoMode;
 use bevy::window::VideoModeSelection;
 use bevy::window::WindowMode;
+use bevy_kana::ToI32;
+use bevy_kana::ToU32;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -453,8 +455,8 @@ impl TargetPosition {
         let ratio = self.ratio();
         self.position.map(|pos| {
             IVec2::new(
-                (f64::from(pos.x) * ratio) as i32,
-                (f64::from(pos.y) * ratio) as i32,
+                (f64::from(pos.x) * ratio).to_i32(),
+                (f64::from(pos.y) * ratio).to_i32(),
             )
         })
     }
@@ -466,8 +468,8 @@ impl TargetPosition {
     pub fn compensated_size(&self) -> UVec2 {
         let ratio = self.ratio();
         UVec2::new(
-            (f64::from(self.width) * ratio) as u32,
-            (f64::from(self.height) * ratio) as u32,
+            (f64::from(self.width) * ratio).to_u32(),
+            (f64::from(self.height) * ratio).to_u32(),
         )
     }
 }

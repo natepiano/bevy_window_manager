@@ -12,6 +12,8 @@
 use bevy::ecs::system::NonSendMarker;
 use bevy::prelude::*;
 use bevy::winit::WINIT_WINDOWS;
+use bevy_kana::ToI32;
+use bevy_kana::ToU32;
 use raw_window_handle::HasWindowHandle;
 use raw_window_handle::RawWindowHandle;
 use x11rb::protocol::xproto::AtomEnum;
@@ -38,7 +40,7 @@ fn query_frame_top(window_id: u32) -> Option<i32> {
 
     let values: Vec<u32> = property.value32()?.collect();
     if values.len() >= 4 {
-        Some(values[2] as i32) // top extent
+        Some(values[2].to_i32()) // top extent
     } else {
         None
     }
@@ -48,7 +50,7 @@ fn query_frame_top(window_id: u32) -> Option<i32> {
 fn get_x11_window_id<W: HasWindowHandle>(window: &W) -> Option<u32> {
     let handle = window.window_handle().ok()?;
     match handle.as_raw() {
-        RawWindowHandle::Xlib(h) => Some(h.window as u32),
+        RawWindowHandle::Xlib(h) => Some(h.window.to_u32()),
         RawWindowHandle::Xcb(h) => Some(h.window.get()),
         _ => None,
     }
