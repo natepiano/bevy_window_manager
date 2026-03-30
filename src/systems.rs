@@ -20,30 +20,30 @@ use bevy::winit::WINIT_WINDOWS;
 use bevy_kana::ToI32;
 use bevy_kana::ToU32;
 
+use super::ManagedWindow;
+use super::ManagedWindowPersistence;
+use super::Platform;
+use super::WindowKey;
+use super::monitors::CurrentMonitor;
+use super::monitors::MonitorInfo;
+use super::monitors::Monitors;
+use super::restore_plan;
 use super::state;
+use super::types::FullscreenRestoreState;
+use super::types::MonitorScaleStrategy;
 use super::types::RestoreWindowConfig;
+use super::types::SCALE_FACTOR_EPSILON;
+use super::types::SavedWindowMode;
+use super::types::SettleSnapshot;
+use super::types::SettleState;
+use super::types::TargetPosition;
+use super::types::WindowDecoration;
+use super::types::WindowRestoreMismatch;
+use super::types::WindowRestoreState;
+use super::types::WindowRestored;
 use super::types::WindowState;
-use crate::ManagedWindow;
-use crate::ManagedWindowPersistence;
-use crate::Platform;
-use crate::WindowKey;
-use crate::monitors::CurrentMonitor;
-use crate::monitors::MonitorInfo;
-use crate::monitors::Monitors;
-use crate::restore_plan;
-use crate::types::FullscreenRestoreState;
-use crate::types::MonitorScaleStrategy;
-use crate::types::SCALE_FACTOR_EPSILON;
-use crate::types::SavedWindowMode;
-use crate::types::SettleSnapshot;
-use crate::types::SettleState;
-use crate::types::TargetPosition;
-use crate::types::WindowDecoration;
-use crate::types::WindowRestoreMismatch;
-use crate::types::WindowRestoreState;
-use crate::types::WindowRestored;
-use crate::types::WinitInfo;
-use crate::types::X11FrameCompensated;
+use super::types::WinitInfo;
+use super::types::X11FrameCompensated;
 
 /// Populate `WinitInfo` resource from winit (decoration and starting monitor).
 ///
@@ -51,7 +51,7 @@ use crate::types::X11FrameCompensated;
 ///
 /// Panics if no monitors are available (e.g., laptop lid closed at startup).
 /// Window management requires at least one monitor to function.
-pub fn init_winit_info(
+pub(super) fn init_winit_info(
     mut commands: Commands,
     window_entity: Single<Entity, With<PrimaryWindow>>,
     monitors: Res<Monitors>,
@@ -129,7 +129,7 @@ pub fn init_winit_info(
 /// Load saved window state and insert `TargetPosition` component on the primary window entity.
 ///
 /// Runs after `init_winit_info` so we have access to starting monitor info.
-pub fn load_target_position(
+pub(super) fn load_target_position(
     mut commands: Commands,
     window_entity: Single<Entity, With<PrimaryWindow>>,
     monitors: Res<Monitors>,
@@ -245,7 +245,7 @@ pub fn load_target_position(
 /// Skipped on Wayland (no position) and non-fullscreen modes.
 /// For managed windows, the equivalent happens in `on_managed_window_load`.
 #[cfg(target_os = "linux")]
-pub fn move_to_target_monitor(
+pub(super) fn move_to_target_monitor(
     mut window: Single<&mut Window, With<PrimaryWindow>>,
     targets: Query<&TargetPosition, With<PrimaryWindow>>,
     platform: Res<Platform>,
@@ -282,7 +282,7 @@ pub fn move_to_target_monitor(
 ///
 /// For fullscreen modes, we still move to the target monitor so the fullscreen mode
 /// is applied on the correct monitor when `try_apply_restore` runs.
-pub fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
+pub(super) fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
     /// Computed parameters for the initial window move to target monitor.
     #[derive(Debug)]
     struct MoveParams {
@@ -392,7 +392,7 @@ pub fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
 
 /// Cached window state for change detection comparison.
 #[derive(Default)]
-pub struct CachedWindowState {
+pub(super) struct CachedWindowState {
     position:       Option<IVec2>,
     logical_width:  u32,
     logical_height: u32,
@@ -409,7 +409,7 @@ pub struct CachedWindowState {
 ///
 /// `exclude_entity` allows callers (e.g., `On<Remove>` observers) to skip an entity
 /// whose component is still visible in the query but is being removed.
-pub fn save_active_window_state(
+pub(super) fn save_active_window_state(
     config: &RestoreWindowConfig,
     monitors: &Monitors,
     all_windows: &Query<
@@ -486,7 +486,7 @@ pub fn save_active_window_state(
 /// Handles both the primary window and any `ManagedWindow` entities. Uses
 /// `ManagedWindowPersistence` to decide whether closed windows keep their saved state.
 #[allow(clippy::too_many_lines)]
-pub fn save_window_state(
+pub(super) fn save_window_state(
     config: Res<RestoreWindowConfig>,
     monitors: Res<Monitors>,
     persistence: Res<crate::ManagedWindowPersistence>,
@@ -660,7 +660,7 @@ pub fn save_window_state(
 /// at runtime would have their physical size set by `set_physical_resolution()` and
 /// then doubled by `create_windows` → `set_scale_factor_and_apply_to_physical_size()`
 /// which runs between frames.
-pub fn restore_windows(
+pub(super) fn restore_windows(
     mut scale_changed_messages: MessageReader<WindowScaleFactorChanged>,
     mut windows: Query<(Entity, &mut TargetPosition, &mut Window), With<X11FrameCompensated>>,
     _non_send: NonSendMarker,
@@ -913,7 +913,7 @@ fn resolve_window_key(
 ///
 /// Runs while `TargetPosition` entities exist (same gate as `restore_windows`).
 /// Only processes entities that have a `settle_state` set.
-pub fn check_restore_settling(
+pub(super) fn check_restore_settling(
     mut commands: Commands,
     time: Res<Time>,
     mut windows: Query<
@@ -1159,7 +1159,7 @@ fn get_window_position(entity: Entity, window: &Window) -> Option<IVec2> {
 /// 4. `monitors.first()` — last resort fallback
 ///
 /// All platforms: computes `effective_mode` (handles macOS green button fullscreen)
-pub fn update_current_monitor(
+pub(super) fn update_current_monitor(
     mut commands: Commands,
     windows: Query<
         (Entity, &Window, Option<&CurrentMonitor>),

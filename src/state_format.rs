@@ -35,12 +35,12 @@ use bevy::prelude::*;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::state::PRIMARY_WINDOW_KEY;
-use crate::types::SavedWindowMode;
-use crate::types::WindowState;
+use super::state::PRIMARY_WINDOW_KEY;
+use super::types::SavedWindowMode;
+use super::types::WindowState;
 
 /// Current persisted state format version.
-pub const CURRENT_STATE_VERSION: u8 = 2;
+pub(super) const CURRENT_STATE_VERSION: u8 = 2;
 
 /// Typed identifier for persisted window state.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, Reflect)]
@@ -60,14 +60,14 @@ impl fmt::Display for WindowKey {
 
 /// One persisted key/state pair in v1.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PersistedEntry {
+pub(super) struct PersistedEntry {
     pub key:   WindowKey,
     pub state: WindowState,
 }
 
 /// Versioned persisted state format.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PersistedState {
+pub(super) struct PersistedState {
     pub version: u8,
     pub entries: Vec<PersistedEntry>,
 }
@@ -83,7 +83,7 @@ struct VersionProbe {
 /// Tries versioned formats first (dispatching by the `version` field),
 /// then falls back to legacy unversioned formats. See the module-level
 /// docs for the full list of supported formats.
-pub fn decode(contents: &str) -> Option<HashMap<WindowKey, WindowState>> {
+pub(super) fn decode(contents: &str) -> Option<HashMap<WindowKey, WindowState>> {
     // Probe the version field without requiring any particular entry shape.
     if let Ok(probe) = ron::from_str::<VersionProbe>(contents) {
         return match probe.version {
@@ -198,7 +198,7 @@ const RON_HEADER: &str = "\
 ";
 
 /// Encode typed runtime state into persisted v1 text.
-pub fn encode(states: &HashMap<WindowKey, WindowState>) -> Result<String, ron::Error> {
+pub(super) fn encode(states: &HashMap<WindowKey, WindowState>) -> Result<String, ron::Error> {
     let mut entries: Vec<PersistedEntry> = states
         .iter()
         .map(|(key, state)| PersistedEntry {

@@ -18,8 +18,8 @@ use objc2_app_kit::NSWindowTabbingMode;
 use raw_window_handle::HasWindowHandle;
 use raw_window_handle::RawWindowHandle;
 
-use crate::ManagedWindow;
-use crate::systems;
+use super::ManagedWindow;
+use super::systems;
 
 /// Get the `NSWindow` for a Bevy window entity.
 fn get_ns_window(entity: Entity) -> Option<Retained<NSWindow>> {
@@ -75,7 +75,7 @@ fn disable_tabbing_on_managed(
 /// The primary window fix runs at `Startup` so it's in place before any managed
 /// windows are created. The managed window fix runs in `Update` before
 /// `restore_windows` so `tabbingMode` is set before fullscreen is applied.
-pub fn init(app: &mut App) {
+pub(super) fn init(app: &mut App) {
     app.add_systems(Startup, disable_tabbing_on_primary);
     app.add_systems(
         Update,

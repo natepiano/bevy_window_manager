@@ -10,7 +10,7 @@ use bevy_diagnostic::FrameCount;
 use bevy_kana::ToI32;
 
 /// Plugin that manages the `Monitors` resource.
-pub struct MonitorPlugin;
+pub(super) struct MonitorPlugin;
 
 impl Plugin for MonitorPlugin {
     fn build(&self, app: &mut App) {
@@ -186,7 +186,7 @@ fn build_monitors(monitors: &Query<&Monitor>) -> Monitors {
 }
 
 /// Initialize `Monitors` resource at startup.
-pub fn init_monitors(mut commands: Commands, monitors: Query<&Monitor>) {
+pub(super) fn init_monitors(mut commands: Commands, monitors: Query<&Monitor>) {
     let monitors_resource = build_monitors(&monitors);
     debug!(
         "[init_monitors] Found {} monitors",

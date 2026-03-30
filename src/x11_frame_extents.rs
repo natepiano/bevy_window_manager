@@ -20,8 +20,8 @@ use x11rb::protocol::xproto::AtomEnum;
 use x11rb::protocol::xproto::ConnectionExt;
 use x11rb::xcb_ffi::XCBConnection;
 
-use crate::types::TargetPosition;
-use crate::types::X11FrameCompensated;
+use super::types::TargetPosition;
+use super::types::X11FrameCompensated;
 
 /// Query `_NET_FRAME_EXTENTS` for an X11 window ID.
 ///
@@ -65,7 +65,7 @@ fn get_x11_window_id<W: HasWindowHandle>(window: &W) -> Option<u32> {
 /// Inserts `X11FrameCompensated` component when successful, which gates
 /// `restore_windows`. If frame extents aren't available yet,
 /// returns silently and retries next frame.
-pub fn compensate_target_position(
+pub(super) fn compensate_target_position(
     mut commands: Commands,
     mut windows: Query<(Entity, &mut TargetPosition), Without<X11FrameCompensated>>,
     _non_send: NonSendMarker,

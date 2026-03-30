@@ -12,7 +12,7 @@ use bevy_kana::ToU32;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::WindowKey;
+use super::WindowKey;
 
 /// Event fired when a window restore completes and the window becomes visible.
 ///
@@ -121,11 +121,11 @@ pub struct WindowRestoreMismatch {
 ///
 /// Accounts for floating-point imprecision when comparing scale factors.
 /// A difference less than this epsilon is considered negligible.
-pub const SCALE_FACTOR_EPSILON: f64 = 0.01;
+pub(super) const SCALE_FACTOR_EPSILON: f64 = 0.01;
 
 /// Saved video mode for exclusive fullscreen.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SavedVideoMode {
+pub(super) struct SavedVideoMode {
     pub physical_size:           UVec2,
     pub bit_depth:               u16,
     pub refresh_rate_millihertz: u32,
@@ -145,7 +145,7 @@ impl SavedVideoMode {
 
 /// Serializable window mode.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SavedWindowMode {
+pub(super) enum SavedWindowMode {
     Windowed,
     BorderlessFullscreen,
     /// Exclusive fullscreen with optional specific video mode.
@@ -200,14 +200,14 @@ impl From<&WindowMode> for SavedWindowMode {
 }
 
 /// Window decoration dimensions (title bar, borders).
-pub struct WindowDecoration {
+pub(super) struct WindowDecoration {
     pub width:  u32,
     pub height: u32,
 }
 
 /// Information from winit captured at startup.
 #[derive(Resource)]
-pub struct WinitInfo {
+pub(super) struct WinitInfo {
     pub starting_monitor_index: usize,
     pub window_decoration:      WindowDecoration,
 }
@@ -228,7 +228,7 @@ impl WinitInfo {
 /// before restore proceeds. On other platforms/configurations, the token is
 /// inserted immediately during `load_target_position` since no compensation is needed.
 #[derive(Component)]
-pub struct X11FrameCompensated;
+pub(super) struct X11FrameCompensated;
 
 /// State for `MonitorScaleStrategy::HigherToLower` (high→low DPI restore).
 ///
@@ -240,7 +240,7 @@ pub struct X11FrameCompensated;
 /// By moving a 1x1 window to the final position first, we ensure the window is already
 /// at the correct location when we later apply size in `ApplySize`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WindowRestoreState {
+pub(super) enum WindowRestoreState {
     /// Initial state: window needs to be moved to the target monitor to trigger a scale change.
     /// Handled by `restore_windows` which calls `apply_initial_move` and transitions to
     /// `WaitingForScaleChange`. This unified entry point replaces the old separate paths
@@ -266,7 +266,7 @@ pub enum WindowRestoreState {
 /// position, the compositor may briefly honor it then revert. Splitting into
 /// separate frames ensures each change is processed independently.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FullscreenRestoreState {
+pub(super) enum FullscreenRestoreState {
     /// Move window to target monitor position. Skipped on Wayland (no position).
     MoveToMonitor,
     /// Wait for compositor to process the position change (1 frame).
@@ -324,7 +324,7 @@ pub enum FullscreenRestoreState {
 ///   1. Move a 1x1 window to final position (compensated) to trigger scale change
 ///   2. After scale changes, apply size without compensation
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MonitorScaleStrategy {
+pub(super) enum MonitorScaleStrategy {
     /// Same scale - apply position and size directly.
     ApplyUnchanged,
     /// Windows cross-DPI: position direct, size in two phases.
@@ -345,7 +345,7 @@ pub enum MonitorScaleStrategy {
 /// Outer dimensions (including title bar) are only used during loading for
 /// clamping calculations.
 #[derive(Component)]
-pub struct TargetPosition {
+pub(super) struct TargetPosition {
     /// Final clamped position (adjusted to fit within target monitor).
     /// None on Wayland where clients can't access window position.
     pub position:                 Option<IVec2>,
@@ -397,7 +397,7 @@ const SETTLE_TIMEOUT_SECS: f32 = 1.0;
 
 /// Tracks the two-timer settling state after restore completes.
 #[derive(Debug, Clone)]
-pub struct SettleState {
+pub(super) struct SettleState {
     /// Hard deadline timer — fires mismatch if stability is never reached.
     pub total_timeout:   Timer,
     /// Resets whenever any compared value changes between frames.
@@ -420,7 +420,7 @@ impl SettleState {
 
 /// Snapshot of compared values for change detection between frames.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SettleSnapshot {
+pub(super) struct SettleSnapshot {
     pub position: Option<IVec2>,
     pub size:     UVec2,
     pub mode:     WindowMode,
@@ -476,7 +476,7 @@ impl TargetPosition {
 
 /// Configuration for the `RestoreWindowPlugin`.
 #[derive(Resource, Clone)]
-pub struct RestoreWindowConfig {
+pub(super) struct RestoreWindowConfig {
     /// Full path to the state file.
     pub path:          PathBuf,
     /// Snapshot of window states as loaded from the file at startup.
@@ -495,7 +495,7 @@ pub struct RestoreWindowConfig {
 /// `monitor_scale` records the scale factor of the monitor at save time. It is informational
 /// only — restore uses the target monitor's live scale factor, not this saved value.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WindowState {
+pub(super) struct WindowState {
     /// Top-left corner of the window content area in logical pixels.
     /// `None` on Wayland where clients cannot access window position.
     #[serde(alias = "position")]

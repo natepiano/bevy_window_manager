@@ -31,6 +31,8 @@ use windows::Win32::UI::WindowsAndMessaging::SWP_NOZORDER;
 use windows::Win32::UI::WindowsAndMessaging::SetWindowPos;
 use windows::Win32::UI::WindowsAndMessaging::WM_DPICHANGED;
 
+use super::ManagedWindow;
+
 const SUBCLASS_ID: usize = 1;
 
 /// Wrapper around HWND that implements Send + Sync.
@@ -112,7 +114,7 @@ unsafe extern "system" fn subclass_proc(
 
 /// Guard resource that removes the window subclass on drop.
 #[derive(Resource)]
-pub struct DpiFixGuard {
+pub(super) struct DpiFixGuard {
     hwnd: SendSyncHwnd,
 }
 
@@ -127,7 +129,7 @@ impl Drop for DpiFixGuard {
 }
 
 /// System to install the DPI fix subclass on the primary window.
-pub fn install_dpi_fix(
+pub(super) fn install_dpi_fix(
     mut commands: Commands,
     window_entity: Single<Entity, With<PrimaryWindow>>,
     _non_send: NonSendMarker,
@@ -151,8 +153,8 @@ pub fn install_dpi_fix(
 }
 
 /// Install DPI fix on newly added `ManagedWindow` entities.
-pub fn install_dpi_fix_on_managed(
-    new_windows: Query<Entity, Added<crate::ManagedWindow>>,
+pub(super) fn install_dpi_fix_on_managed(
+    new_windows: Query<Entity, Added<ManagedWindow>>,
     _non_send: NonSendMarker,
 ) {
     for entity in &new_windows {
@@ -175,7 +177,7 @@ pub fn install_dpi_fix_on_managed(
 }
 
 /// Initialize the Windows DPI fix.
-pub fn init(app: &mut App) {
+pub(super) fn init(app: &mut App) {
     app.add_systems(Startup, install_dpi_fix);
     app.add_systems(Update, install_dpi_fix_on_managed);
 }

@@ -10,10 +10,10 @@
 use bevy::prelude::*;
 use bevy::window::WindowMode;
 
-use crate::types::FullscreenRestoreState;
-use crate::types::MonitorScaleStrategy;
-use crate::types::SCALE_FACTOR_EPSILON;
-use crate::types::WindowRestoreState;
+use super::types::FullscreenRestoreState;
+use super::types::MonitorScaleStrategy;
+use super::types::SCALE_FACTOR_EPSILON;
+use super::types::WindowRestoreState;
 
 /// The display platform, detected once at startup and inserted as a [`Resource`].
 ///
@@ -154,7 +154,7 @@ impl Platform {
     ///   mode is applied.
     /// - **macOS / Wayland**: `ApplyMode` — apply fullscreen directly.
     #[must_use]
-    pub const fn fullscreen_restore_state(self) -> FullscreenRestoreState {
+    pub(super) const fn fullscreen_restore_state(self) -> FullscreenRestoreState {
         #[cfg(feature = "workaround-winit-3124")]
         if matches!(self, Self::Windows) {
             return FullscreenRestoreState::WaitForSurface;
@@ -175,7 +175,11 @@ impl Platform {
     /// - **macOS / X11**: both position and size affected → `LowerToHigher` or `HigherToLower`
     ///   depending on scale direction.
     #[must_use]
-    pub fn scale_strategy(self, starting_scale: f64, target_scale: f64) -> MonitorScaleStrategy {
+    pub(super) fn scale_strategy(
+        self,
+        starting_scale: f64,
+        target_scale: f64,
+    ) -> MonitorScaleStrategy {
         if !cfg!(feature = "workaround-winit-4440") {
             return MonitorScaleStrategy::ApplyUnchanged;
         }
