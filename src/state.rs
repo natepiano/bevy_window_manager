@@ -18,14 +18,23 @@ pub const PRIMARY_WINDOW_KEY: &str = "primary";
 
 /// Get the default state file path using the executable name.
 ///
-/// Returns `config_dir()/<exe_name>/windows.ron`
+/// When the executable lives in a Cargo `examples/` directory (the standard
+/// layout for `cargo run --example`), state is stored as
+/// `config_dir()/<crate>/<example>.ron` so that all examples for a crate are
+/// grouped together. Regular binaries use `config_dir()/<exe_name>/windows.ron`.
 pub fn get_default_state_path() -> Option<PathBuf> {
-    let exe_name = std::env::current_exe()
-        .ok()?
-        .file_stem()?
-        .to_str()?
-        .to_string();
-    dirs::config_dir().map(|d| d.join(exe_name).join(STATE_FILE))
+    let exe = std::env::current_exe().ok()?;
+    let exe_name = exe.file_stem()?.to_str()?;
+    let is_cargo_example = exe.parent().and_then(|p| p.file_name()) == Some("examples".as_ref());
+
+    if is_cargo_example {
+        dirs::config_dir().map(|d| {
+            d.join(env!("CARGO_PKG_NAME"))
+                .join(format!("{exe_name}.ron"))
+        })
+    } else {
+        dirs::config_dir().map(|d| d.join(exe_name).join(STATE_FILE))
+    }
 }
 
 /// Get the state file path for a given app name.

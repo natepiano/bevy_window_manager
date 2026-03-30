@@ -142,7 +142,7 @@ struct PersistedEntryV1 {
 /// v1 persisted state wrapper.
 #[derive(Debug, Clone, Deserialize)]
 struct PersistedStateV1 {
-    #[allow(dead_code)]
+    #[allow(dead_code, reason = "field required for v1 deserialization")]
     version: u8,
     entries: Vec<PersistedEntryV1>,
 }

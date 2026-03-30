@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Group example state files under the crate config directory instead of creating separate top-level directories per example
+
 ## [0.19.0] - 2026-03-25
 
 ### Added
