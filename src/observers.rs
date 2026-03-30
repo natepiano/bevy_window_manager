@@ -16,7 +16,7 @@ use super::WindowKey;
 use super::monitors::CurrentMonitor;
 use super::monitors::MonitorPlugin;
 use super::monitors::Monitors;
-use super::monitors::init_monitors;
+use super::monitors;
 use super::platform::Platform;
 use super::restore_plan;
 use super::state;
@@ -423,13 +423,13 @@ pub(super) fn build_plugin(app: &mut App, path: PathBuf, persistence: ManagedWin
                     systems::move_to_target_monitor,
                 )
                     .chain()
-                    .after(init_monitors)
+                    .after(monitors::init_monitors)
             }
             #[cfg(not(target_os = "linux"))]
             {
                 (systems::init_winit_info, systems::load_target_position)
                     .chain()
-                    .after(init_monitors)
+                    .after(monitors::init_monitors)
             }
         });
 
