@@ -117,11 +117,8 @@ pub struct WindowRestoreMismatch {
     pub actual_scale:          f64,
 }
 
-/// Threshold for considering two scale factors equal.
-///
-/// Accounts for floating-point imprecision when comparing scale factors.
-/// A difference less than this epsilon is considered negligible.
-pub(super) const SCALE_FACTOR_EPSILON: f64 = 0.01;
+use super::constants::SETTLE_STABILITY_SECS;
+use super::constants::SETTLE_TIMEOUT_SECS;
 
 /// Saved video mode for exclusive fullscreen.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -390,11 +387,6 @@ pub(super) struct TargetPosition {
     pub settle_state:             Option<SettleState>,
 }
 
-/// Duration (in seconds) that all values must remain stable before declaring success.
-const SETTLE_STABILITY_SECS: f32 = 0.2;
-/// Maximum total duration (in seconds) to wait for values to stabilize.
-const SETTLE_TIMEOUT_SECS: f32 = 1.0;
-
 /// Tracks the two-timer settling state after restore completes.
 #[derive(Debug, Clone)]
 pub(super) struct SettleState {
@@ -557,9 +549,9 @@ pub enum ManagedWindowPersistence {
 
 /// Internal registry to track managed window names and detect duplicates.
 #[derive(Resource, Default)]
-pub struct ManagedWindowRegistry {
+pub(super) struct ManagedWindowRegistry {
     /// Set of registered window names (for duplicate detection).
-    pub names:    std::collections::HashSet<String>,
+    pub(super) names:    std::collections::HashSet<String>,
     /// Map from entity to window name (for cleanup on removal).
-    pub entities: std::collections::HashMap<Entity, String>,
+    pub(super) entities: std::collections::HashMap<Entity, String>,
 }

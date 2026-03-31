@@ -35,12 +35,10 @@ use bevy::prelude::*;
 use serde::Deserialize;
 use serde::Serialize;
 
-use super::state::PRIMARY_WINDOW_KEY;
+use super::constants::CURRENT_STATE_VERSION;
+use super::constants::PRIMARY_WINDOW_KEY;
 use super::types::SavedWindowMode;
 use super::types::WindowState;
-
-/// Current persisted state format version.
-pub(super) const CURRENT_STATE_VERSION: u8 = 2;
 
 /// Typed identifier for persisted window state.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, Reflect)]

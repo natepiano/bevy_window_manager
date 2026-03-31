@@ -71,7 +71,7 @@ fn on_managed_window_added(
         warn!(
             "[on_managed_window_added] `ManagedWindow` cannot be added to the primary window (entity {entity:?}). \
              The primary window is managed automatically under the key \"{key}\".",
-            key = state::PRIMARY_WINDOW_KEY,
+            key = super::constants::PRIMARY_WINDOW_KEY,
         );
         return;
     }

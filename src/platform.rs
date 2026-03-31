@@ -10,9 +10,9 @@
 use bevy::prelude::*;
 use bevy::window::WindowMode;
 
+use super::constants::SCALE_FACTOR_EPSILON;
 use super::types::FullscreenRestoreState;
 use super::types::MonitorScaleStrategy;
-use super::types::SCALE_FACTOR_EPSILON;
 use super::types::WindowRestoreState;
 
 /// The display platform, detected once at startup and inserted as a [`Resource`].

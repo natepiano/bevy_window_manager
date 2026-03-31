@@ -18,9 +18,6 @@
 //!
 //! Move and resize windows to test state persistence across restarts.
 
-// Monitor dimensions always fit in i32
-#![allow(clippy::cast_possible_wrap)]
-
 use std::collections::HashMap;
 
 use bevy::camera::RenderTarget;

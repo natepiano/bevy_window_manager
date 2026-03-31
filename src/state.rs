@@ -8,13 +8,9 @@ use std::path::PathBuf;
 use bevy::prelude::*;
 
 use super::WindowKey;
+use super::constants::STATE_FILE;
 use super::state_format;
 use super::types::WindowState;
-
-const STATE_FILE: &str = "windows.ron";
-
-/// Key used for the primary window in the state file.
-pub(super) const PRIMARY_WINDOW_KEY: &str = "primary";
 
 /// Get the default state file path using the executable name.
 ///
