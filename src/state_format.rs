@@ -215,7 +215,7 @@ pub(super) fn encode(states: &HashMap<WindowKey, WindowState>) -> Result<String,
 }
 
 #[cfg(test)]
-#[allow(clippy::panic)]
+#[allow(clippy::panic, reason = "tests should panic on unexpected values")]
 mod tests {
     use std::collections::HashMap;
 

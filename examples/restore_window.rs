@@ -1022,8 +1022,10 @@ fn handle_window_mode_input(
     //    but the transition hasn't completed so `effective_mode` still reads `Windowed`.
     let is_fullscreen = !matches!(window.mode, WindowMode::Windowed);
     let restore_complete = restored_states.states.contains_key(&entity);
-    #[allow(clippy::suspicious_operation_groupings)]
-    // intentional: compare cached mode vs effective
+    #[allow(
+        clippy::suspicious_operation_groupings,
+        reason = "compare cached fullscreen intent against the monitor's effective mode"
+    )]
     if !is_fullscreen && restore_complete && window.mode != monitor.effective_mode {
         window.mode = monitor.effective_mode;
     }
@@ -1122,7 +1124,13 @@ fn sync_selected_to_active(
 /// Get platform suffix for Linux (Wayland or X11).
 ///
 /// Not const on Linux due to `std::env::var` check; clippy false positive on other platforms.
-#[cfg_attr(not(target_os = "linux"), allow(clippy::missing_const_for_fn))]
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(
+        clippy::missing_const_for_fn,
+        reason = "Linux platform detection reads WAYLAND_DISPLAY at runtime"
+    )
+)]
 fn platform_suffix() -> &'static str {
     #[cfg(target_os = "linux")]
     {

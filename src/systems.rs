@@ -828,7 +828,7 @@ fn build_actual_snapshot(
 ) -> (SettleSnapshot, f64) {
     let position = if platform.position_available() {
         match window.position {
-            bevy::window::WindowPosition::At(p) => Some(IVec2::new(p.x, p.y)),
+            WindowPosition::At(p) => Some(IVec2::new(p.x, p.y)),
             _ => None,
         }
     } else {
@@ -1146,7 +1146,10 @@ enum RestoreStatus {
 }
 
 /// Get window position, using winit's `outer_position` on Linux with W5 workaround.
-#[allow(clippy::missing_const_for_fn)] // Linux branch uses WINIT_WINDOWS thread-local
+#[allow(
+    clippy::missing_const_for_fn,
+    reason = "Linux workaround reads the WINIT_WINDOWS thread-local at runtime"
+)]
 fn get_window_position(entity: Entity, window: &Window) -> Option<IVec2> {
     #[cfg(all(target_os = "linux", feature = "workaround-winit-4443"))]
     {
@@ -1162,7 +1165,7 @@ fn get_window_position(entity: Entity, window: &Window) -> Option<IVec2> {
     {
         let _ = entity;
         match window.position {
-            bevy::window::WindowPosition::At(p) => Some(p),
+            WindowPosition::At(p) => Some(p),
             _ => None,
         }
     }
@@ -1244,7 +1247,7 @@ fn winit_detect_monitor(entity: Entity, monitors: &Monitors) -> Option<MonitorIn
 
 /// Detect monitor from `window.position` using center-point logic.
 fn position_detect_monitor(window: &Window, monitors: &Monitors) -> Option<MonitorInfo> {
-    if let bevy::window::WindowPosition::At(pos) = window.position {
+    if let WindowPosition::At(pos) = window.position {
         Some(*monitors.monitor_for_window(pos, window.physical_width(), window.physical_height()))
     } else {
         None
@@ -1271,7 +1274,7 @@ fn compute_effective_mode(
     }
 
     // On Wayland, position is unavailable so we can only trust self.mode
-    let bevy::window::WindowPosition::At(pos) = window.position else {
+    let WindowPosition::At(pos) = window.position else {
         return window.mode;
     };
 

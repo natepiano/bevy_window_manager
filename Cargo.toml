@@ -146,9 +146,6 @@ unwrap_used                     = "deny"
 # Standard allows
 multiple_crate_versions = "allow"
 
-# Visibility documentation
-redundant_pub_crate = "allow"
-
 # Bevy-specific allows
 needless_pass_by_value = "allow"
 option_if_let_else     = "allow"

@@ -33,7 +33,10 @@ impl Platform {
     /// On Linux, checks `WAYLAND_DISPLAY` to distinguish Wayland from X11.
     /// On macOS and Windows the result is compile-time constant.
     #[must_use]
-    #[allow(clippy::missing_const_for_fn)] // Linux branch calls std::env::var
+    #[allow(
+        clippy::missing_const_for_fn,
+        reason = "Linux platform detection reads WAYLAND_DISPLAY at runtime"
+    )]
     pub fn detect() -> Self {
         #[cfg(target_os = "macos")]
         {

@@ -111,13 +111,13 @@ fn on_managed_window_added(
 
     if !already_saved && let Ok(window) = windows.get(entity) {
         let monitor = match window.position {
-            bevy::window::WindowPosition::At(pos) => {
+            WindowPosition::At(pos) => {
                 *monitors.monitor_for_window(pos, window.physical_width(), window.physical_height())
             },
             _ => *monitors.first(),
         };
         let logical_position = match window.position {
-            bevy::window::WindowPosition::At(pos) => {
+            WindowPosition::At(pos) => {
                 let lx = (f64::from(pos.x) / monitor.scale).round().to_i32();
                 let ly = (f64::from(pos.y) / monitor.scale).round().to_i32();
                 Some((lx, ly))

@@ -1,4 +1,8 @@
 #![doc = include_str!("../README.md")]
+#![allow(
+    clippy::redundant_pub_crate,
+    reason = "pub(super) intentionally documents sibling-shared, non-facade items in top-level private modules"
+)]
 //!
 //! # Technical Details
 //!

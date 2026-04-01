@@ -70,7 +70,7 @@ pub(super) fn save_all_states(path: &Path, states: &HashMap<WindowKey, WindowSta
 }
 
 #[cfg(test)]
-#[allow(clippy::panic)]
+#[allow(clippy::panic, reason = "tests should panic on unexpected values")]
 mod tests {
     use std::fs;
 

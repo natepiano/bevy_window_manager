@@ -12,6 +12,8 @@ use bevy_kana::ToU32;
 use serde::Deserialize;
 use serde::Serialize;
 
+use super::constants::SETTLE_STABILITY_SECS;
+use super::constants::SETTLE_TIMEOUT_SECS;
 use super::WindowKey;
 
 /// Event fired when a window restore completes and the window becomes visible.
@@ -116,9 +118,6 @@ pub struct WindowRestoreMismatch {
     /// Lags behind monitor changes; updates only on winit `ScaleFactorChanged`.
     pub actual_scale:          f64,
 }
-
-use super::constants::SETTLE_STABILITY_SECS;
-use super::constants::SETTLE_TIMEOUT_SECS;
 
 /// Saved video mode for exclusive fullscreen.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
