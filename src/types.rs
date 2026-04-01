@@ -12,9 +12,9 @@ use bevy_kana::ToU32;
 use serde::Deserialize;
 use serde::Serialize;
 
+use super::WindowKey;
 use super::constants::SETTLE_STABILITY_SECS;
 use super::constants::SETTLE_TIMEOUT_SECS;
-use super::WindowKey;
 
 /// Event fired when a window restore completes and the window becomes visible.
 ///
