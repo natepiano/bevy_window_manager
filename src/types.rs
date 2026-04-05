@@ -121,7 +121,7 @@ pub struct WindowRestoreMismatch {
 
 /// Saved video mode for exclusive fullscreen.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) struct SavedVideoMode {
+pub(crate) struct SavedVideoMode {
     pub physical_size:           UVec2,
     pub bit_depth:               u16,
     pub refresh_rate_millihertz: u32,
@@ -141,7 +141,7 @@ impl SavedVideoMode {
 
 /// Serializable window mode.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) enum SavedWindowMode {
+pub(crate) enum SavedWindowMode {
     Windowed,
     BorderlessFullscreen,
     /// Exclusive fullscreen with optional specific video mode.
@@ -196,14 +196,14 @@ impl From<&WindowMode> for SavedWindowMode {
 }
 
 /// Window decoration dimensions (title bar, borders).
-pub(super) struct WindowDecoration {
+pub(crate) struct WindowDecoration {
     pub width:  u32,
     pub height: u32,
 }
 
 /// Information from winit captured at startup.
 #[derive(Resource)]
-pub(super) struct WinitInfo {
+pub(crate) struct WinitInfo {
     pub starting_monitor_index: usize,
     pub window_decoration:      WindowDecoration,
 }
@@ -224,7 +224,7 @@ impl WinitInfo {
 /// before restore proceeds. On other platforms/configurations, the token is
 /// inserted immediately during `load_target_position` since no compensation is needed.
 #[derive(Component)]
-pub(super) struct X11FrameCompensated;
+pub(crate) struct X11FrameCompensated;
 
 /// State for `MonitorScaleStrategy::HigherToLower` (high→low DPI restore).
 ///
@@ -236,7 +236,7 @@ pub(super) struct X11FrameCompensated;
 /// By moving a 1x1 window to the final position first, we ensure the window is already
 /// at the correct location when we later apply size in `ApplySize`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum WindowRestoreState {
+pub(crate) enum WindowRestoreState {
     /// Initial state: window needs to be moved to the target monitor to trigger a scale change.
     /// Handled by `restore_windows` which calls `apply_initial_move` and transitions to
     /// `WaitingForScaleChange`. This unified entry point replaces the old separate paths
@@ -262,7 +262,7 @@ pub(super) enum WindowRestoreState {
 /// position, the compositor may briefly honor it then revert. Splitting into
 /// separate frames ensures each change is processed independently.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum FullscreenRestoreState {
+pub(crate) enum FullscreenRestoreState {
     /// Move window to target monitor position. Skipped on Wayland (no position).
     MoveToMonitor,
     /// Wait for compositor to process the position change (1 frame).
@@ -320,7 +320,7 @@ pub(super) enum FullscreenRestoreState {
 ///   1. Move a 1x1 window to final position (compensated) to trigger scale change
 ///   2. After scale changes, apply size without compensation
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum MonitorScaleStrategy {
+pub(crate) enum MonitorScaleStrategy {
     /// Same scale - apply position and size directly.
     ApplyUnchanged,
     /// Windows cross-DPI: position direct, size in two phases.
@@ -341,7 +341,7 @@ pub(super) enum MonitorScaleStrategy {
 /// Outer dimensions (including title bar) are only used during loading for
 /// clamping calculations.
 #[derive(Component)]
-pub(super) struct TargetPosition {
+pub(crate) struct TargetPosition {
     /// Final clamped position (adjusted to fit within target monitor).
     /// None on Wayland where clients can't access window position.
     pub position:                 Option<IVec2>,
@@ -388,7 +388,7 @@ pub(super) struct TargetPosition {
 
 /// Tracks the two-timer settling state after restore completes.
 #[derive(Debug, Clone)]
-pub(super) struct SettleState {
+pub(crate) struct SettleState {
     /// Hard deadline timer — fires mismatch if stability is never reached.
     pub total_timeout:   Timer,
     /// Resets whenever any compared value changes between frames.
@@ -411,7 +411,7 @@ impl SettleState {
 
 /// Snapshot of compared values for change detection between frames.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct SettleSnapshot {
+pub(crate) struct SettleSnapshot {
     pub position: Option<IVec2>,
     pub size:     UVec2,
     pub mode:     WindowMode,
@@ -467,7 +467,7 @@ impl TargetPosition {
 
 /// Configuration for the `RestoreWindowPlugin`.
 #[derive(Resource, Clone)]
-pub(super) struct RestoreWindowConfig {
+pub(crate) struct RestoreWindowConfig {
     /// Full path to the state file.
     pub path:          PathBuf,
     /// Snapshot of window states as loaded from the file at startup.
@@ -486,7 +486,7 @@ pub(super) struct RestoreWindowConfig {
 /// `monitor_scale` records the scale factor of the monitor at save time. It is informational
 /// only — restore uses the target monitor's live scale factor, not this saved value.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(super) struct WindowState {
+pub(crate) struct WindowState {
     /// Top-left corner of the window content area in logical pixels.
     /// `None` on Wayland where clients cannot access window position.
     #[serde(alias = "position")]
@@ -548,9 +548,9 @@ pub enum ManagedWindowPersistence {
 
 /// Internal registry to track managed window names and detect duplicates.
 #[derive(Resource, Default)]
-pub(super) struct ManagedWindowRegistry {
+pub(crate) struct ManagedWindowRegistry {
     /// Set of registered window names (for duplicate detection).
-    pub(super) names:    std::collections::HashSet<String>,
+    pub(crate) names:    std::collections::HashSet<String>,
     /// Map from entity to window name (for cleanup on removal).
-    pub(super) entities: std::collections::HashMap<Entity, String>,
+    pub(crate) entities: std::collections::HashMap<Entity, String>,
 }

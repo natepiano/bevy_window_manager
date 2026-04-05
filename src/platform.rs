@@ -157,7 +157,7 @@ impl Platform {
     ///   mode is applied.
     /// - **macOS / Wayland**: `ApplyMode` — apply fullscreen directly.
     #[must_use]
-    pub(super) const fn fullscreen_restore_state(self) -> FullscreenRestoreState {
+    pub(crate) const fn fullscreen_restore_state(self) -> FullscreenRestoreState {
         #[cfg(feature = "workaround-winit-3124")]
         if matches!(self, Self::Windows) {
             return FullscreenRestoreState::WaitForSurface;
@@ -178,7 +178,7 @@ impl Platform {
     /// - **macOS / X11**: both position and size affected → `LowerToHigher` or `HigherToLower`
     ///   depending on scale direction.
     #[must_use]
-    pub(super) fn scale_strategy(
+    pub(crate) fn scale_strategy(
         self,
         starting_scale: f64,
         target_scale: f64,

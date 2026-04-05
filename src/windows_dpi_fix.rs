@@ -114,7 +114,7 @@ unsafe extern "system" fn subclass_proc(
 
 /// Guard resource that removes the window subclass on drop.
 #[derive(Resource)]
-pub(super) struct DpiFixGuard {
+pub(crate) struct DpiFixGuard {
     hwnd: SendSyncHwnd,
 }
 
@@ -129,7 +129,7 @@ impl Drop for DpiFixGuard {
 }
 
 /// System to install the DPI fix subclass on the primary window.
-pub(super) fn install_dpi_fix(
+pub(crate) fn install_dpi_fix(
     mut commands: Commands,
     window_entity: Single<Entity, With<PrimaryWindow>>,
     _non_send: NonSendMarker,
@@ -153,7 +153,7 @@ pub(super) fn install_dpi_fix(
 }
 
 /// Install DPI fix on newly added `ManagedWindow` entities.
-pub(super) fn install_dpi_fix_on_managed(
+pub(crate) fn install_dpi_fix_on_managed(
     new_windows: Query<Entity, Added<ManagedWindow>>,
     _non_send: NonSendMarker,
 ) {
@@ -177,7 +177,7 @@ pub(super) fn install_dpi_fix_on_managed(
 }
 
 /// Initialize the Windows DPI fix.
-pub(super) fn init(app: &mut App) {
+pub(crate) fn init(app: &mut App) {
     app.add_systems(Startup, install_dpi_fix);
     app.add_systems(Update, install_dpi_fix_on_managed);
 }

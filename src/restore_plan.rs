@@ -15,7 +15,7 @@ use super::types::WindowState;
 /// If the saved monitor no longer exists, falls back to monitor 0 and drops saved position
 /// because the coordinates referred to the missing monitor.
 #[must_use]
-pub(super) fn resolve_target_monitor_and_position(
+pub(crate) fn resolve_target_monitor_and_position(
     saved_monitor_index: usize,
     saved_position: Option<(i32, i32)>,
     monitors: &Monitors,
@@ -28,7 +28,7 @@ pub(super) fn resolve_target_monitor_and_position(
 
 /// Compute a `TargetPosition` from saved state and a resolved target monitor.
 #[must_use]
-pub(super) fn compute_target_position(
+pub(crate) fn compute_target_position(
     saved_state: &WindowState,
     target_info: &MonitorInfo,
     fallback_position: Option<(i32, i32)>,

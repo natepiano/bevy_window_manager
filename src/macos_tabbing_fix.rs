@@ -75,7 +75,7 @@ fn disable_tabbing_on_managed(
 /// The primary window fix runs at `Startup` so it's in place before any managed
 /// windows are created. The managed window fix runs in `Update` before
 /// `restore_windows` so `tabbingMode` is set before fullscreen is applied.
-pub(super) fn init(app: &mut App) {
+pub(crate) fn init(app: &mut App) {
     app.add_systems(Startup, disable_tabbing_on_primary);
     app.add_systems(
         Update,

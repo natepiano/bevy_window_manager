@@ -58,14 +58,14 @@ impl fmt::Display for WindowKey {
 
 /// One persisted key/state pair in v1.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(super) struct PersistedEntry {
+pub(crate) struct PersistedEntry {
     pub key:   WindowKey,
     pub state: WindowState,
 }
 
 /// Versioned persisted state format.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(super) struct PersistedState {
+pub(crate) struct PersistedState {
     pub version: u8,
     pub entries: Vec<PersistedEntry>,
 }
@@ -81,7 +81,7 @@ struct VersionProbe {
 /// Tries versioned formats first (dispatching by the `version` field),
 /// then falls back to legacy unversioned formats. See the module-level
 /// docs for the full list of supported formats.
-pub(super) fn decode(contents: &str) -> Option<HashMap<WindowKey, WindowState>> {
+pub(crate) fn decode(contents: &str) -> Option<HashMap<WindowKey, WindowState>> {
     // Probe the version field without requiring any particular entry shape.
     if let Ok(probe) = ron::from_str::<VersionProbe>(contents) {
         return match probe.version {
@@ -196,7 +196,7 @@ const RON_HEADER: &str = "\
 ";
 
 /// Encode typed runtime state into persisted v1 text.
-pub(super) fn encode(states: &HashMap<WindowKey, WindowState>) -> Result<String, ron::Error> {
+pub(crate) fn encode(states: &HashMap<WindowKey, WindowState>) -> Result<String, ron::Error> {
     let mut entries: Vec<PersistedEntry> = states
         .iter()
         .map(|(key, state)| PersistedEntry {

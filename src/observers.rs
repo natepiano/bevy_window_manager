@@ -13,6 +13,7 @@ use bevy_kana::ToU32;
 use super::ManagedWindow;
 use super::ManagedWindowPersistence;
 use super::WindowKey;
+use super::constants::PRIMARY_WINDOW_KEY;
 use super::monitors;
 use super::monitors::CurrentMonitor;
 use super::monitors::MonitorPlugin;
@@ -71,7 +72,7 @@ fn on_managed_window_added(
         warn!(
             "[on_managed_window_added] `ManagedWindow` cannot be added to the primary window (entity {entity:?}). \
              The primary window is managed automatically under the key \"{key}\".",
-            key = super::constants::PRIMARY_WINDOW_KEY,
+            key = PRIMARY_WINDOW_KEY,
         );
         return;
     }
@@ -118,9 +119,9 @@ fn on_managed_window_added(
         };
         let logical_position = match window.position {
             WindowPosition::At(pos) => {
-                let lx = (f64::from(pos.x) / monitor.scale).round().to_i32();
-                let ly = (f64::from(pos.y) / monitor.scale).round().to_i32();
-                Some((lx, ly))
+                let logical_x = (f64::from(pos.x) / monitor.scale).round().to_i32();
+                let logical_y = (f64::from(pos.y) / monitor.scale).round().to_i32();
+                Some((logical_x, logical_y))
             },
             _ => None,
         };
@@ -226,12 +227,11 @@ fn on_managed_window_load(
     };
     let name = &managed_window.window_name;
 
-    // Hide window during restore
-    if let Ok(mut window) = windows.get_mut(entity) {
-        // On Linux X11 with frame extent compensation, don't hide
-        if platform.should_hide_on_startup() {
-            window.visible = false;
-        }
+    // Hide window during restore (on Linux X11 with frame extent compensation, don't hide)
+    if let Ok(mut window) = windows.get_mut(entity)
+        && platform.should_hide_on_startup()
+    {
+        window.visible = false;
     }
 
     // Check the startup snapshot — not the file, which may have been modified by
@@ -365,7 +365,7 @@ fn no_restoring_windows(q: Query<(), With<TargetPosition>>) -> bool { q.is_empty
 /// The run conditions allow us to separate the initial primary window restore from
 /// subsequent positions saves - which we dont' want to do until AFTER we've done
 /// the initial restore.
-pub(super) fn build_plugin(app: &mut App, path: PathBuf, persistence: ManagedWindowPersistence) {
+pub(crate) fn build_plugin(app: &mut App, path: PathBuf, persistence: ManagedWindowPersistence) {
     let platform = Platform::detect();
     app.insert_resource(platform);
 

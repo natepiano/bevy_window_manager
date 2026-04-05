@@ -65,7 +65,7 @@ fn get_x11_window_id<W: HasWindowHandle>(window: &W) -> Option<u32> {
 /// Inserts `X11FrameCompensated` component when successful, which gates
 /// `restore_windows`. If frame extents aren't available yet,
 /// returns silently and retries next frame.
-pub(super) fn compensate_target_position(
+pub(crate) fn compensate_target_position(
     mut commands: Commands,
     mut windows: Query<(Entity, &mut TargetPosition), Without<X11FrameCompensated>>,
     _non_send: NonSendMarker,

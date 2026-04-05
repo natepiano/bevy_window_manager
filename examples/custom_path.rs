@@ -17,6 +17,9 @@ use bevy::window::PrimaryWindow;
 use bevy_window_manager::CurrentMonitor;
 use bevy_window_manager::WindowManagerPlugin;
 
+const FONT_SIZE: f32 = 20.0;
+const MARGIN: Val = Val::Px(10.0);
+
 #[expect(
     clippy::expect_used,
     reason = "example code - panicking on missing config dir is acceptable"
@@ -52,13 +55,13 @@ fn setup(mut commands: Commands) {
         InfoText,
         Text::default(),
         TextFont {
-            font_size: 20.0,
+            font_size: FONT_SIZE,
             ..default()
         },
         Node {
             position_type: PositionType::Absolute,
-            top: Val::Px(10.0),
-            left: Val::Px(10.0),
+            top: MARGIN,
+            left: MARGIN,
             ..default()
         },
     ));

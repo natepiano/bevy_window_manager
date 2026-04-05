@@ -18,7 +18,7 @@ use super::types::WindowState;
 /// layout for `cargo run --example`), state is stored as
 /// `config_dir()/<crate>/<example>.ron` so that all examples for a crate are
 /// grouped together. Regular binaries use `config_dir()/<exe_name>/windows.ron`.
-pub(super) fn get_default_state_path() -> Option<PathBuf> {
+pub(crate) fn get_default_state_path() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let exe_name = exe.file_stem()?.to_str()?;
     let is_cargo_example = exe.parent().and_then(|p| p.file_name()) == Some("examples".as_ref());
@@ -36,7 +36,7 @@ pub(super) fn get_default_state_path() -> Option<PathBuf> {
 /// Get the state file path for a given app name.
 ///
 /// Returns `config_dir()/<app_name>/windows.ron`
-pub(super) fn get_state_path_for_app(app_name: &str) -> Option<PathBuf> {
+pub(crate) fn get_state_path_for_app(app_name: &str) -> Option<PathBuf> {
     dirs::config_dir().map(|d| d.join(app_name).join(STATE_FILE))
 }
 
@@ -44,13 +44,13 @@ pub(super) fn get_state_path_for_app(app_name: &str) -> Option<PathBuf> {
 ///
 /// Supports migration from the old single-window format: if the file contains
 /// a single `WindowState`, it is wrapped as `{"primary": state}`.
-pub(super) fn load_all_states(path: &Path) -> Option<HashMap<WindowKey, WindowState>> {
+pub(crate) fn load_all_states(path: &Path) -> Option<HashMap<WindowKey, WindowState>> {
     let contents = fs::read_to_string(path).ok()?;
     state_format::decode(&contents)
 }
 
 /// Save all window states to the given path.
-pub(super) fn save_all_states(path: &Path, states: &HashMap<WindowKey, WindowState>) {
+pub(crate) fn save_all_states(path: &Path, states: &HashMap<WindowKey, WindowState>) {
     if let Some(parent) = path.parent()
         && let Err(e) = fs::create_dir_all(parent)
     {
