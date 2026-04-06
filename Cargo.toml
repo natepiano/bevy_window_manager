@@ -6,7 +6,7 @@ keywords    = ["bevy", "gamedev", "monitor", "multi-monitor", "window"]
 license     = "MIT OR Apache-2.0"
 name        = "bevy_window_manager"
 repository  = "https://github.com/natepiano/bevy_window_manager"
-version     = "0.21.0-dev"
+version     = "0.20.1"
 
 [lib]
 name = "bevy_window_manager"
