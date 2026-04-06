@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `Reflect` derives on internal restore types (`TargetPosition`, `MonitorScaleStrategy`, `SettleState`, etc.) for BRP debugging — enables querying restore state in real time when diagnosing stuck or misbehaving window restores.
+
 ## [0.20.0] - 2026-03-30
 
 ### Changed
