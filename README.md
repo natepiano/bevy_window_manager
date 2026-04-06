@@ -92,7 +92,7 @@ commands.spawn((
         ..default()
     },
     ManagedWindow {
-        window_name: "inspector".to_string(),
+        name: "inspector".to_string(),
     },
 ));
 ```

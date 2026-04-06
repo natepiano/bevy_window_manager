@@ -69,10 +69,10 @@ pub(crate) fn compute_target_position(
         logical_height,
         target_scale,
         starting_scale,
-        monitor_scale_strategy: platform.scale_strategy(starting_scale, target_scale),
+        scale_strategy: platform.scale_strategy(starting_scale, target_scale),
         mode: saved_state.mode.clone(),
         target_monitor_index: target_info.index,
-        fullscreen_restore_state: if saved_state.mode.is_fullscreen() {
+        fullscreen_state: if saved_state.mode.is_fullscreen() {
             Some(platform.fullscreen_restore_state())
         } else {
             None
@@ -98,17 +98,17 @@ fn clamp_position_to_monitor(
     platform: Platform,
 ) -> IVec2 {
     if platform.should_clamp_position() {
-        let mon_right = target_info.position.x + target_info.size.x.to_i32();
-        let mon_bottom = target_info.position.y + target_info.size.y.to_i32();
+        let monitor_right = target_info.position.x + target_info.size.x.to_i32();
+        let monitor_bottom = target_info.position.y + target_info.size.y.to_i32();
 
         let mut x = saved_x;
         let mut y = saved_y;
 
-        if x + outer_width.to_i32() > mon_right {
-            x = mon_right - outer_width.to_i32();
+        if x + outer_width.to_i32() > monitor_right {
+            x = monitor_right - outer_width.to_i32();
         }
-        if y + outer_height.to_i32() > mon_bottom {
-            y = mon_bottom - outer_height.to_i32();
+        if y + outer_height.to_i32() > monitor_bottom {
+            y = monitor_bottom - outer_height.to_i32();
         }
         x = x.max(target_info.position.x);
         y = y.max(target_info.position.y);

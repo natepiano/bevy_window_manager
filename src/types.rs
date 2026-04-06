@@ -13,6 +13,7 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use super::WindowKey;
+use super::constants::DEFAULT_SCALE_FACTOR;
 use super::constants::SETTLE_STABILITY_SECS;
 use super::constants::SETTLE_TIMEOUT_SECS;
 
@@ -205,14 +206,14 @@ pub(crate) struct WindowDecoration {
 #[derive(Resource)]
 pub(crate) struct WinitInfo {
     pub starting_monitor_index: usize,
-    pub window_decoration:      WindowDecoration,
+    pub decoration:             WindowDecoration,
 }
 
 impl WinitInfo {
     /// Get window decoration dimensions as a `UVec2`.
     #[must_use]
     pub const fn decoration(&self) -> UVec2 {
-        UVec2::new(self.window_decoration.width, self.window_decoration.height)
+        UVec2::new(self.decoration.width, self.decoration.height)
     }
 }
 
@@ -344,33 +345,33 @@ pub(crate) enum MonitorScaleStrategy {
 pub(crate) struct TargetPosition {
     /// Final clamped position (adjusted to fit within target monitor).
     /// None on Wayland where clients can't access window position.
-    pub position:                 Option<IVec2>,
+    pub position:             Option<IVec2>,
     /// Target width in physical pixels (content area, excluding window decoration).
     /// Computed from `logical_width * target_scale`. Applied via `set_physical_resolution()`.
-    pub width:                    u32,
+    pub width:                u32,
     /// Target height in physical pixels (content area, excluding window decoration).
     /// Computed from `logical_height * target_scale`. Applied via `set_physical_resolution()`.
-    pub height:                   u32,
+    pub height:               u32,
     /// Target width in logical pixels, from `WindowState.logical_width`.
     /// Used for event reporting.
-    pub logical_width:            u32,
+    pub logical_width:        u32,
     /// Target height in logical pixels, from `WindowState.logical_height`.
     /// Used for event reporting.
-    pub logical_height:           u32,
+    pub logical_height:       u32,
     /// Scale factor of the target monitor.
-    pub target_scale:             f64,
+    pub target_scale:         f64,
     /// Scale factor of the monitor where the window starts (keyboard focus monitor).
-    pub starting_scale:           f64,
+    pub starting_scale:       f64,
     /// Strategy for handling scale factor differences between monitors.
-    pub monitor_scale_strategy:   MonitorScaleStrategy,
+    pub scale_strategy:       MonitorScaleStrategy,
     /// Window mode to restore.
-    pub mode:                     SavedWindowMode,
+    pub mode:                 SavedWindowMode,
     /// Target monitor index for fullscreen restore.
     /// On non-Wayland platforms, this could be derived from position, but Wayland
     /// doesn't provide window position, so we store it explicitly.
-    pub target_monitor_index:     usize,
+    pub target_monitor_index: usize,
     /// Fullscreen restore state (DX12/DXGI workaround).
-    pub fullscreen_restore_state: Option<FullscreenRestoreState>,
+    pub fullscreen_state:     Option<FullscreenRestoreState>,
     /// Settling state. When set, `try_apply_restore` has completed and we're waiting
     /// for the compositor/winit to deliver stable, matching state.
     ///
@@ -383,7 +384,7 @@ pub(crate) struct TargetPosition {
     /// This handles compositor artifacts like Wayland `wl_surface.enter`/`leave` bounces
     /// where `current_monitor()` transiently reports the wrong monitor during fullscreen
     /// transitions.
-    pub settle_state:             Option<SettleState>,
+    pub settle_state:         Option<SettleState>,
 }
 
 /// Tracks the two-timer settling state after restore completes.
@@ -505,7 +506,7 @@ pub(crate) struct WindowState {
 }
 
 /// Default monitor scale for deserialization of legacy files missing the field.
-const fn default_monitor_scale() -> f64 { 1.0 }
+const fn default_monitor_scale() -> f64 { DEFAULT_SCALE_FACTOR }
 
 /// Marks a window entity as managed by the window manager plugin.
 ///
@@ -513,7 +514,7 @@ const fn default_monitor_scale() -> f64 { 1.0 }
 /// save/restore behavior. The primary window is always managed automatically
 /// using the key `"primary"` in the state file.
 ///
-/// Each managed window must have a unique `window_name`. Duplicate names
+/// Each managed window must have a unique `name`. Duplicate names
 /// will cause a panic.
 ///
 /// # Example
@@ -521,14 +522,14 @@ const fn default_monitor_scale() -> f64 { 1.0 }
 /// ```ignore
 /// commands.spawn((
 ///     Window { title: "Inspector".into(), ..default() },
-///     ManagedWindow { window_name: "inspector".into() },
+///     ManagedWindow { name: "inspector".into() },
 /// ));
 /// ```
 #[derive(Component, Clone, Reflect)]
 #[reflect(Component)]
 pub struct ManagedWindow {
     /// Unique name used as the key in the state file.
-    pub window_name: String,
+    pub name: String,
 }
 
 /// Controls what happens to saved state when a managed window is despawned.

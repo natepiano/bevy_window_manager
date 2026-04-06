@@ -13,6 +13,7 @@ use bevy_kana::ToU32;
 use super::ManagedWindow;
 use super::ManagedWindowPersistence;
 use super::WindowKey;
+use super::constants::DEFAULT_SCALE_FACTOR;
 use super::constants::PRIMARY_WINDOW_KEY;
 use super::monitors;
 use super::monitors::CurrentMonitor;
@@ -65,7 +66,7 @@ fn on_managed_window_added(
     let Ok(mut managed_window) = managed.get_mut(entity) else {
         return;
     };
-    let name = managed_window.window_name.clone();
+    let name = managed_window.name.clone();
 
     // Primary window is managed automatically — reject explicit `ManagedWindow` on it
     if primary_query.get(entity).is_ok() {
@@ -95,7 +96,7 @@ fn on_managed_window_added(
         warn!(
             "[on_managed_window_added] Duplicate ManagedWindow name: \"{name}\" — renamed to \"{unique_name}\" for entity {entity:?}"
         );
-        managed_window.window_name.clone_from(&unique_name);
+        managed_window.name.clone_from(&unique_name);
     }
 
     registry.names.insert(unique_name.clone());
@@ -225,7 +226,7 @@ fn on_managed_window_load(
     let Ok(managed_window) = managed.get(entity) else {
         return;
     };
-    let name = &managed_window.window_name;
+    let name = &managed_window.name;
 
     // Hide window during restore (on Linux X11 with frame extent compensation, don't hide)
     if let Ok(mut window) = windows.get_mut(entity)
@@ -273,7 +274,10 @@ fn on_managed_window_load(
 
     // The window will be created on the focused window's monitor (the primary window's
     // monitor), so use that scale as starting_scale for scale factor compensation.
-    let primary_scale = primary_monitor.iter().next().map_or(1.0, |cm| cm.scale);
+    let primary_scale = primary_monitor
+        .iter()
+        .next()
+        .map_or(DEFAULT_SCALE_FACTOR, |cm| cm.scale);
 
     restore_managed_window(
         entity,

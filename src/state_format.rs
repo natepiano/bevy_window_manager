@@ -36,6 +36,7 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use super::constants::CURRENT_STATE_VERSION;
+use super::constants::DEFAULT_SCALE_FACTOR;
 use super::constants::PRIMARY_WINDOW_KEY;
 use super::types::SavedWindowMode;
 use super::types::WindowState;
@@ -123,7 +124,7 @@ impl WindowStateV1 {
             logical_position: self.position,
             logical_width:    self.width,
             logical_height:   self.height,
-            monitor_scale:    1.0,
+            monitor_scale:    DEFAULT_SCALE_FACTOR,
             monitor_index:    self.monitor_index,
             mode:             self.mode,
             app_name:         self.app_name,

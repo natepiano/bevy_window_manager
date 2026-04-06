@@ -826,7 +826,7 @@ def get_managed_by_name(entities: list[JsonDict], window_name: str) -> JsonDict 
         managed = extract_from_entity(ent, COMP_MANAGED)
         if isinstance(managed, dict):
             d = cast(JsonDict, managed)
-            if d.get("window_name") == window_name:
+            if d.get("name") == window_name:
                 return ent
     return None
 

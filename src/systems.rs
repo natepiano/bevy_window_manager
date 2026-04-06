@@ -24,6 +24,7 @@ use super::ManagedWindow;
 use super::ManagedWindowPersistence;
 use super::Platform;
 use super::WindowKey;
+use super::constants::DEFAULT_SCALE_FACTOR;
 use super::constants::SCALE_FACTOR_EPSILON;
 use super::monitors::CurrentMonitor;
 use super::monitors::MonitorInfo;
@@ -88,11 +89,11 @@ pub(crate) fn init_winit_info(
             let starting_monitor = winit_window
                 .current_monitor()
                 .and_then(|cm| {
-                    let cm_pos = cm.position();
-                    let info = monitors.at(cm_pos.x, cm_pos.y);
+                    let monitor_position = cm.position();
+                    let info = monitors.at(monitor_position.x, monitor_position.y);
                     debug!(
                         "[init_winit_info] current_monitor() position=({}, {}) -> index={:?}",
-                        cm_pos.x, cm_pos.y, info.map(|m| m.index)
+                        monitor_position.x, monitor_position.y, info.map(|m| m.index)
                     );
                     info.copied()
                 })
@@ -120,7 +121,7 @@ pub(crate) fn init_winit_info(
 
             commands.insert_resource(WinitInfo {
                 starting_monitor_index,
-                window_decoration: decoration,
+                decoration,
             });
         }
     });
@@ -170,7 +171,7 @@ pub(crate) fn load_target_position(
     // Get starting monitor from WinitInfo
     let starting_monitor_index = winit_info.starting_monitor_index;
     let starting_info = monitors.by_index(starting_monitor_index);
-    let starting_scale = starting_info.map_or(1.0, |m| m.scale);
+    let starting_scale = starting_info.map_or(DEFAULT_SCALE_FACTOR, |m| m.scale);
 
     let (target_info, fallback_position, used_fallback) =
         restore_plan::resolve_target_monitor_and_position(
@@ -200,7 +201,7 @@ pub(crate) fn load_target_position(
         starting_scale,
         target.target_monitor_index,
         target.target_scale,
-        target.monitor_scale_strategy,
+        target.scale_strategy,
         target.position
     );
 
@@ -338,18 +339,18 @@ pub(crate) fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
     };
 
     // Compute move parameters based on scale strategy
-    let params = match target.monitor_scale_strategy {
+    let params = match target.scale_strategy {
         MonitorScaleStrategy::HigherToLower(_) => {
             // Compensate position because winit divides by launch scale
             let ratio = target.starting_scale / target.target_scale;
-            let comp_x = (f64::from(pos.x) * ratio).to_i32();
-            let comp_y = (f64::from(pos.y) * ratio).to_i32();
+            let compensated_x = (f64::from(pos.x) * ratio).to_i32();
+            let compensated_y = (f64::from(pos.y) * ratio).to_i32();
             debug!(
                 "[apply_initial_move] HigherToLower: compensating position {:?} -> ({}, {}) (ratio={})",
-                pos, comp_x, comp_y, ratio
+                pos, compensated_x, compensated_y, ratio
             );
             MoveParams {
-                position: IVec2::new(comp_x, comp_y),
+                position: IVec2::new(compensated_x, compensated_y),
                 // Use actual target size to avoid macOS caching tiny size
                 width:    target.width,
                 height:   target.height,
@@ -443,7 +444,7 @@ pub(crate) fn save_active_window_state(
         let key = if primary_q.get(entity).is_ok() {
             WindowKey::Primary
         } else if let Some(m) = managed {
-            WindowKey::Managed(m.window_name.clone())
+            WindowKey::Managed(m.name.clone())
         } else {
             continue;
         };
@@ -510,7 +511,7 @@ fn persist_remember_all(
         let key = if primary_q.get(*entity).is_ok() {
             WindowKey::Primary
         } else if let Ok((_, _, _, Some(managed))) = all_windows.get(*entity) {
-            WindowKey::Managed(managed.window_name.clone())
+            WindowKey::Managed(managed.name.clone())
         } else {
             // Entity may have been despawned - skip stale cached entry
             continue;
@@ -518,7 +519,9 @@ fn persist_remember_all(
 
         if let Some(mode) = &entry.mode {
             let monitor_index = entry.monitor_index.unwrap_or(0);
-            let monitor_scale = monitors.by_index(monitor_index).map_or(1.0, |m| m.scale);
+            let monitor_scale = monitors
+                .by_index(monitor_index)
+                .map_or(DEFAULT_SCALE_FACTOR, |m| m.scale);
             let logical_position = entry.position.map(|p| {
                 let logical_x = (f64::from(p.x) / monitor_scale).round().to_i32();
                 let logical_y = (f64::from(p.y) / monitor_scale).round().to_i32();
@@ -587,7 +590,7 @@ pub(crate) fn save_window_state(
         let key = if primary_q.get(window_entity).is_ok() {
             WindowKey::Primary
         } else if let Some(m) = managed {
-            WindowKey::Managed(m.window_name.clone())
+            WindowKey::Managed(m.name.clone())
         } else {
             continue;
         };
@@ -715,14 +718,13 @@ pub(crate) fn restore_windows(
         if platform.needs_managed_scale_fixup() {
             let actual_scale = f64::from(window.resolution.base_scale_factor());
             if (actual_scale - target.starting_scale).abs() > SCALE_FACTOR_EPSILON {
-                let old_strategy = target.monitor_scale_strategy;
+                let old_strategy = target.scale_strategy;
                 target.starting_scale = actual_scale;
-                target.monitor_scale_strategy =
-                    platform.scale_strategy(actual_scale, target.target_scale);
+                target.scale_strategy = platform.scale_strategy(actual_scale, target.target_scale);
                 debug!(
                     "[restore_windows] Corrected starting_scale for entity {entity:?}: \
                      strategy: {old_strategy:?} -> {:?} (actual_scale={actual_scale:.2})",
-                    target.monitor_scale_strategy
+                    target.scale_strategy
                 );
             }
         }
@@ -731,12 +733,12 @@ pub(crate) fn restore_windows(
         // Phase 1: apply_initial_move sets compensated position/size to trigger DPI change.
         // Phase 2: after ScaleFactorChanged, re-apply exact target size.
         if matches!(
-            target.monitor_scale_strategy,
+            target.scale_strategy,
             MonitorScaleStrategy::HigherToLower(WindowRestoreState::NeedInitialMove)
                 | MonitorScaleStrategy::CompensateSizeOnly(WindowRestoreState::NeedInitialMove)
         ) {
             apply_initial_move(&target, &mut window);
-            target.monitor_scale_strategy = match target.monitor_scale_strategy {
+            target.scale_strategy = match target.scale_strategy {
                 MonitorScaleStrategy::HigherToLower(_) => {
                     MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange)
                 },
@@ -750,21 +752,21 @@ pub(crate) fn restore_windows(
         // Handle state transition on scale change for both strategies.
         // CompensateSizeOnly: also advance if no scale change arrives (e.g., hidden window
         // didn't trigger WM_DPICHANGED, or the app launched on the target monitor).
-        match target.monitor_scale_strategy {
+        match target.scale_strategy {
             MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange)
                 if scale_changed =>
             {
                 debug!(
                     "[Restore] ScaleChanged received, transitioning to WindowRestoreState::ApplySize"
                 );
-                target.monitor_scale_strategy =
+                target.scale_strategy =
                     MonitorScaleStrategy::HigherToLower(WindowRestoreState::ApplySize);
             },
             MonitorScaleStrategy::CompensateSizeOnly(WindowRestoreState::WaitingForScaleChange) => {
                 debug!(
                     "[Restore] CompensateSizeOnly: transitioning to ApplySize (scale_changed={scale_changed})"
                 );
-                target.monitor_scale_strategy =
+                target.scale_strategy =
                     MonitorScaleStrategy::CompensateSizeOnly(WindowRestoreState::ApplySize);
             },
             _ => {},
@@ -774,7 +776,7 @@ pub(crate) fn restore_windows(
         // Phases: MoveToMonitor → WaitForMove → ApplyMode (Linux X11)
         //         WaitForSurface → ApplyMode (Windows DX12)
         //         ApplyMode (Wayland, macOS — direct apply)
-        if let Some(fs_state) = target.fullscreen_restore_state {
+        if let Some(fs_state) = target.fullscreen_state {
             match fs_state {
                 FullscreenRestoreState::MoveToMonitor => {
                     // Move window to target monitor so compositor knows where it belongs
@@ -782,19 +784,19 @@ pub(crate) fn restore_windows(
                         debug!("[restore_windows] Fullscreen MoveToMonitor: position={pos:?}");
                         window.position = WindowPosition::At(pos);
                     }
-                    target.fullscreen_restore_state = Some(FullscreenRestoreState::WaitForMove);
+                    target.fullscreen_state = Some(FullscreenRestoreState::WaitForMove);
                     continue;
                 },
                 FullscreenRestoreState::WaitForMove => {
                     // Wait one frame for compositor to process the position change
                     debug!("[restore_windows] Fullscreen WaitForMove: waiting for compositor");
-                    target.fullscreen_restore_state = Some(FullscreenRestoreState::ApplyMode);
+                    target.fullscreen_state = Some(FullscreenRestoreState::ApplyMode);
                     continue;
                 },
                 FullscreenRestoreState::WaitForSurface => {
                     // Wait one frame for GPU surface creation (Windows DX12, winit #3124)
                     debug!("[restore_windows] Fullscreen WaitForSurface: waiting for GPU surface");
-                    target.fullscreen_restore_state = Some(FullscreenRestoreState::ApplyMode);
+                    target.fullscreen_state = Some(FullscreenRestoreState::ApplyMode);
                     continue;
                 },
                 FullscreenRestoreState::ApplyMode => {
@@ -866,7 +868,7 @@ fn check_settle_matches(
     platform: Platform,
 ) -> (bool, bool, bool, bool) {
     let is_fullscreen = target.mode.is_fullscreen();
-    let pos_match = if is_fullscreen {
+    let position_matches = if is_fullscreen {
         true
     } else if platform.position_reliable_for_settle() {
         target_position == actual.position
@@ -876,7 +878,7 @@ fn check_settle_matches(
     let size_match = is_fullscreen || target_size == actual.size;
     let mode_match = platform.modes_match(target_mode, actual.mode);
     let monitor_match = target_monitor == actual.monitor;
-    (pos_match, size_match, mode_match, monitor_match)
+    (position_matches, size_match, mode_match, monitor_match)
 }
 
 /// Detect whether the settle snapshot changed from the previous frame and reset the
@@ -916,7 +918,7 @@ fn resolve_window_key(
     if primary_q.get(entity).is_ok() {
         WindowKey::Primary
     } else if let Ok(managed) = managed_q.get(entity) {
-        WindowKey::Managed(managed.window_name.clone())
+        WindowKey::Managed(managed.name.clone())
     } else {
         WindowKey::Primary
     }
@@ -984,7 +986,7 @@ pub(crate) fn check_restore_settling(
             continue;
         }
         let stable = settle.stability_timer.is_finished();
-        let (pos_match, size_match, mode_match, monitor_match) = check_settle_matches(
+        let (position_matches, size_match, mode_match, monitor_match) = check_settle_matches(
             &target,
             target_position,
             target_size,
@@ -993,10 +995,10 @@ pub(crate) fn check_restore_settling(
             &current_snapshot,
             *platform,
         );
-        let all_match = pos_match && size_match && mode_match && monitor_match;
+        let all_match = position_matches && size_match && mode_match && monitor_match;
         debug!(
             "[check_restore_settling] [{key}] {total_elapsed_ms:.0}ms (stable: {stability_elapsed_ms:.0}ms): \
-             pos={pos_match} size={size_match} mode={mode_match} monitor={monitor_match} | \
+             pos={position_matches} size={size_match} mode={mode_match} monitor={monitor_match} | \
              size: {target_size} vs {}, \
              mode: {target_mode:?} vs {:?}, \
              monitor: {target_monitor} vs {}, \
@@ -1380,10 +1382,10 @@ fn try_apply_restore(
 
     debug!(
         "[Restore] target_pos={:?} target_scale={} strategy={:?}",
-        target.position, target.target_scale, target.monitor_scale_strategy
+        target.position, target.target_scale, target.scale_strategy
     );
 
-    match target.monitor_scale_strategy {
+    match target.scale_strategy {
         MonitorScaleStrategy::ApplyUnchanged => {
             apply_window_geometry(
                 window,

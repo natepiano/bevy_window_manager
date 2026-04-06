@@ -297,9 +297,7 @@ fn on_spawn_managed_window(
             ),
             ..default()
         },
-        ManagedWindow {
-            window_name: name.clone(),
-        },
+        ManagedWindow { name: name.clone() },
     ));
 
     info!("[restore_window] Spawned managed window \"{name}\"");
@@ -806,7 +804,7 @@ fn update_primary_display(
             };
             managed_lines.push(format!(
                 "  {}: pos={pos} phys={}x{} log={}x{} scale={} monitor={}\n",
-                managed.window_name,
+                managed.name,
                 mw.physical_width(),
                 mw.physical_height(),
                 mw.resolution.width().to_u32(),
@@ -853,9 +851,7 @@ fn update_secondary_displays(
             effective_mode: window.mode,
         });
 
-        let name = managed_q
-            .get(display.0)
-            .map_or("unknown", |m| &m.window_name);
+        let name = managed_q.get(display.0).map_or("unknown", |m| &m.name);
         let restored_state = restored_states.states.get(&display.0);
         let mismatch_state = mismatch_states.states.get(&display.0);
 
