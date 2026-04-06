@@ -121,7 +121,7 @@ pub struct WindowRestoreMismatch {
 }
 
 /// Saved video mode for exclusive fullscreen.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Reflect)]
 pub(crate) struct SavedVideoMode {
     pub physical_size:           UVec2,
     pub bit_depth:               u16,
@@ -141,7 +141,7 @@ impl SavedVideoMode {
 }
 
 /// Serializable window mode.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Reflect)]
 pub(crate) enum SavedWindowMode {
     Windowed,
     BorderlessFullscreen,
@@ -236,7 +236,7 @@ pub(crate) struct X11FrameCompensated;
 ///
 /// By moving a 1x1 window to the final position first, we ensure the window is already
 /// at the correct location when we later apply size in `ApplySize`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect)]
 pub(crate) enum WindowRestoreState {
     /// Initial state: window needs to be moved to the target monitor to trigger a scale change.
     /// Handled by `restore_windows` which calls `apply_initial_move` and transitions to
@@ -262,7 +262,7 @@ pub(crate) enum WindowRestoreState {
 /// The key insight: on X11, if fullscreen mode is set in the same frame as
 /// position, the compositor may briefly honor it then revert. Splitting into
 /// separate frames ensures each change is processed independently.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect)]
 pub(crate) enum FullscreenRestoreState {
     /// Move window to target monitor position. Skipped on Wayland (no position).
     MoveToMonitor,
@@ -320,7 +320,7 @@ pub(crate) enum FullscreenRestoreState {
 ///   via `WindowRestoreState` to avoid size clamping:
 ///   1. Move a 1x1 window to final position (compensated) to trigger scale change
 ///   2. After scale changes, apply size without compensation
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect)]
 pub(crate) enum MonitorScaleStrategy {
     /// Same scale - apply position and size directly.
     ApplyUnchanged,
@@ -341,7 +341,8 @@ pub(crate) enum MonitorScaleStrategy {
 /// Bevy's `Window.resolution` represents and what we save to the state file.
 /// Outer dimensions (including title bar) are only used during loading for
 /// clamping calculations.
-#[derive(Component)]
+#[derive(Component, Reflect)]
+#[reflect(Component)]
 pub(crate) struct TargetPosition {
     /// Final clamped position (adjusted to fit within target monitor).
     /// None on Wayland where clients can't access window position.
@@ -388,7 +389,7 @@ pub(crate) struct TargetPosition {
 }
 
 /// Tracks the two-timer settling state after restore completes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Reflect)]
 pub(crate) struct SettleState {
     /// Hard deadline timer — fires mismatch if stability is never reached.
     pub total_timeout:   Timer,
@@ -411,7 +412,7 @@ impl SettleState {
 }
 
 /// Snapshot of compared values for change detection between frames.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect)]
 pub(crate) struct SettleSnapshot {
     pub position: Option<IVec2>,
     pub size:     UVec2,
