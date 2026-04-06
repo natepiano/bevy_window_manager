@@ -42,6 +42,10 @@ mod restore_plan;
 mod state;
 mod state_format;
 mod systems;
+#[allow(
+    clippy::used_underscore_binding,
+    reason = "false positive on enum variant fields"
+)]
 mod types;
 #[cfg(all(target_os = "windows", feature = "workaround-winit-4341"))]
 mod windows_dpi_fix;
