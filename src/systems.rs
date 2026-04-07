@@ -283,7 +283,7 @@ pub(crate) fn move_to_target_monitor(
 ///
 /// For fullscreen modes, we still move to the target monitor so the fullscreen mode
 /// is applied on the correct monitor when `try_apply_restore` runs.
-pub(crate) fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
+fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
     /// Computed parameters for the initial window move to target monitor.
     #[derive(Debug)]
     struct MoveParams {
@@ -729,9 +729,9 @@ pub(crate) fn restore_windows(
             }
         }
 
-        // Two-phase restore for cross-DPI strategies (HigherToLower, CompensateSizeOnly).
-        // Phase 1: apply_initial_move sets compensated position/size to trigger DPI change.
-        // Phase 2: after ScaleFactorChanged, re-apply exact target size.
+        // Two-phase restore for cross-DPI strategies (`HigherToLower`, `CompensateSizeOnly`).
+        // Phase 1: `apply_initial_move` sets compensated position/size to trigger DPI change.
+        // Phase 2: after `ScaleFactorChanged`, re-apply exact target size.
         if matches!(
             target.scale_strategy,
             MonitorScaleStrategy::HigherToLower(WindowRestoreState::NeedInitialMove)
@@ -742,8 +742,8 @@ pub(crate) fn restore_windows(
         }
 
         // Handle state transition on scale change for both strategies.
-        // CompensateSizeOnly: also advance if no scale change arrives (e.g., hidden window
-        // didn't trigger WM_DPICHANGED, or the app launched on the target monitor).
+        // `CompensateSizeOnly`: also advance if no scale change arrives (e.g., hidden window
+        // didn't trigger `WM_DPICHANGED`, or the app launched on the target monitor).
         match target.scale_strategy {
             MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange)
                 if scale_changed =>

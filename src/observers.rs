@@ -375,8 +375,10 @@ pub(crate) fn build_plugin(app: &mut App, path: PathBuf, persistence: ManagedWin
 
     // Hide primary window to prevent flash at default position.
     // Two cases to handle:
-    // 1. Window already exists (WindowManagerPlugin added after DefaultPlugins) - hide immediately
-    // 2. Window doesn't exist yet (WindowManagerPlugin added before DefaultPlugins) - use observer
+    // 1. Window already exists (`WindowManagerPlugin` added after `DefaultPlugins`) - hide
+    //    immediately
+    // 2. Window doesn't exist yet (`WindowManagerPlugin` added before `DefaultPlugins`) - use
+    //    observer
     //
     // EXCEPTION: On Linux X11 with frame extent compensation (workaround-winit-4445),
     // we cannot hide the window because the compensation system needs to query

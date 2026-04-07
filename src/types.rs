@@ -131,7 +131,7 @@ pub(crate) struct SavedVideoMode {
 impl SavedVideoMode {
     /// Convert to Bevy's `VideoMode`.
     #[must_use]
-    pub const fn to_video_mode(&self) -> VideoMode {
+    pub(crate) const fn to_video_mode(&self) -> VideoMode {
         VideoMode {
             physical_size:           self.physical_size,
             bit_depth:               self.bit_depth,
@@ -155,7 +155,7 @@ pub(crate) enum SavedWindowMode {
 impl SavedWindowMode {
     /// Convert to Bevy's `WindowMode` with the given monitor index.
     #[must_use]
-    pub const fn to_window_mode(&self, monitor_index: usize) -> WindowMode {
+    pub(crate) const fn to_window_mode(&self, monitor_index: usize) -> WindowMode {
         let selection = MonitorSelection::Index(monitor_index);
         match self {
             Self::Windowed => WindowMode::Windowed,
@@ -174,7 +174,7 @@ impl SavedWindowMode {
 
     /// Check if this is a fullscreen mode (borderless or exclusive).
     #[must_use]
-    pub const fn is_fullscreen(&self) -> bool { !matches!(self, Self::Windowed) }
+    pub(crate) const fn is_fullscreen(&self) -> bool { !matches!(self, Self::Windowed) }
 }
 
 impl From<&WindowMode> for SavedWindowMode {
@@ -212,7 +212,7 @@ pub(crate) struct WinitInfo {
 impl WinitInfo {
     /// Get window decoration dimensions as a `UVec2`.
     #[must_use]
-    pub const fn decoration(&self) -> UVec2 {
+    pub(crate) const fn decoration(&self) -> UVec2 {
         UVec2::new(self.decoration.width, self.decoration.height)
     }
 }
@@ -402,7 +402,7 @@ pub(crate) struct SettleState {
 impl SettleState {
     /// Create a new settle state with default durations.
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             total_timeout:   Timer::from_seconds(SETTLE_TIMEOUT_SECS, TimerMode::Once),
             stability_timer: Timer::from_seconds(SETTLE_STABILITY_SECS, TimerMode::Once),
@@ -423,28 +423,28 @@ pub(crate) struct SettleSnapshot {
 impl TargetPosition {
     /// Get the target position as an `IVec2`, if available.
     #[must_use]
-    pub const fn position(&self) -> Option<IVec2> { self.position }
+    pub(crate) const fn position(&self) -> Option<IVec2> { self.position }
 
     /// Get the target physical size as a `UVec2`.
     #[must_use]
-    pub const fn size(&self) -> UVec2 { UVec2::new(self.width, self.height) }
+    pub(crate) const fn size(&self) -> UVec2 { UVec2::new(self.width, self.height) }
 
     /// Get the target logical size as a `UVec2`.
     #[must_use]
-    pub const fn logical_size(&self) -> UVec2 {
+    pub(crate) const fn logical_size(&self) -> UVec2 {
         UVec2::new(self.logical_width, self.logical_height)
     }
 
     /// Scale ratio between starting and target monitors.
     #[must_use]
-    pub fn ratio(&self) -> f64 { self.starting_scale / self.target_scale }
+    pub(crate) fn ratio(&self) -> f64 { self.starting_scale / self.target_scale }
 
     /// Position compensated for scale factor differences.
     ///
     /// Multiplies position by the ratio to account for winit dividing by launch scale.
     /// Returns None if position is not available (Wayland).
     #[must_use]
-    pub fn compensated_position(&self) -> Option<IVec2> {
+    pub(crate) fn compensated_position(&self) -> Option<IVec2> {
         let ratio = self.ratio();
         self.position.map(|pos| {
             IVec2::new(
@@ -458,7 +458,7 @@ impl TargetPosition {
     ///
     /// Multiplies size by the ratio to account for winit dividing by launch scale.
     #[must_use]
-    pub fn compensated_size(&self) -> UVec2 {
+    pub(crate) fn compensated_size(&self) -> UVec2 {
         let ratio = self.ratio();
         UVec2::new(
             (f64::from(self.width) * ratio).to_u32(),

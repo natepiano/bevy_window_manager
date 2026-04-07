@@ -20,6 +20,8 @@ use x11rb::protocol::xproto::AtomEnum;
 use x11rb::protocol::xproto::ConnectionExt;
 use x11rb::xcb_ffi::XCBConnection;
 
+use super::constants::FRAME_EXTENT_COUNT;
+use super::constants::FRAME_EXTENT_TOP_INDEX;
 use super::types::TargetPosition;
 use super::types::X11FrameCompensated;
 
@@ -39,8 +41,8 @@ fn query_frame_top(window_id: u32) -> Option<i32> {
     let property = property_cookie.reply().ok()?;
 
     let values: Vec<u32> = property.value32()?.collect();
-    if values.len() >= 4 {
-        Some(values[2].to_i32()) // top extent
+    if values.len() >= FRAME_EXTENT_COUNT {
+        Some(values[FRAME_EXTENT_TOP_INDEX].to_i32()) // top extent
     } else {
         None
     }

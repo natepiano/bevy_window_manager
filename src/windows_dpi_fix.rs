@@ -32,8 +32,7 @@ use windows::Win32::UI::WindowsAndMessaging::SetWindowPos;
 use windows::Win32::UI::WindowsAndMessaging::WM_DPICHANGED;
 
 use super::ManagedWindow;
-
-const SUBCLASS_ID: usize = 1;
+use super::constants::SUBCLASS_ID;
 
 /// Wrapper around HWND that implements Send + Sync.
 ///

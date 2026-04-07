@@ -5,6 +5,7 @@
 
 use bevy::prelude::*;
 use bevy::window::Monitor;
+use bevy::window::PrimaryWindow;
 use bevy::window::WindowMode;
 use bevy_diagnostic::FrameCount;
 use bevy_kana::ToI32;
@@ -208,7 +209,7 @@ fn update_monitors(
     added: Query<Entity, Added<Monitor>>,
     mut removed: RemovedComponents<Monitor>,
     frame_count: Res<FrameCount>,
-    current_monitor_q: Query<Option<&CurrentMonitor>, With<bevy::window::PrimaryWindow>>,
+    current_monitor_q: Query<Option<&CurrentMonitor>, With<PrimaryWindow>>,
 ) {
     let has_changes = !added.is_empty() || removed.read().next().is_some();
 

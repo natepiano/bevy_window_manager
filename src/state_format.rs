@@ -190,11 +190,7 @@ fn decode_v2(contents: &str) -> Option<HashMap<WindowKey, WindowState>> {
     Some(states)
 }
 
-/// Header comment prepended to the RON file to document the coordinate contract.
-const RON_HEADER: &str = "\
-// All spatial values (position, size) are in logical pixels.
-// monitor_scale: scale factor at save time (informational, not used during restore).
-";
+use super::constants::RON_HEADER;
 
 /// Encode typed runtime state into persisted v1 text.
 pub(crate) fn encode(states: &HashMap<WindowKey, WindowState>) -> Result<String, ron::Error> {
