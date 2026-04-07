@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix invisible window on launch when saved state has no position on a different-scale monitor (e.g., first launch on an external display). The cross-DPI restore would wait forever for a scale change event that never arrived because the window couldn't move to the target monitor.
+- Fix macOS saving `position: None` for windows that were never explicitly moved. Now queries the actual OS window position via winit instead of relying on Bevy's `Window.position`, which stays `Automatic` after creation.
+
 ## [0.20.1] - 2026-04-06
 
 ### Added
