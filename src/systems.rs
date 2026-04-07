@@ -736,16 +736,8 @@ pub(crate) fn restore_windows(
             target.scale_strategy,
             MonitorScaleStrategy::HigherToLower(WindowRestoreState::NeedInitialMove)
                 | MonitorScaleStrategy::CompensateSizeOnly(WindowRestoreState::NeedInitialMove)
-        ) {
-            apply_initial_move(&target, &mut window);
-            target.scale_strategy = match target.scale_strategy {
-                MonitorScaleStrategy::HigherToLower(_) => {
-                    MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange)
-                },
-                _ => MonitorScaleStrategy::CompensateSizeOnly(
-                    WindowRestoreState::WaitingForScaleChange,
-                ),
-            };
+        ) && try_cross_dpi_initial_move(&mut target, &mut window)
+        {
             continue;
         }
 
@@ -1147,13 +1139,16 @@ enum RestoreStatus {
     Waiting,
 }
 
-/// Get window position, using winit's `outer_position` on Linux with W5 workaround.
-#[allow(
-    clippy::missing_const_for_fn,
-    reason = "Linux workaround reads the WINIT_WINDOWS thread-local at runtime"
-)]
+/// Get window position from the OS via winit, falling back to `Window.position`.
+///
+/// On macOS, `Window.position` stays `Automatic` even after the OS places the window,
+/// so we must query winit directly. On Linux with W5 workaround, we also use winit
+/// to get `outer_position` (frame origin). On other platforms, `Window.position` suffices.
 fn get_window_position(entity: Entity, window: &Window) -> Option<IVec2> {
-    #[cfg(all(target_os = "linux", feature = "workaround-winit-4443"))]
+    #[cfg(any(
+        target_os = "macos",
+        all(target_os = "linux", feature = "workaround-winit-4443")
+    ))]
     {
         let _ = window;
         WINIT_WINDOWS.with(|ww| {
@@ -1163,7 +1158,10 @@ fn get_window_position(entity: Entity, window: &Window) -> Option<IVec2> {
             Some(IVec2::new(outer_pos.x, outer_pos.y))
         })
     }
-    #[cfg(not(all(target_os = "linux", feature = "workaround-winit-4443")))]
+    #[cfg(not(any(
+        target_os = "macos",
+        all(target_os = "linux", feature = "workaround-winit-4443")
+    )))]
     {
         let _ = entity;
         match window.position {
@@ -1320,6 +1318,41 @@ fn apply_fullscreen_restore(target: &TargetPosition, window: &mut Window, platfo
     );
 
     window.mode = window_mode;
+}
+
+/// Handle the initial move for cross-DPI strategies (`HigherToLower`, `CompensateSizeOnly`).
+///
+/// When position is available, starts the two-phase dance: move to trigger DPI change,
+/// then wait for `ScaleFactorChanged` to apply final size.
+///
+/// When position is `None` (e.g., macOS first launch where `Window.position` stays
+/// `Automatic`), the window can't move to the target monitor, so the two-phase dance
+/// would wait for a `ScaleFactorChanged` that never arrives. Instead, recompute the
+/// physical size for the starting monitor's scale and apply directly.
+///
+/// Returns `true` if the caller should `continue` (skip to next entity).
+fn try_cross_dpi_initial_move(target: &mut TargetPosition, window: &mut Window) -> bool {
+    if target.position.is_none() {
+        let width = (f64::from(target.logical_width) * target.starting_scale).to_u32();
+        let height = (f64::from(target.logical_height) * target.starting_scale).to_u32();
+        debug!(
+            "[restore_windows] No position for cross-DPI restore, applying logical size \
+             {}x{} at starting_scale={} (physical {}x{}) instead of two-phase dance",
+            target.logical_width, target.logical_height, target.starting_scale, width, height
+        );
+        window.resolution.set_physical_resolution(width, height);
+        window.visible = true;
+        target.settle_state = Some(SettleState::new());
+        return true;
+    }
+    apply_initial_move(target, window);
+    target.scale_strategy = match target.scale_strategy {
+        MonitorScaleStrategy::HigherToLower(_) => {
+            MonitorScaleStrategy::HigherToLower(WindowRestoreState::WaitingForScaleChange)
+        },
+        _ => MonitorScaleStrategy::CompensateSizeOnly(WindowRestoreState::WaitingForScaleChange),
+    };
+    true
 }
 
 /// Apply position and/or size to window with logging.

@@ -143,6 +143,42 @@
     },
 
     {
+      "id": "no_position_cross_dpi_restore",
+      "description": "Window with no saved position on different-scale monitor restores visible with correct size on launch monitor",
+      "automation": "full",
+      "launch_monitor": 0,
+      "requires": {"min_monitors": 2, "different_scales": true},
+      "expect_mismatch": true,
+
+      "ron_file": "no_position_cross_dpi.ron",
+
+      "windows": {
+        "primary": {
+          "validate": ["size", "mode"]
+        }
+      }
+    },
+
+    {
+      "id": "save_position_on_unmoved_window",
+      "description": "Window that was never moved saves a real position (not None) to the state file",
+      "automation": "full",
+      "launch_monitor": 0,
+
+      "ron_file": "no_position_same_monitor.ron",
+
+      "windows": {
+        "primary": {
+          "validate": ["size", "mode"]
+        }
+      },
+
+      "persistence_validation": {
+        "expect_position_saved": ["primary"]
+      }
+    },
+
+    {
       "id": "multi_window_0_1",
       "description": "Primary on Monitor 0, secondary on Monitor 1",
       "automation": "full",

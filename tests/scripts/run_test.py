@@ -149,6 +149,10 @@ class RonWindowValues(TypedDict, total=False):
     height: str
     monitor: str
     mode: str
+    mutation_physical_x: str
+    mutation_physical_y: str
+    mutation_physical_w: str
+    mutation_physical_h: str
 
 
 # =============================================================================
@@ -716,6 +720,20 @@ def _check_persistence_key(key: str, ron_content: str, expect_present: bool) -> 
             pass_line("persistence", f"key={key}", "absent")
 
 
+def _check_position_saved(key: str, ron_content: str) -> None:
+    """Check that a window's saved position is Some(...), not None."""
+    parsed = parse_ron_values(ron_content)
+    entry = parsed.get(key)
+    if entry is None:
+        fail_line("persistence", f"position_saved={key}", "window_key_not_found")
+        return
+    pos_x = entry.get("pos_x", "")
+    if pos_x:
+        pass_line("persistence", f"position_saved={key}", f"position=({pos_x},{entry.get('pos_y', '')})")
+    else:
+        fail_line("persistence", f"position_saved={key}", "position=None")
+
+
 # =============================================================================
 # Validation (single function, handles initial / mutation / relaunch)
 # =============================================================================
@@ -788,7 +806,7 @@ def wait_for_all_windows_settled(expected_count: int) -> None:
             result = brp.call("world.get_resources", {"resource": RES_SETTLED_COUNT})
             value = json_get(result, "result", "value")
             if isinstance(value, dict):
-                count = value.get("count", 0)
+                count = cast(JsonDict, value).get("count", 0)
                 if isinstance(count, int) and count >= expected_count:
                     return
         except (URLError, OSError):
@@ -1014,6 +1032,9 @@ def validate_persistence(test: TestEntry, ron_path: str) -> None:
 
     for key in persistence.get("unexpected_ron_keys", []):
         _check_persistence_key(key, ron_content, expect_present=False)
+
+    for key in cast(list[str], persistence.get("expect_position_saved", [])):
+        _check_position_saved(key, ron_content)
 
 
 # =============================================================================
@@ -1478,8 +1499,12 @@ def run_test(
     capture_stderr = bool(expected_log)
     use_test_mode = not no_shutdown
     stderr_path, restore_result = launch_app(feature_flags, resolved_backend, capture_stderr, test_mode=use_test_mode)
+    expect_mismatch = test.get("expect_mismatch", False)
     if restore_result == "mismatch":
-        fail_line("restore", "event", "WindowRestoreMismatch fired (restore state did not match)")
+        if expect_mismatch:
+            pass_line("restore", "event", "WindowRestoreMismatch fired (expected)")
+        else:
+            fail_line("restore", "event", "WindowRestoreMismatch fired (restore state did not match)")
 
     # Click fullscreen button flow (macOS)
     if has_click_fullscreen:
