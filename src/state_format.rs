@@ -38,6 +38,7 @@ use serde::Serialize;
 use super::constants::CURRENT_STATE_VERSION;
 use super::constants::DEFAULT_SCALE_FACTOR;
 use super::constants::PRIMARY_WINDOW_KEY;
+use super::constants::RON_HEADER;
 use super::types::SavedWindowMode;
 use super::types::WindowState;
 
@@ -189,8 +190,6 @@ fn decode_v2(contents: &str) -> Option<HashMap<WindowKey, WindowState>> {
 
     Some(states)
 }
-
-use super::constants::RON_HEADER;
 
 /// Encode typed runtime state into persisted v1 text.
 pub(crate) fn encode(states: &HashMap<WindowKey, WindowState>) -> Result<String, ron::Error> {

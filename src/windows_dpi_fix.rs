@@ -65,7 +65,7 @@ fn get_hwnd(window_entity: Entity) -> Option<HWND> {
 /// The lparam contains a pointer to a RECT with the suggested new size/position.
 /// We simply apply it using `SetWindowPos`.
 fn handle_dpi_changed(hwnd: HWND, lparam: LPARAM) -> LRESULT {
-    // SAFETY: lparam is a valid pointer to RECT per WM_DPICHANGED contract
+    // SAFETY: lparam is a valid pointer to RECT per `WM_DPICHANGED` contract
     let suggested_rect = unsafe { &*(lparam.0 as *const RECT) };
 
     // SAFETY: SetWindowPos is safe with valid HWND and dimensions

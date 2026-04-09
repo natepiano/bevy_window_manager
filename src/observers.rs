@@ -421,8 +421,8 @@ pub(crate) fn build_plugin(app: &mut App, path: PathBuf, persistence: ManagedWin
             {
                 // X11 fullscreen: move window to target monitor before first event loop.
                 // Must be chained (not .after()) so apply_deferred runs between
-                // load_target_position and move_to_target_monitor — otherwise the
-                // TargetPosition component inserted via deferred commands won't exist yet.
+                // `load_target_position` and `move_to_target_monitor` — otherwise the
+                // `TargetPosition` component inserted via deferred commands won't exist yet.
                 (
                     systems::init_winit_info,
                     systems::load_target_position,

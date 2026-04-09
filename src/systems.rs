@@ -229,7 +229,7 @@ pub(crate) fn load_target_position(
     // Insert X11FrameCompensated token for platforms that don't need compensation.
     // On Linux + W6 + X11, the compensation system inserts this token after adjusting position.
     // For fullscreen modes, skip frame compensation entirely — the window will cover the whole
-    // screen so frame extents are irrelevant, and delaying restore_windows by extra frames
+    // screen so frame extents are irrelevant, and delaying `restore_windows` by extra frames
     // gives the compositor time to revert our PreStartup position change.
     if is_fullscreen || !platform.needs_frame_compensation() {
         commands.entity(entity).insert(X11FrameCompensated);
@@ -358,7 +358,7 @@ fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
         },
         MonitorScaleStrategy::CompensateSizeOnly(_) => {
             // Position applied directly, size compensated to survive DPI transition.
-            // Phase 2 will re-apply the exact target size after ScaleFactorChanged.
+            // Phase 2 will re-apply the exact target size after `ScaleFactorChanged`.
             let compensated = target.compensated_size();
             debug!(
                 "[apply_initial_move] CompensateSizeOnly: position={:?} compensated_size={}x{} (ratio={})",
@@ -792,7 +792,7 @@ pub(crate) fn restore_windows(
                     continue;
                 },
                 FullscreenRestoreState::ApplyMode => {
-                    // Fall through to try_apply_restore which applies the fullscreen mode
+                    // Fall through to `try_apply_restore` which applies the fullscreen mode
                 },
             }
         }
