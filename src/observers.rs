@@ -1,9 +1,4 @@
-//! Observers, run conditions, and plugin builder.
-//!
-//! All window-lifecycle logic lives here. [`build_plugin`] is called from the
-//! thin `Plugin` impls in `lib.rs`.
-
-use std::path::PathBuf;
+//! Observers and run conditions for window lifecycle management.
 
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
@@ -15,9 +10,7 @@ use super::ManagedWindowPersistence;
 use super::WindowKey;
 use super::constants::DEFAULT_SCALE_FACTOR;
 use super::constants::PRIMARY_WINDOW_KEY;
-use super::monitors;
 use super::monitors::CurrentMonitor;
-use super::monitors::MonitorPlugin;
 use super::monitors::Monitors;
 use super::platform::Platform;
 use super::restore_plan;
@@ -40,7 +33,10 @@ use super::types::X11FrameCompensated;
 /// Note: We observe `Add<PrimaryWindow>` rather than `Add<Window>` because when
 /// `Window` is added, `PrimaryWindow` may not exist yet. By observing `PrimaryWindow`,
 /// we know the `Window` component already exists on the entity.
-fn hide_window_on_creation(add: On<Add, PrimaryWindow>, mut windows: Query<&mut Window>) {
+pub(crate) fn hide_window_on_creation(
+    add: On<Add, PrimaryWindow>,
+    mut windows: Query<&mut Window>,
+) {
     debug!(
         "[hide_window_on_creation] Observer fired for entity {:?}",
         add.entity
@@ -53,7 +49,7 @@ fn hide_window_on_creation(add: On<Add, PrimaryWindow>, mut windows: Query<&mut 
 
 /// Observer: register a `ManagedWindow` name, deduplicate if needed, and save initial state if
 /// needed.
-fn on_managed_window_added(
+pub(crate) fn on_managed_window_added(
     add: On<Add, ManagedWindow>,
     mut managed: Query<&mut ManagedWindow>,
     mut registry: ResMut<ManagedWindowRegistry>,
@@ -144,7 +140,7 @@ fn on_managed_window_added(
 }
 
 /// Observer: unregister a `ManagedWindow` name when removed, and update state file if `ActiveOnly`.
-fn on_managed_window_removed(
+pub(crate) fn on_managed_window_removed(
     remove: On<Remove, ManagedWindow>,
     mut registry: ResMut<ManagedWindowRegistry>,
     config: Res<RestoreWindowConfig>,
@@ -189,7 +185,7 @@ fn on_managed_window_removed(
 /// When `ManagedWindowPersistence` switches to `ActiveOnly`, immediately rebuild the state
 /// file from the currently-active windows so that any previously-remembered-but-closed
 /// window entries are pruned.
-fn on_persistence_changed(
+pub(crate) fn on_persistence_changed(
     persistence: Res<ManagedWindowPersistence>,
     config: Res<RestoreWindowConfig>,
     monitors: Res<Monitors>,
@@ -211,7 +207,7 @@ fn on_persistence_changed(
 }
 
 /// Observer: hide a managed window on creation and load its saved state.
-fn on_managed_window_load(
+pub(crate) fn on_managed_window_load(
     add: On<Add, ManagedWindow>,
     mut commands: Commands,
     managed: Query<&ManagedWindow>,
@@ -361,116 +357,7 @@ fn restore_managed_window(
 }
 
 /// Run condition: returns true if any entity has a `TargetPosition` component.
-fn has_restoring_windows(q: Query<(), With<TargetPosition>>) -> bool { !q.is_empty() }
+pub(crate) fn has_restoring_windows(q: Query<(), With<TargetPosition>>) -> bool { !q.is_empty() }
 
 /// Run condition: returns true if no entity has a `TargetPosition` component.
-fn no_restoring_windows(q: Query<(), With<TargetPosition>>) -> bool { q.is_empty() }
-
-/// The run conditions allow us to separate the initial primary window restore from
-/// subsequent positions saves - which we dont' want to do until AFTER we've done
-/// the initial restore.
-pub(crate) fn build_plugin(app: &mut App, path: PathBuf, persistence: ManagedWindowPersistence) {
-    let platform = Platform::detect();
-    app.insert_resource(platform);
-
-    // Hide primary window to prevent flash at default position.
-    // Two cases to handle:
-    // 1. Window already exists (`WindowManagerPlugin` added after `DefaultPlugins`) - hide
-    //    immediately
-    // 2. Window doesn't exist yet (`WindowManagerPlugin` added before `DefaultPlugins`) - use
-    //    observer
-    //
-    // EXCEPTION: On Linux X11 with frame extent compensation (workaround-winit-4445),
-    // we cannot hide the window because the compensation system needs to query
-    // _NET_FRAME_EXTENTS, which requires the window to be visible/mapped.
-    let should_hide = platform.should_hide_on_startup();
-
-    if should_hide {
-        let mut query = app
-            .world_mut()
-            .query_filtered::<&mut Window, With<PrimaryWindow>>();
-        if let Some(mut window) = query.iter_mut(app.world_mut()).next() {
-            debug!("[build_plugin] Window already exists, hiding immediately");
-            window.visible = false;
-        } else {
-            debug!("[build_plugin] Window doesn't exist yet, registering observer");
-            app.add_observer(hide_window_on_creation);
-        }
-    } else {
-        debug!("[build_plugin] Linux X11: skipping window hide for frame extent compensation");
-    }
-
-    #[cfg(target_os = "macos")]
-    super::macos_tabbing_fix::init(app);
-
-    #[cfg(all(target_os = "windows", feature = "workaround-winit-4341"))]
-    super::windows_dpi_fix::init(app);
-
-    app.add_plugins(MonitorPlugin)
-        .insert_resource(RestoreWindowConfig {
-            path,
-            loaded_states: std::collections::HashMap::new(),
-        })
-        .insert_resource(persistence)
-        .init_resource::<ManagedWindowRegistry>()
-        .add_observer(on_managed_window_added)
-        .add_observer(on_managed_window_removed)
-        .add_observer(on_managed_window_load)
-        .add_systems(PreStartup, {
-            #[cfg(target_os = "linux")]
-            {
-                // X11 fullscreen: move window to target monitor before first event loop.
-                // Must be chained (not .after()) so apply_deferred runs between
-                // `load_target_position` and `move_to_target_monitor` — otherwise the
-                // `TargetPosition` component inserted via deferred commands won't exist yet.
-                (
-                    systems::init_winit_info,
-                    systems::load_target_position,
-                    systems::move_to_target_monitor,
-                )
-                    .chain()
-                    .after(monitors::init_monitors)
-            }
-            #[cfg(not(target_os = "linux"))]
-            {
-                (systems::init_winit_info, systems::load_target_position)
-                    .chain()
-                    .after(monitors::init_monitors)
-            }
-        });
-
-    // X11 frame extent compensation (Linux + W6 + X11 only)
-    // Runs until all restoring windows have the X11FrameCompensated component
-    #[cfg(all(target_os = "linux", feature = "workaround-winit-4445"))]
-    app.add_systems(
-        Update,
-        super::x11_frame_extents::compensate_target_position
-            .run_if(has_restoring_windows)
-            .run_if(|p: Res<Platform>| p.is_x11()),
-    );
-
-    // Restore windows - processes all entities with `TargetPosition` + `X11FrameCompensated`
-    app.add_systems(
-        Update,
-        (
-            systems::restore_windows,
-            systems::check_restore_settling.after(systems::restore_windows),
-        )
-            .run_if(has_restoring_windows),
-    );
-
-    // Unified monitor detection + save window state
-    app.add_systems(
-        Update,
-        (
-            systems::update_current_monitor,
-            systems::save_window_state
-                .run_if(no_restoring_windows)
-                .after(systems::update_current_monitor),
-            on_persistence_changed
-                .run_if(resource_changed::<ManagedWindowPersistence>)
-                .run_if(no_restoring_windows)
-                .after(systems::update_current_monitor),
-        ),
-    );
-}
+pub(crate) fn no_restoring_windows(q: Query<(), With<TargetPosition>>) -> bool { q.is_empty() }

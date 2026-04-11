@@ -42,13 +42,13 @@ fn query_frame_top(window_id: u32) -> Option<i32> {
             atom,
             AtomEnum::CARDINAL,
             0,
-            FRAME_EXTENT_COUNT as u32,
+            FRAME_EXTENT_COUNT,
         )
         .ok()?;
     let property = property_cookie.reply().ok()?;
 
     let values: Vec<u32> = property.value32()?.collect();
-    if values.len() >= FRAME_EXTENT_COUNT {
+    if values.len() >= FRAME_EXTENT_COUNT as usize {
         Some(values[FRAME_EXTENT_TOP_INDEX].to_i32()) // top extent
     } else {
         None

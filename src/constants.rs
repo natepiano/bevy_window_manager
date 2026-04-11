@@ -35,7 +35,7 @@ pub(crate) const SUBCLASS_ID: usize = 1;
 // X11 frame extents (`_NET_FRAME_EXTENTS`: left, right, top, bottom)
 /// Number of values in `_NET_FRAME_EXTENTS` (left, right, top, bottom).
 #[cfg(all(target_os = "linux", feature = "workaround-winit-4445"))]
-pub(crate) const FRAME_EXTENT_COUNT: usize = 4;
+pub(crate) const FRAME_EXTENT_COUNT: u32 = 4;
 /// Index of the "top" extent in `_NET_FRAME_EXTENTS`.
 #[cfg(all(target_os = "linux", feature = "workaround-winit-4445"))]
 pub(crate) const FRAME_EXTENT_TOP_INDEX: usize = 2;
