@@ -36,7 +36,14 @@ fn query_frame_top(window_id: u32) -> Option<i32> {
     let atom = atom_cookie.reply().ok()?.atom;
 
     let property_cookie = conn
-        .get_property(false, window_id, atom, AtomEnum::CARDINAL, 0, 4)
+        .get_property(
+            false,
+            window_id,
+            atom,
+            AtomEnum::CARDINAL,
+            0,
+            FRAME_EXTENT_COUNT as u32,
+        )
         .ok()?;
     let property = property_cookie.reply().ok()?;
 
