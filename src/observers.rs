@@ -8,21 +8,21 @@ use bevy_kana::ToU32;
 use super::ManagedWindow;
 use super::ManagedWindowPersistence;
 use super::WindowKey;
+use super::config::RestoreWindowConfig;
 use super::constants::DEFAULT_SCALE_FACTOR;
 use super::constants::PRIMARY_WINDOW_KEY;
+use super::managed::ManagedWindowRegistry;
 use super::monitors::CurrentMonitor;
 use super::monitors::Monitors;
 use super::platform::Platform;
 use super::restore_plan;
+use super::restore_target::TargetPosition;
+use super::restore_target::WinitInfo;
+use super::restore_target::X11FrameCompensated;
+use super::saved::SavedWindowMode;
+use super::saved::WindowState;
 use super::state;
 use super::systems;
-use super::types::ManagedWindowRegistry;
-use super::types::RestoreWindowConfig;
-use super::types::SavedWindowMode;
-use super::types::TargetPosition;
-use super::types::WindowState;
-use super::types::WinitInfo;
-use super::types::X11FrameCompensated;
 
 /// Hide the primary window when created, before winit creates the OS window.
 ///

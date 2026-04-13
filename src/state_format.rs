@@ -39,8 +39,8 @@ use super::constants::CURRENT_STATE_VERSION;
 use super::constants::DEFAULT_SCALE_FACTOR;
 use super::constants::PRIMARY_WINDOW_KEY;
 use super::constants::RON_HEADER;
-use super::types::SavedWindowMode;
-use super::types::WindowState;
+use super::saved::SavedWindowMode;
+use super::saved::WindowState;
 
 /// Typed identifier for persisted window state.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, Reflect)]
@@ -223,9 +223,9 @@ mod tests {
     use super::WindowKey;
     use super::decode;
     use super::encode;
-    use crate::types::SavedVideoMode;
-    use crate::types::SavedWindowMode;
-    use crate::types::WindowState;
+    use crate::saved::SavedVideoMode;
+    use crate::saved::SavedWindowMode;
+    use crate::saved::WindowState;
 
     fn sample_state() -> WindowState {
         WindowState {

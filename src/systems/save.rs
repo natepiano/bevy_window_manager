@@ -12,17 +12,17 @@ use bevy_kana::ToU32;
 use crate::ManagedWindow;
 use crate::ManagedWindowPersistence;
 use crate::WindowKey;
+use crate::config::RestoreWindowConfig;
 use crate::constants::DEFAULT_SCALE_FACTOR;
 use crate::monitors::CurrentMonitor;
 use crate::monitors::Monitors;
+use crate::saved::SavedWindowMode;
+use crate::saved::WindowState;
 use crate::state;
-use crate::types::RestoreWindowConfig;
-use crate::types::SavedWindowMode;
-use crate::types::WindowState;
 
 /// Cached window state for change detection comparison.
 #[derive(Default)]
-pub(crate) struct CachedWindowState {
+pub struct CachedWindowState {
     position:       Option<IVec2>,
     logical_width:  u32,
     logical_height: u32,
@@ -39,7 +39,7 @@ pub(crate) struct CachedWindowState {
 ///
 /// `exclude_entity` allows callers (e.g., `On<Remove>` observers) to skip an entity
 /// whose component is still visible in the query but is being removed.
-pub(crate) fn save_active_window_state(
+pub fn save_active_window_state(
     config: &RestoreWindowConfig,
     monitors: &Monitors,
     all_windows: &Query<
@@ -178,7 +178,7 @@ fn persist_remember_all(
 ///
 /// Handles both the primary window and any `ManagedWindow` entities. Uses
 /// `ManagedWindowPersistence` to decide whether closed windows keep their saved state.
-pub(crate) fn save_window_state(
+pub fn save_window_state(
     config: Res<RestoreWindowConfig>,
     monitors: Res<Monitors>,
     persistence: Res<ManagedWindowPersistence>,
@@ -268,8 +268,8 @@ pub(crate) fn save_window_state(
                 .and_then(|i| monitors.by_index(i))
                 .map(|m| m.scale);
             debug!(
-                "[save_window_state] [{key}] MONITOR CHANGE: {:?} (scale={:?}) -> {} (scale={})",
-                entry.monitor_index, prev_scale, monitor_index, monitor_scale
+                "[save_window_state] [{key}] MONITOR CHANGE: {:?} (scale={prev_scale:?}) -> {monitor_index} (scale={monitor_scale})",
+                entry.monitor_index,
             );
         }
 
@@ -314,9 +314,9 @@ pub(super) fn get_window_position(entity: Entity, window: &Window) -> Option<IVe
     ))]
     {
         let _ = window;
-        WINIT_WINDOWS.with(|ww| {
-            let ww = ww.borrow();
-            let winit_win = ww.get_window(entity)?;
+        WINIT_WINDOWS.with(|winit_windows| {
+            let winit_windows = winit_windows.borrow();
+            let winit_win = winit_windows.get_window(entity)?;
             let outer_pos = winit_win.outer_position().ok()?;
             Some(IVec2::new(outer_pos.x, outer_pos.y))
         })

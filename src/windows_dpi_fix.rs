@@ -50,9 +50,9 @@ unsafe impl Sync for SendSyncHwnd {}
 
 /// Get the HWND from a Bevy window entity.
 fn get_hwnd(window_entity: Entity) -> Option<HWND> {
-    WINIT_WINDOWS.with(|ww| {
-        let ww = ww.borrow();
-        let winit_window = ww.get_window(window_entity)?;
+    WINIT_WINDOWS.with(|winit_windows| {
+        let winit_windows = winit_windows.borrow();
+        let winit_window = winit_windows.get_window(window_entity)?;
         match winit_window.window_handle().ok()?.as_raw() {
             RawWindowHandle::Win32(handle) => Some(HWND(handle.hwnd.get() as *mut _)),
             _ => None,
@@ -173,10 +173,4 @@ pub(crate) fn install_dpi_fix_on_managed(
             warn!("[windows_dpi_fix] Failed to install subclass on managed window {entity:?}");
         }
     }
-}
-
-/// Initialize the Windows DPI fix.
-pub(crate) fn init(app: &mut App) {
-    app.add_systems(Startup, install_dpi_fix);
-    app.add_systems(Update, install_dpi_fix_on_managed);
 }

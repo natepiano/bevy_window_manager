@@ -11,13 +11,13 @@ use bevy_kana::ToU32;
 use crate::ManagedWindow;
 use crate::Platform;
 use crate::WindowKey;
+use crate::events::WindowRestoreMismatch;
+use crate::events::WindowRestored;
 use crate::monitors::CurrentMonitor;
-use crate::types::SettleSnapshot;
-use crate::types::SettleState;
-use crate::types::TargetPosition;
-use crate::types::WindowRestoreMismatch;
-use crate::types::WindowRestored;
-use crate::types::X11FrameCompensated;
+use crate::restore_target::SettleSnapshot;
+use crate::restore_target::SettleState;
+use crate::restore_target::TargetPosition;
+use crate::restore_target::X11FrameCompensated;
 
 /// Build a [`SettleSnapshot`] from the current window state, returning the snapshot
 /// and the actual scale factor (tracked separately since scale is informational).
@@ -131,7 +131,7 @@ fn resolve_window_key(
 ///
 /// Runs while `TargetPosition` entities exist (same gate as `restore_windows`).
 /// Only processes entities that have a `settle_state` set.
-pub(crate) fn check_restore_settling(
+pub fn check_restore_settling(
     mut commands: Commands,
     time: Res<Time>,
     mut windows: Query<

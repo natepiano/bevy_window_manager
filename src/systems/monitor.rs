@@ -25,7 +25,7 @@ use crate::monitors::Monitors;
 /// 4. `monitors.first()` — last resort fallback
 ///
 /// All platforms: computes `effective_mode` (handles macOS green button fullscreen)
-pub(crate) fn update_current_monitor(
+pub fn update_current_monitor(
     mut commands: Commands,
     windows: Query<
         (Entity, &Window, Option<&CurrentMonitor>),
@@ -79,9 +79,9 @@ pub(crate) fn update_current_monitor(
 
 /// Detect monitor via winit's `current_monitor()`.
 fn winit_detect_monitor(entity: Entity, monitors: &Monitors) -> Option<MonitorInfo> {
-    WINIT_WINDOWS.with(|ww| {
-        let ww = ww.borrow();
-        ww.get_window(entity).and_then(|winit_window| {
+    WINIT_WINDOWS.with(|winit_windows| {
+        let winit_windows = winit_windows.borrow();
+        winit_windows.get_window(entity).and_then(|winit_window| {
             winit_window.current_monitor().and_then(|current_monitor| {
                 let pos = current_monitor.position();
                 monitors.at(pos.x, pos.y).copied()

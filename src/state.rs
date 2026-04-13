@@ -9,8 +9,8 @@ use bevy::prelude::*;
 
 use super::WindowKey;
 use super::constants::STATE_FILE;
+use super::saved::WindowState;
 use super::state_format;
-use super::types::WindowState;
 
 /// Get the default state file path using the executable name.
 ///
@@ -78,9 +78,9 @@ mod tests {
 
     use super::load_all_states;
     use super::save_all_states;
+    use crate::saved::SavedWindowMode;
+    use crate::saved::WindowState;
     use crate::state_format::WindowKey;
-    use crate::types::SavedWindowMode;
-    use crate::types::WindowState;
 
     fn sample_state() -> WindowState {
         WindowState {

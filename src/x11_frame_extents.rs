@@ -22,8 +22,8 @@ use x11rb::xcb_ffi::XCBConnection;
 
 use super::constants::FRAME_EXTENT_COUNT;
 use super::constants::FRAME_EXTENT_TOP_INDEX;
-use super::types::TargetPosition;
-use super::types::X11FrameCompensated;
+use super::restore_target::TargetPosition;
+use super::restore_target::X11FrameCompensated;
 
 /// Query `_NET_FRAME_EXTENTS` for an X11 window ID.
 ///
@@ -86,9 +86,9 @@ pub(crate) fn compensate_target_position(
             continue;
         };
 
-        let frame_top = WINIT_WINDOWS.with(|ww| {
-            let ww = ww.borrow();
-            ww.get_window(entity).and_then(|winit_window| {
+        let frame_top = WINIT_WINDOWS.with(|winit_windows| {
+            let winit_windows = winit_windows.borrow();
+            winit_windows.get_window(entity).and_then(|winit_window| {
                 let window_id = get_x11_window_id(&**winit_window)?;
                 query_frame_top(window_id)
             })
@@ -100,10 +100,7 @@ pub(crate) fn compensate_target_position(
         };
 
         let compensated = IVec2::new(pos.x, pos.y - frame_top);
-        info!(
-            "[W6] Compensating position: {:?} -> {:?} (frame_top={})",
-            pos, compensated, frame_top
-        );
+        info!("[W6] Compensating position: {pos:?} -> {compensated:?} (frame_top={frame_top})");
         target.position = Some(compensated);
         commands.entity(entity).insert(X11FrameCompensated);
     }

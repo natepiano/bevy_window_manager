@@ -32,21 +32,25 @@
 //!
 //! See `examples/custom_path.rs` for how to override the full path to the state file.
 
+mod config;
 mod constants;
+mod events;
 #[cfg(target_os = "macos")]
 mod macos_tabbing_fix;
+mod managed;
 mod monitors;
 mod observers;
 mod platform;
 mod restore_plan;
-mod state;
-mod state_format;
-mod systems;
+mod restore_target;
 #[allow(
     clippy::used_underscore_binding,
     reason = "false positive on enum variant fields"
 )]
-mod types;
+mod saved;
+mod state;
+mod state_format;
+mod systems;
 #[cfg(all(target_os = "windows", feature = "workaround-winit-4341"))]
 mod windows_dpi_fix;
 #[cfg(all(target_os = "linux", feature = "workaround-winit-4445"))]
@@ -56,18 +60,18 @@ use std::path::PathBuf;
 
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
+use config::RestoreWindowConfig;
+pub use events::WindowRestoreMismatch;
+pub use events::WindowRestored;
+pub use managed::ManagedWindow;
+pub use managed::ManagedWindowPersistence;
+use managed::ManagedWindowRegistry;
 pub use monitors::CurrentMonitor;
 pub use monitors::MonitorInfo;
 use monitors::MonitorPlugin;
 pub use monitors::Monitors;
 pub use platform::Platform;
 pub use state_format::WindowKey;
-pub use types::ManagedWindow;
-pub use types::ManagedWindowPersistence;
-use types::ManagedWindowRegistry;
-use types::RestoreWindowConfig;
-pub use types::WindowRestoreMismatch;
-pub use types::WindowRestored;
 
 /// The main plugin. See module docs for usage.
 ///
@@ -174,10 +178,19 @@ fn build_app(app: &mut App, path: PathBuf, persistence: ManagedWindowPersistence
     }
 
     #[cfg(target_os = "macos")]
-    macos_tabbing_fix::init(app);
+    {
+        app.add_systems(Startup, macos_tabbing_fix::disable_tabbing_on_primary);
+        app.add_systems(
+            Update,
+            macos_tabbing_fix::disable_tabbing_on_managed.before(systems::restore_windows),
+        );
+    }
 
     #[cfg(all(target_os = "windows", feature = "workaround-winit-4341"))]
-    windows_dpi_fix::init(app);
+    {
+        app.add_systems(Startup, windows_dpi_fix::install_dpi_fix);
+        app.add_systems(Update, windows_dpi_fix::install_dpi_fix_on_managed);
+    }
 
     app.add_plugins(MonitorPlugin)
         .insert_resource(RestoreWindowConfig {

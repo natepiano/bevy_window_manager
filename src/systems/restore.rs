@@ -15,21 +15,21 @@ use bevy_kana::ToU32;
 
 use crate::Platform;
 use crate::WindowKey;
+use crate::config::RestoreWindowConfig;
 use crate::constants::DEFAULT_SCALE_FACTOR;
 use crate::constants::SCALE_FACTOR_EPSILON;
 use crate::monitors::Monitors;
 use crate::restore_plan;
+use crate::restore_target::FullscreenRestoreState;
+use crate::restore_target::MonitorScaleStrategy;
+use crate::restore_target::SettleState;
+use crate::restore_target::TargetPosition;
+use crate::restore_target::WindowDecoration;
+use crate::restore_target::WindowRestoreState;
+use crate::restore_target::WinitInfo;
+use crate::restore_target::X11FrameCompensated;
+use crate::saved::SavedWindowMode;
 use crate::state;
-use crate::types::FullscreenRestoreState;
-use crate::types::MonitorScaleStrategy;
-use crate::types::RestoreWindowConfig;
-use crate::types::SavedWindowMode;
-use crate::types::SettleState;
-use crate::types::TargetPosition;
-use crate::types::WindowDecoration;
-use crate::types::WindowRestoreState;
-use crate::types::WinitInfo;
-use crate::types::X11FrameCompensated;
 
 /// Populate `WinitInfo` resource from winit (decoration and starting monitor).
 ///
@@ -37,7 +37,7 @@ use crate::types::X11FrameCompensated;
 ///
 /// Panics if no monitors are available (e.g., laptop lid closed at startup).
 /// Window management requires at least one monitor to function.
-pub(crate) fn init_winit_info(
+pub fn init_winit_info(
     mut commands: Commands,
     window_entity: Single<Entity, With<PrimaryWindow>>,
     monitors: Res<Monitors>,
@@ -48,9 +48,9 @@ pub(crate) fn init_winit_info(
         "No monitors available - cannot initialize window manager without a display"
     );
 
-    WINIT_WINDOWS.with(|ww| {
-        let ww = ww.borrow();
-        if let Some(winit_window) = ww.get_window(*window_entity) {
+    WINIT_WINDOWS.with(|winit_windows| {
+        let winit_windows = winit_windows.borrow();
+        if let Some(winit_window) = winit_windows.get_window(*window_entity) {
             let outer = winit_window.outer_size();
             let inner = winit_window.inner_size();
             let decoration = WindowDecoration {
@@ -92,8 +92,8 @@ pub(crate) fn init_winit_info(
             let starting_monitor_index = starting_monitor.index;
 
             debug!(
-                "[init_winit_info] decoration={}x{} pos=({}, {}) starting_monitor={}",
-                decoration.width, decoration.height, pos.x, pos.y, starting_monitor_index
+                "[init_winit_info] decoration={}x{} pos=({}, {}) starting_monitor={starting_monitor_index}",
+                decoration.width, decoration.height, pos.x, pos.y,
             );
 
             // Insert initial CurrentMonitor component on window entity
@@ -115,7 +115,7 @@ pub(crate) fn init_winit_info(
 /// Load saved window state and insert `TargetPosition` component on the primary window entity.
 ///
 /// Runs after `init_winit_info` so we have access to starting monitor info.
-pub(crate) fn load_target_position(
+pub fn load_target_position(
     mut commands: Commands,
     window_entity: Single<Entity, With<PrimaryWindow>>,
     monitors: Res<Monitors>,
@@ -181,13 +181,8 @@ pub(crate) fn load_target_position(
     );
 
     debug!(
-        "[load_target_position] Starting monitor={} scale={}, Target monitor={} scale={}, strategy={:?}, position={:?}",
-        starting_monitor_index,
-        starting_scale,
-        target.target_monitor_index,
-        target.target_scale,
-        target.scale_strategy,
-        target.position
+        "[load_target_position] Starting monitor={starting_monitor_index} scale={starting_scale}, Target monitor={} scale={}, strategy={:?}, position={:?}",
+        target.target_monitor_index, target.target_scale, target.scale_strategy, target.position
     );
 
     // Windows W3 workaround (winit #3124): For exclusive fullscreen restore, we must
@@ -231,7 +226,7 @@ pub(crate) fn load_target_position(
 /// Skipped on Wayland (no position) and non-fullscreen modes.
 /// For managed windows, the equivalent happens in `on_managed_window_load`.
 #[cfg(target_os = "linux")]
-pub(crate) fn move_to_target_monitor(
+pub fn move_to_target_monitor(
     mut window: Single<&mut Window, With<PrimaryWindow>>,
     targets: Query<&TargetPosition, With<PrimaryWindow>>,
     platform: Res<Platform>,
@@ -331,8 +326,7 @@ fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
             let compensated_x = (f64::from(pos.x) * ratio).to_i32();
             let compensated_y = (f64::from(pos.y) * ratio).to_i32();
             debug!(
-                "[apply_initial_move] HigherToLower: compensating position {:?} -> ({}, {}) (ratio={})",
-                pos, compensated_x, compensated_y, ratio
+                "[apply_initial_move] HigherToLower: compensating position {pos:?} -> ({compensated_x}, {compensated_y}) (ratio={ratio})",
             );
             MoveParams {
                 position: IVec2::new(compensated_x, compensated_y),
@@ -384,7 +378,7 @@ fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
 /// at runtime would have their physical size set by `set_physical_resolution()` and
 /// then doubled by `create_windows` → `set_scale_factor_and_apply_to_physical_size()`
 /// which runs between frames.
-pub(crate) fn restore_windows(
+pub fn restore_windows(
     mut scale_changed_messages: MessageReader<WindowScaleFactorChanged>,
     mut windows: Query<(Entity, &mut TargetPosition, &mut Window), With<X11FrameCompensated>>,
     _non_send: NonSendMarker,
@@ -408,7 +402,8 @@ pub(crate) fn restore_windows(
             continue;
         }
 
-        let winit_window_exists = WINIT_WINDOWS.with(|ww| ww.borrow().get_window(entity).is_some());
+        let winit_window_exists =
+            WINIT_WINDOWS.with(|winit_windows| winit_windows.borrow().get_window(entity).is_some());
         if !winit_window_exists {
             debug!("[restore_windows] Skipping entity {entity:?}: winit window not yet created");
             continue;
