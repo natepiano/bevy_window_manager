@@ -3,16 +3,17 @@
 # Usage: macos_detect_zed_monitor.sh
 # Outputs: "0" or "1" for the monitor index, or exits with error
 #
-# Finds the Zed window titled "bevy_window_manager" (handles multiple Zed windows)
+# Finds the Zed window titled "bevy_window_manager*" (handles worktree variants)
 # Queries NSScreen directly for current monitor geometry (no temp file needed)
 
 set -e
 
-# Get position of the Zed window titled "bevy_window_manager"
-POS=$(osascript -e 'tell application "System Events" to get position of (first window of process "Zed" whose name is "bevy_window_manager")' 2>/dev/null)
+# Get position of the Zed window whose title starts with "bevy_window_manager"
+# (matches both main repo and worktree folders like bevy_window_manager_style_fix)
+POS=$(osascript -e 'tell application "System Events" to get position of (first window of process "Zed" whose name contains "bevy_window_manager")' 2>/dev/null)
 
 if [ -z "$POS" ]; then
-    echo "ERROR: Could not find Zed window titled 'bevy_window_manager'" >&2
+    echo "ERROR: Could not find Zed window matching 'bevy_window_manager*'" >&2
     exit 1
 fi
 

@@ -2,7 +2,7 @@
 # Moves Zed window to a target monitor (macOS)
 # Usage: macos_move_zed_to_monitor.sh <monitor_index>
 #
-# Finds the Zed window titled "bevy_window_manager" (handles multiple Zed windows)
+# Finds the Zed window titled "bevy_window_manager*" (handles worktree variants)
 # Positions it in the left half of the target monitor
 # Queries NSScreen directly for current monitor geometry (no temp file needed)
 
@@ -74,11 +74,11 @@ TARGET_Y=$((MON_Y + MENU_BAR_HEIGHT + MARGIN))
 TARGET_W=$((MON_W / 2 - MARGIN * 2))
 TARGET_H=$((MON_H - MENU_BAR_HEIGHT - MARGIN * 2))
 
-# Move and resize the Zed window titled "bevy_window_manager"
+# Move and resize the Zed window matching "bevy_window_manager*"
 osascript <<EOF
 tell application "System Events"
     tell process "Zed"
-        set targetWindow to (first window whose name is "bevy_window_manager")
+        set targetWindow to (first window whose name contains "bevy_window_manager")
         set frontmost to true
         delay 0.1
         set position of targetWindow to {$TARGET_X, $TARGET_Y}
