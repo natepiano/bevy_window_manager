@@ -61,11 +61,11 @@ MAX_POLLS: Final = 200  # 10s timeout
 
 COMP_WINDOW: Final = "bevy_window::window::Window"
 COMP_PRIMARY: Final = "bevy_window::window::PrimaryWindow"
-COMP_MANAGED: Final = "bevy_window_manager::types::ManagedWindow"
+COMP_MANAGED: Final = "bevy_window_manager::managed::ManagedWindow"
 COMP_CURRENT_MONITOR: Final = "bevy_window_manager::monitors::CurrentMonitor"
 COMP_MONITORS: Final = "bevy_window_manager::monitors::Monitors"
 COMP_MONITOR: Final = "bevy_window::monitor::Monitor"
-COMP_PERSISTENCE: Final = "bevy_window_manager::types::ManagedWindowPersistence"
+COMP_PERSISTENCE: Final = "bevy_window_manager::managed::ManagedWindowPersistence"
 RES_RESTORED: Final = "restore_window::WindowRestoredReceived"
 RES_MISMATCH: Final = "restore_window::WindowRestoreMismatchReceived"
 RES_SETTLED_COUNT: Final = "restore_window::WindowsSettledCount"
