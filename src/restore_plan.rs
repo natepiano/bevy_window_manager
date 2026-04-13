@@ -7,8 +7,8 @@ use bevy_kana::ToU32;
 use super::Platform;
 use super::monitors::MonitorInfo;
 use super::monitors::Monitors;
+use super::persistence::WindowState;
 use super::restore_target::TargetPosition;
-use super::saved::WindowState;
 
 /// Resolve the target monitor from saved state and return an adjusted saved position.
 ///

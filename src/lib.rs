@@ -40,16 +40,14 @@ mod macos_tabbing_fix;
 mod managed;
 mod monitors;
 mod observers;
-mod platform;
-mod restore_plan;
-mod restore_target;
 #[allow(
     clippy::used_underscore_binding,
     reason = "false positive on enum variant fields"
 )]
-mod saved;
-mod state;
-mod state_format;
+mod persistence;
+mod platform;
+mod restore_plan;
+mod restore_target;
 mod systems;
 #[cfg(all(target_os = "windows", feature = "workaround-winit-4341"))]
 mod windows_dpi_fix;
@@ -70,8 +68,8 @@ pub use monitors::CurrentMonitor;
 pub use monitors::MonitorInfo;
 use monitors::MonitorPlugin;
 pub use monitors::Monitors;
+pub use persistence::format::WindowKey;
 pub use platform::Platform;
-pub use state_format::WindowKey;
 
 /// The main plugin. See module docs for usage.
 ///
@@ -95,7 +93,7 @@ impl WindowManagerPlugin {
     #[expect(clippy::expect_used, reason = "fail fast if path cannot be determined")]
     pub fn with_app_name(app_name: impl Into<String>) -> impl Plugin {
         WindowManagerPluginCustomPath {
-            path:        state::get_state_path_for_app(&app_name.into())
+            path:        persistence::get_state_path_for_app(&app_name.into())
                 .expect("Could not determine state file path"),
             persistence: ManagedWindowPersistence::default(),
         }
@@ -119,7 +117,8 @@ impl WindowManagerPlugin {
     #[expect(clippy::expect_used, reason = "fail fast if path cannot be determined")]
     pub fn with_persistence(persistence: ManagedWindowPersistence) -> impl Plugin {
         WindowManagerPluginCustomPath {
-            path: state::get_default_state_path().expect("Could not determine state file path"),
+            path: persistence::get_default_state_path()
+                .expect("Could not determine state file path"),
             persistence,
         }
     }
@@ -128,7 +127,8 @@ impl WindowManagerPlugin {
 impl Plugin for WindowManagerPlugin {
     #[expect(clippy::expect_used, reason = "fail fast if path cannot be determined")]
     fn build(&self, app: &mut App) {
-        let path = state::get_default_state_path().expect("Could not determine state file path");
+        let path =
+            persistence::get_default_state_path().expect("Could not determine state file path");
         build_app(app, path, ManagedWindowPersistence::default());
     }
 }
@@ -250,7 +250,7 @@ fn build_app(app: &mut App, path: PathBuf, persistence: ManagedWindowPersistence
         Update,
         (
             systems::update_current_monitor,
-            systems::save_window_state
+            persistence::save_window_state
                 .run_if(observers::no_restoring_windows)
                 .after(systems::update_current_monitor),
             observers::on_persistence_changed

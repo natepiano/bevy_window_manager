@@ -1,16 +1,14 @@
-//! Window state persistence.
+//! Window state loading and path resolution.
 
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 
-use bevy::prelude::*;
-
-use super::WindowKey;
-use super::constants::STATE_FILE;
-use super::saved::WindowState;
-use super::state_format;
+use super::format;
+use super::format::WindowKey;
+use super::types::WindowState;
+use crate::constants::STATE_FILE;
 
 /// Get the default state file path using the executable name.
 ///
@@ -46,27 +44,7 @@ pub(crate) fn get_state_path_for_app(app_name: &str) -> Option<PathBuf> {
 /// a single `WindowState`, it is wrapped as `{"primary": state}`.
 pub(crate) fn load_all_states(path: &Path) -> Option<HashMap<WindowKey, WindowState>> {
     let contents = fs::read_to_string(path).ok()?;
-    state_format::decode(&contents)
-}
-
-/// Save all window states to the given path.
-pub(crate) fn save_all_states(path: &Path, states: &HashMap<WindowKey, WindowState>) {
-    if let Some(parent) = path.parent()
-        && let Err(e) = fs::create_dir_all(parent)
-    {
-        warn!("[save_all_states] Failed to create directory {parent:?}: {e}");
-        return;
-    }
-    match state_format::encode(states) {
-        Ok(contents) => {
-            if let Err(e) = fs::write(path, &contents) {
-                warn!("[save_all_states] Failed to write state file {path:?}: {e}");
-            }
-        },
-        Err(e) => {
-            warn!("[save_all_states] Failed to serialize state: {e}");
-        },
-    }
+    format::decode(&contents)
 }
 
 #[cfg(test)]
@@ -77,10 +55,10 @@ mod tests {
     use tempfile::NamedTempFile;
 
     use super::load_all_states;
-    use super::save_all_states;
-    use crate::saved::SavedWindowMode;
-    use crate::saved::WindowState;
-    use crate::state_format::WindowKey;
+    use crate::persistence::format::WindowKey;
+    use crate::persistence::save::save_all_states;
+    use crate::persistence::types::SavedWindowMode;
+    use crate::persistence::types::WindowState;
 
     fn sample_state() -> WindowState {
         WindowState {

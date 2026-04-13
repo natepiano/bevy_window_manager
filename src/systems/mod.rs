@@ -12,7 +12,6 @@
 
 mod monitor;
 mod restore;
-mod save;
 mod settle;
 
 pub(crate) use monitor::update_current_monitor;
@@ -21,6 +20,4 @@ pub(crate) use restore::load_target_position;
 #[cfg(target_os = "linux")]
 pub(crate) use restore::move_to_target_monitor;
 pub(crate) use restore::restore_windows;
-pub(crate) use save::save_active_window_state;
-pub(crate) use save::save_window_state;
 pub(crate) use settle::check_restore_settling;

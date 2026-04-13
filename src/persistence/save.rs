@@ -9,16 +9,40 @@ use bevy::winit::WINIT_WINDOWS;
 use bevy_kana::ToI32;
 use bevy_kana::ToU32;
 
+use super::format;
+use super::format::WindowKey;
+use super::load;
+use super::types::SavedWindowMode;
+use super::types::WindowState;
 use crate::ManagedWindow;
 use crate::ManagedWindowPersistence;
-use crate::WindowKey;
 use crate::config::RestoreWindowConfig;
 use crate::constants::DEFAULT_SCALE_FACTOR;
 use crate::monitors::CurrentMonitor;
 use crate::monitors::Monitors;
-use crate::saved::SavedWindowMode;
-use crate::saved::WindowState;
-use crate::state;
+
+/// Save all window states to the given path.
+pub(crate) fn save_all_states(
+    path: &std::path::Path,
+    states: &std::collections::HashMap<WindowKey, WindowState>,
+) {
+    if let Some(parent) = path.parent()
+        && let Err(e) = std::fs::create_dir_all(parent)
+    {
+        warn!("[save_all_states] Failed to create directory {parent:?}: {e}");
+        return;
+    }
+    match format::encode(states) {
+        Ok(contents) => {
+            if let Err(e) = std::fs::write(path, &contents) {
+                warn!("[save_all_states] Failed to write state file {path:?}: {e}");
+            }
+        },
+        Err(e) => {
+            warn!("[save_all_states] Failed to serialize state: {e}");
+        },
+    }
+}
 
 /// Cached window state for change detection comparison.
 #[derive(Default)]
@@ -108,7 +132,7 @@ pub fn save_active_window_state(
         );
     }
 
-    state::save_all_states(&config.path, &states);
+    save_all_states(&config.path, &states);
 }
 
 /// Persist window states using the `RememberAll` strategy: load existing file,
@@ -133,7 +157,7 @@ fn persist_remember_all(
         .and_then(|p| p.file_stem().and_then(|s| s.to_str()).map(String::from))
         .unwrap_or_default();
 
-    let mut states = state::load_all_states(&config.path).unwrap_or_default();
+    let mut states = load::load_all_states(&config.path).unwrap_or_default();
 
     // Update with current window states from cache
     for (entity, entry) in cached {
@@ -171,7 +195,7 @@ fn persist_remember_all(
         }
     }
 
-    state::save_all_states(&config.path, &states);
+    save_all_states(&config.path, &states);
 }
 
 /// Save window state when position, size, or mode changes. Runs only when not restoring.

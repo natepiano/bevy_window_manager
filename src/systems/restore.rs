@@ -19,6 +19,8 @@ use crate::config::RestoreWindowConfig;
 use crate::constants::DEFAULT_SCALE_FACTOR;
 use crate::constants::SCALE_FACTOR_EPSILON;
 use crate::monitors::Monitors;
+use crate::persistence;
+use crate::persistence::SavedWindowMode;
 use crate::restore_plan;
 use crate::restore_target::FullscreenRestoreState;
 use crate::restore_target::MonitorScaleStrategy;
@@ -28,8 +30,6 @@ use crate::restore_target::WindowDecoration;
 use crate::restore_target::WindowRestoreState;
 use crate::restore_target::WinitInfo;
 use crate::restore_target::X11FrameCompensated;
-use crate::saved::SavedWindowMode;
-use crate::state;
 
 /// Populate `WinitInfo` resource from winit (decoration and starting monitor).
 ///
@@ -127,7 +127,7 @@ pub fn load_target_position(
     // This must happen before any managed window observers fire so they can check
     // `loaded_states` instead of re-reading the file (which may have been modified
     // by `on_managed_window_added` saving initial state for new windows).
-    if let Some(all_states) = state::load_all_states(&config.path) {
+    if let Some(all_states) = persistence::load_all_states(&config.path) {
         config.loaded_states = all_states;
     }
 

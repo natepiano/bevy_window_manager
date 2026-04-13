@@ -35,12 +35,12 @@ use bevy::prelude::*;
 use serde::Deserialize;
 use serde::Serialize;
 
-use super::constants::CURRENT_STATE_VERSION;
-use super::constants::DEFAULT_SCALE_FACTOR;
-use super::constants::PRIMARY_WINDOW_KEY;
-use super::constants::RON_HEADER;
-use super::saved::SavedWindowMode;
-use super::saved::WindowState;
+use super::types::SavedWindowMode;
+use super::types::WindowState;
+use crate::constants::CURRENT_STATE_VERSION;
+use crate::constants::DEFAULT_SCALE_FACTOR;
+use crate::constants::PRIMARY_WINDOW_KEY;
+use crate::constants::RON_HEADER;
 
 /// Typed identifier for persisted window state.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, Reflect)]
@@ -223,9 +223,9 @@ mod tests {
     use super::WindowKey;
     use super::decode;
     use super::encode;
-    use crate::saved::SavedVideoMode;
-    use crate::saved::SavedWindowMode;
-    use crate::saved::WindowState;
+    use crate::persistence::types::SavedVideoMode;
+    use crate::persistence::types::SavedWindowMode;
+    use crate::persistence::types::WindowState;
 
     fn sample_state() -> WindowState {
         WindowState {

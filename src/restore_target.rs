@@ -7,7 +7,7 @@ use bevy_kana::ToU32;
 
 use crate::constants::SETTLE_STABILITY_SECS;
 use crate::constants::SETTLE_TIMEOUT_SECS;
-use crate::saved::SavedWindowMode;
+use crate::persistence::SavedWindowMode;
 
 /// Window decoration dimensions (title bar, borders).
 pub(crate) struct WindowDecoration {

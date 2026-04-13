@@ -14,16 +14,14 @@ use super::constants::PRIMARY_WINDOW_KEY;
 use super::managed::ManagedWindowRegistry;
 use super::monitors::CurrentMonitor;
 use super::monitors::Monitors;
+use super::persistence;
+use super::persistence::SavedWindowMode;
+use super::persistence::WindowState;
 use super::platform::Platform;
 use super::restore_plan;
 use super::restore_target::TargetPosition;
 use super::restore_target::WinitInfo;
 use super::restore_target::X11FrameCompensated;
-use super::saved::SavedWindowMode;
-use super::saved::WindowState;
-use super::state;
-use super::systems;
-
 /// Hide the primary window when created, before winit creates the OS window.
 ///
 /// Uses an observer on `PrimaryWindow` component addition, so it works regardless
@@ -102,7 +100,7 @@ pub(crate) fn on_managed_window_added(
     );
 
     // If no saved state exists for this window, save its current position/size immediately
-    let existing = state::load_all_states(&config.path);
+    let existing = persistence::load_all_states(&config.path);
     let already_saved = existing
         .as_ref()
         .is_some_and(|s| s.contains_key(&WindowKey::Managed(unique_name.clone())));
@@ -134,7 +132,7 @@ pub(crate) fn on_managed_window_added(
 
         let mut states = existing.unwrap_or_default();
         states.insert(WindowKey::Managed(unique_name.clone()), window_state);
-        state::save_all_states(&config.path, &states);
+        persistence::save_all_states(&config.path, &states);
         debug!("[on_managed_window_added] Saved initial state for \"{unique_name}\"");
     }
 }
@@ -163,7 +161,7 @@ pub(crate) fn on_managed_window_removed(
         // The removed entity's `ManagedWindow` is being removed, so the query
         // naturally excludes it — but guard against it just in case.
         if *persistence == ManagedWindowPersistence::ActiveOnly {
-            systems::save_active_window_state(
+            persistence::save_active_window_state(
                 &config,
                 &monitors,
                 &all_windows,
@@ -201,7 +199,7 @@ pub(crate) fn on_persistence_changed(
     primary_q: Query<(), With<PrimaryWindow>>,
 ) {
     if *persistence == ManagedWindowPersistence::ActiveOnly {
-        systems::save_active_window_state(&config, &monitors, &all_windows, &primary_q, None);
+        persistence::save_active_window_state(&config, &monitors, &all_windows, &primary_q, None);
         debug!("[on_persistence_changed] Rebuilt state file for ActiveOnly mode");
     }
 }
