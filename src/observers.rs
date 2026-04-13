@@ -18,10 +18,10 @@ use super::persistence;
 use super::persistence::SavedWindowMode;
 use super::persistence::WindowState;
 use super::platform::Platform;
-use super::restore_plan;
-use super::restore_target::TargetPosition;
-use super::restore_target::WinitInfo;
-use super::restore_target::X11FrameCompensated;
+use super::restore;
+use super::restore::TargetPosition;
+use super::restore::WinitInfo;
+use super::restore::X11FrameCompensated;
 /// Hide the primary window when created, before winit creates the OS window.
 ///
 /// Uses an observer on `PrimaryWindow` component addition, so it works regardless
@@ -301,7 +301,7 @@ fn restore_managed_window(
     platform: Platform,
 ) {
     let (target_info, fallback_position, used_fallback) =
-        restore_plan::resolve_target_monitor_and_position(
+        restore::resolve_target_monitor_and_position(
             saved_state.monitor_index,
             saved_state.logical_position,
             monitors,
@@ -318,7 +318,7 @@ fn restore_managed_window(
     // The window is created on the focused window's monitor (the primary window's monitor)
     // without explicit positioning. Its starting scale matches the primary monitor, not the
     // target monitor.
-    let target = restore_plan::compute_target_position(
+    let target = restore::compute_target_position(
         saved_state,
         target_info,
         fallback_position,

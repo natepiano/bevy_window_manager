@@ -22,8 +22,8 @@ use x11rb::xcb_ffi::XCBConnection;
 
 use super::constants::FRAME_EXTENT_COUNT;
 use super::constants::FRAME_EXTENT_TOP_INDEX;
-use super::restore_target::TargetPosition;
-use super::restore_target::X11FrameCompensated;
+use super::restore::TargetPosition;
+use super::restore::X11FrameCompensated;
 
 /// Query `_NET_FRAME_EXTENTS` for an X11 window ID.
 ///

@@ -7,6 +7,10 @@ use std::path::PathBuf;
 
 use super::format;
 use super::format::WindowKey;
+#[cfg(test)]
+use super::save;
+#[cfg(test)]
+use super::types::SavedWindowMode;
 use super::types::WindowState;
 use crate::constants::STATE_FILE;
 
@@ -54,11 +58,11 @@ mod tests {
 
     use tempfile::NamedTempFile;
 
+    use super::SavedWindowMode;
+    use super::WindowKey;
+    use super::WindowState;
     use super::load_all_states;
-    use crate::persistence::format::WindowKey;
-    use crate::persistence::save::save_all_states;
-    use crate::persistence::types::SavedWindowMode;
-    use crate::persistence::types::WindowState;
+    use super::save;
 
     fn sample_state() -> WindowState {
         WindowState {
@@ -84,7 +88,7 @@ mod tests {
             (WindowKey::Primary, sample_state()),
             (WindowKey::Managed("primary".to_string()), sample_state()),
         ]);
-        save_all_states(path, &states);
+        save::save_all_states(path, &states);
 
         let loaded = load_all_states(path);
         assert!(loaded.is_some(), "expected saved v1 state to load");
@@ -118,7 +122,7 @@ mod tests {
         let states = load_all_states(path);
         assert!(states.is_some(), "expected legacy content to decode");
         let states = states.unwrap_or_default();
-        save_all_states(path, &states);
+        save::save_all_states(path, &states);
 
         let contents = fs::read_to_string(path);
         assert!(contents.is_ok(), "expected rewritten file to be readable");

@@ -25,7 +25,7 @@ use crate::monitors::Monitors;
 /// 4. `monitors.first()` — last resort fallback
 ///
 /// All platforms: computes `effective_mode` (handles macOS green button fullscreen)
-pub fn update_current_monitor(
+pub(crate) fn update_current_monitor(
     mut commands: Commands,
     windows: Query<
         (Entity, &Window, Option<&CurrentMonitor>),

@@ -8,16 +8,48 @@ use bevy::window::PrimaryWindow;
 use bevy::window::WindowMode;
 use bevy_kana::ToU32;
 
+use super::target::TargetPosition;
+use super::target::X11FrameCompensated;
 use crate::ManagedWindow;
 use crate::Platform;
 use crate::WindowKey;
+use crate::constants::SETTLE_STABILITY_SECS;
+use crate::constants::SETTLE_TIMEOUT_SECS;
 use crate::events::WindowRestoreMismatch;
 use crate::events::WindowRestored;
 use crate::monitors::CurrentMonitor;
-use crate::restore_target::SettleSnapshot;
-use crate::restore_target::SettleState;
-use crate::restore_target::TargetPosition;
-use crate::restore_target::X11FrameCompensated;
+
+/// Tracks the two-timer settling state after restore completes.
+#[derive(Debug, Clone, Reflect)]
+pub(crate) struct SettleState {
+    /// Hard deadline timer — fires mismatch if stability is never reached.
+    pub total_timeout:   Timer,
+    /// Resets whenever any compared value changes between frames.
+    pub stability_timer: Timer,
+    /// Snapshot of last frame's compared values, used to detect changes.
+    pub last_snapshot:   Option<SettleSnapshot>,
+}
+
+impl SettleState {
+    /// Create a new settle state with default durations.
+    #[must_use]
+    pub(crate) fn new() -> Self {
+        Self {
+            total_timeout:   Timer::from_seconds(SETTLE_TIMEOUT_SECS, TimerMode::Once),
+            stability_timer: Timer::from_seconds(SETTLE_STABILITY_SECS, TimerMode::Once),
+            last_snapshot:   None,
+        }
+    }
+}
+
+/// Snapshot of compared values for change detection between frames.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect)]
+pub(crate) struct SettleSnapshot {
+    pub position: Option<IVec2>,
+    pub size:     UVec2,
+    pub mode:     WindowMode,
+    pub monitor:  usize,
+}
 
 /// Build a [`SettleSnapshot`] from the current window state, returning the snapshot
 /// and the actual scale factor (tracked separately since scale is informational).

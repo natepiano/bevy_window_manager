@@ -91,7 +91,7 @@ impl From<&WindowMode> for SavedWindowMode {
 /// All spatial values are in **logical pixels** — they represent the user's visual intent
 /// and are independent of scale factor. On restore, both position and size are converted
 /// to physical pixels using the target monitor's scale factor in
-/// [`compute_target_position`](crate::restore_plan::compute_target_position).
+/// [`compute_target_position`](crate::restore::plan::compute_target_position).
 ///
 /// `monitor_scale` records the scale factor of the monitor at save time. It is informational
 /// only — restore uses the target monitor's live scale factor, not this saved value.

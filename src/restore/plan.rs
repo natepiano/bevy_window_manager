@@ -4,11 +4,11 @@ use bevy::prelude::*;
 use bevy_kana::ToI32;
 use bevy_kana::ToU32;
 
-use super::Platform;
-use super::monitors::MonitorInfo;
-use super::monitors::Monitors;
-use super::persistence::WindowState;
-use super::restore_target::TargetPosition;
+use super::target::TargetPosition;
+use crate::Platform;
+use crate::monitors::MonitorInfo;
+use crate::monitors::Monitors;
+use crate::persistence::WindowState;
 
 /// Resolve the target monitor from saved state and return an adjusted saved position.
 ///

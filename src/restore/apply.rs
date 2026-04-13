@@ -13,6 +13,15 @@ use bevy::winit::WINIT_WINDOWS;
 use bevy_kana::ToI32;
 use bevy_kana::ToU32;
 
+use super::plan;
+use super::settle::SettleState;
+use super::target::FullscreenRestoreState;
+use super::target::MonitorScaleStrategy;
+use super::target::TargetPosition;
+use super::target::WindowDecoration;
+use super::target::WindowRestoreState;
+use super::target::WinitInfo;
+use super::target::X11FrameCompensated;
 use crate::Platform;
 use crate::WindowKey;
 use crate::config::RestoreWindowConfig;
@@ -21,15 +30,6 @@ use crate::constants::SCALE_FACTOR_EPSILON;
 use crate::monitors::Monitors;
 use crate::persistence;
 use crate::persistence::SavedWindowMode;
-use crate::restore_plan;
-use crate::restore_target::FullscreenRestoreState;
-use crate::restore_target::MonitorScaleStrategy;
-use crate::restore_target::SettleState;
-use crate::restore_target::TargetPosition;
-use crate::restore_target::WindowDecoration;
-use crate::restore_target::WindowRestoreState;
-use crate::restore_target::WinitInfo;
-use crate::restore_target::X11FrameCompensated;
 
 /// Populate `WinitInfo` resource from winit (decoration and starting monitor).
 ///
@@ -158,12 +158,11 @@ pub fn load_target_position(
     let starting_info = monitors.by_index(starting_monitor_index);
     let starting_scale = starting_info.map_or(DEFAULT_SCALE_FACTOR, |m| m.scale);
 
-    let (target_info, fallback_position, used_fallback) =
-        restore_plan::resolve_target_monitor_and_position(
-            state.monitor_index,
-            state.logical_position,
-            &monitors,
-        );
+    let (target_info, fallback_position, used_fallback) = plan::resolve_target_monitor_and_position(
+        state.monitor_index,
+        state.logical_position,
+        &monitors,
+    );
     if used_fallback {
         warn!(
             "[load_target_position] Target monitor {} not found, falling back to monitor 0",
@@ -171,7 +170,7 @@ pub fn load_target_position(
         );
     }
 
-    let target = restore_plan::compute_target_position(
+    let target = plan::compute_target_position(
         &state,
         target_info,
         fallback_position,

@@ -1,12 +1,10 @@
-//! Restore state machine types: target position, scale strategies, settle tracking.
+//! Restore target types: target position, scale strategies, winit info.
 
 use bevy::prelude::*;
-use bevy::window::WindowMode;
 use bevy_kana::ToI32;
 use bevy_kana::ToU32;
 
-use crate::constants::SETTLE_STABILITY_SECS;
-use crate::constants::SETTLE_TIMEOUT_SECS;
+use super::settle::SettleState;
 use crate::persistence::SavedWindowMode;
 
 /// Window decoration dimensions (title bar, borders).
@@ -199,38 +197,6 @@ pub(crate) struct TargetPosition {
     /// where `current_monitor()` transiently reports the wrong monitor during fullscreen
     /// transitions.
     pub settle_state:         Option<SettleState>,
-}
-
-/// Tracks the two-timer settling state after restore completes.
-#[derive(Debug, Clone, Reflect)]
-pub(crate) struct SettleState {
-    /// Hard deadline timer — fires mismatch if stability is never reached.
-    pub total_timeout:   Timer,
-    /// Resets whenever any compared value changes between frames.
-    pub stability_timer: Timer,
-    /// Snapshot of last frame's compared values, used to detect changes.
-    pub last_snapshot:   Option<SettleSnapshot>,
-}
-
-impl SettleState {
-    /// Create a new settle state with default durations.
-    #[must_use]
-    pub(crate) fn new() -> Self {
-        Self {
-            total_timeout:   Timer::from_seconds(SETTLE_TIMEOUT_SECS, TimerMode::Once),
-            stability_timer: Timer::from_seconds(SETTLE_STABILITY_SECS, TimerMode::Once),
-            last_snapshot:   None,
-        }
-    }
-}
-
-/// Snapshot of compared values for change detection between frames.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect)]
-pub(crate) struct SettleSnapshot {
-    pub position: Option<IVec2>,
-    pub size:     UVec2,
-    pub mode:     WindowMode,
-    pub monitor:  usize,
 }
 
 impl TargetPosition {

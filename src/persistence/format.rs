@@ -35,6 +35,8 @@ use bevy::prelude::*;
 use serde::Deserialize;
 use serde::Serialize;
 
+#[cfg(test)]
+use super::types::SavedVideoMode;
 use super::types::SavedWindowMode;
 use super::types::WindowState;
 use crate::constants::CURRENT_STATE_VERSION;
@@ -220,12 +222,12 @@ mod tests {
     use super::CURRENT_STATE_VERSION;
     use super::PersistedEntry;
     use super::PersistedState;
+    use super::SavedVideoMode;
+    use super::SavedWindowMode;
     use super::WindowKey;
+    use super::WindowState;
     use super::decode;
     use super::encode;
-    use crate::persistence::types::SavedVideoMode;
-    use crate::persistence::types::SavedWindowMode;
-    use crate::persistence::types::WindowState;
 
     fn sample_state() -> WindowState {
         WindowState {

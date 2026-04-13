@@ -38,6 +38,7 @@ mod events;
 #[cfg(target_os = "macos")]
 mod macos_tabbing_fix;
 mod managed;
+mod monitor;
 mod monitors;
 mod observers;
 #[allow(
@@ -46,9 +47,7 @@ mod observers;
 )]
 mod persistence;
 mod platform;
-mod restore_plan;
-mod restore_target;
-mod systems;
+mod restore;
 #[cfg(all(target_os = "windows", feature = "workaround-winit-4341"))]
 mod windows_dpi_fix;
 #[cfg(all(target_os = "linux", feature = "workaround-winit-4445"))]
@@ -68,7 +67,7 @@ pub use monitors::CurrentMonitor;
 pub use monitors::MonitorInfo;
 use monitors::MonitorPlugin;
 pub use monitors::Monitors;
-pub use persistence::format::WindowKey;
+pub use persistence::WindowKey;
 pub use platform::Platform;
 
 /// The main plugin. See module docs for usage.
@@ -182,7 +181,7 @@ fn build_app(app: &mut App, path: PathBuf, persistence: ManagedWindowPersistence
         app.add_systems(Startup, macos_tabbing_fix::disable_tabbing_on_primary);
         app.add_systems(
             Update,
-            macos_tabbing_fix::disable_tabbing_on_managed.before(systems::restore_windows),
+            macos_tabbing_fix::disable_tabbing_on_managed.before(restore::restore_windows),
         );
     }
 
@@ -210,16 +209,16 @@ fn build_app(app: &mut App, path: PathBuf, persistence: ManagedWindowPersistence
                 // `load_target_position` and `move_to_target_monitor` — otherwise the
                 // `TargetPosition` component inserted via deferred commands won't exist yet.
                 (
-                    systems::init_winit_info,
-                    systems::load_target_position,
-                    systems::move_to_target_monitor,
+                    restore::init_winit_info,
+                    restore::load_target_position,
+                    restore::move_to_target_monitor,
                 )
                     .chain()
                     .after(monitors::init_monitors)
             }
             #[cfg(not(target_os = "linux"))]
             {
-                (systems::init_winit_info, systems::load_target_position)
+                (restore::init_winit_info, restore::load_target_position)
                     .chain()
                     .after(monitors::init_monitors)
             }
@@ -239,8 +238,8 @@ fn build_app(app: &mut App, path: PathBuf, persistence: ManagedWindowPersistence
     app.add_systems(
         Update,
         (
-            systems::restore_windows,
-            systems::check_restore_settling.after(systems::restore_windows),
+            restore::restore_windows,
+            restore::check_restore_settling.after(restore::restore_windows),
         )
             .run_if(observers::has_restoring_windows),
     );
@@ -249,14 +248,14 @@ fn build_app(app: &mut App, path: PathBuf, persistence: ManagedWindowPersistence
     app.add_systems(
         Update,
         (
-            systems::update_current_monitor,
+            monitor::update_current_monitor,
             persistence::save_window_state
                 .run_if(observers::no_restoring_windows)
-                .after(systems::update_current_monitor),
+                .after(monitor::update_current_monitor),
             observers::on_persistence_changed
                 .run_if(resource_changed::<ManagedWindowPersistence>)
                 .run_if(observers::no_restoring_windows)
-                .after(systems::update_current_monitor),
+                .after(monitor::update_current_monitor),
         ),
     );
 }
