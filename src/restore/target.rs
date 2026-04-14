@@ -216,7 +216,7 @@ impl TargetPosition {
 
     /// Scale ratio between starting and target monitors.
     #[must_use]
-    pub(crate) fn ratio(&self) -> f64 { self.starting_scale / self.target_scale }
+    pub(crate) const fn ratio(&self) -> f64 { self.starting_scale / self.target_scale }
 
     /// Position compensated for scale factor differences.
     ///

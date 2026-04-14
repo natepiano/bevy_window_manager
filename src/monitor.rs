@@ -103,7 +103,7 @@ fn position_detect_monitor(window: &Window, monitors: &Monitors) -> Option<Monit
 ///
 /// On macOS, clicking the green "maximize" button fills the screen but `window.mode`
 /// remains `Windowed`. This detects that case and returns `BorderlessFullscreen`.
-pub(super) fn compute_effective_mode(
+fn compute_effective_mode(
     window: &Window,
     monitor_info: &MonitorInfo,
     monitors: &Monitors,
