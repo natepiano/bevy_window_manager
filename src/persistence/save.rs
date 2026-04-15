@@ -22,7 +22,7 @@ use crate::monitors::CurrentMonitor;
 use crate::monitors::Monitors;
 
 /// Save all window states to the given path.
-pub(crate) fn save_all_states(
+pub fn save_all_states(
     path: &std::path::Path,
     states: &std::collections::HashMap<WindowKey, WindowState>,
 ) {

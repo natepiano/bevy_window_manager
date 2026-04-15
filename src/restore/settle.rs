@@ -21,7 +21,7 @@ use crate::monitors::CurrentMonitor;
 
 /// Tracks the two-timer settling state after restore completes.
 #[derive(Debug, Clone, Reflect)]
-pub(crate) struct SettleState {
+pub struct SettleState {
     /// Hard deadline timer — fires mismatch if stability is never reached.
     pub total_timeout:   Timer,
     /// Resets whenever any compared value changes between frames.
@@ -33,7 +33,7 @@ pub(crate) struct SettleState {
 impl SettleState {
     /// Create a new settle state with default durations.
     #[must_use]
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             total_timeout:   Timer::from_seconds(SETTLE_TIMEOUT_SECS, TimerMode::Once),
             stability_timer: Timer::from_seconds(SETTLE_STABILITY_SECS, TimerMode::Once),
@@ -44,7 +44,7 @@ impl SettleState {
 
 /// Snapshot of compared values for change detection between frames.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect)]
-pub(crate) struct SettleSnapshot {
+pub struct SettleSnapshot {
     pub position: Option<IVec2>,
     pub size:     UVec2,
     pub mode:     WindowMode,

@@ -8,14 +8,14 @@ use super::settle::SettleState;
 use crate::persistence::SavedWindowMode;
 
 /// Window decoration dimensions (title bar, borders).
-pub(crate) struct WindowDecoration {
+pub struct WindowDecoration {
     pub width:  u32,
     pub height: u32,
 }
 
 /// Information from winit captured at startup.
 #[derive(Resource)]
-pub(crate) struct WinitInfo {
+pub struct WinitInfo {
     pub starting_monitor_index: usize,
     pub decoration:             WindowDecoration,
 }
@@ -23,7 +23,7 @@ pub(crate) struct WinitInfo {
 impl WinitInfo {
     /// Get window decoration dimensions as a `UVec2`.
     #[must_use]
-    pub(crate) const fn decoration(&self) -> UVec2 {
+    pub const fn decoration(&self) -> UVec2 {
         UVec2::new(self.decoration.width, self.decoration.height)
     }
 }
@@ -36,7 +36,7 @@ impl WinitInfo {
 /// before restore proceeds. On other platforms/configurations, the token is
 /// inserted immediately during `load_target_position` since no compensation is needed.
 #[derive(Component)]
-pub(crate) struct X11FrameCompensated;
+pub struct X11FrameCompensated;
 
 /// State for `MonitorScaleStrategy::HigherToLower` (high→low DPI restore).
 ///
@@ -48,7 +48,7 @@ pub(crate) struct X11FrameCompensated;
 /// By moving a 1x1 window to the final position first, we ensure the window is already
 /// at the correct location when we later apply size in `ApplySize`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect)]
-pub(crate) enum WindowRestoreState {
+pub enum WindowRestoreState {
     /// Initial state: window needs to be moved to the target monitor to trigger a scale change.
     /// Handled by `restore_windows` which calls `apply_initial_move` and transitions to
     /// `WaitingForScaleChange`. This unified entry point replaces the old separate paths
@@ -74,7 +74,7 @@ pub(crate) enum WindowRestoreState {
 /// position, the compositor may briefly honor it then revert. Splitting into
 /// separate frames ensures each change is processed independently.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect)]
-pub(crate) enum FullscreenRestoreState {
+pub enum FullscreenRestoreState {
     /// Move window to target monitor position. Skipped on Wayland (no position).
     MoveToMonitor,
     /// Wait for compositor to process the position change (1 frame).
@@ -132,7 +132,7 @@ pub(crate) enum FullscreenRestoreState {
 ///   1. Move a 1x1 window to final position (compensated) to trigger scale change
 ///   2. After scale changes, apply size without compensation
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect)]
-pub(crate) enum MonitorScaleStrategy {
+pub enum MonitorScaleStrategy {
     /// Same scale - apply position and size directly.
     ApplyUnchanged,
     /// Windows cross-DPI: position direct, size in two phases.
@@ -154,7 +154,7 @@ pub(crate) enum MonitorScaleStrategy {
 /// clamping calculations.
 #[derive(Component, Reflect)]
 #[reflect(Component)]
-pub(crate) struct TargetPosition {
+pub struct TargetPosition {
     /// Final clamped position (adjusted to fit within target monitor).
     /// None on Wayland where clients can't access window position.
     pub position:             Option<IVec2>,
@@ -202,28 +202,28 @@ pub(crate) struct TargetPosition {
 impl TargetPosition {
     /// Get the target position as an `IVec2`, if available.
     #[must_use]
-    pub(crate) const fn position(&self) -> Option<IVec2> { self.position }
+    pub const fn position(&self) -> Option<IVec2> { self.position }
 
     /// Get the target physical size as a `UVec2`.
     #[must_use]
-    pub(crate) const fn size(&self) -> UVec2 { UVec2::new(self.width, self.height) }
+    pub const fn size(&self) -> UVec2 { UVec2::new(self.width, self.height) }
 
     /// Get the target logical size as a `UVec2`.
     #[must_use]
-    pub(crate) const fn logical_size(&self) -> UVec2 {
+    pub const fn logical_size(&self) -> UVec2 {
         UVec2::new(self.logical_width, self.logical_height)
     }
 
     /// Scale ratio between starting and target monitors.
     #[must_use]
-    pub(crate) const fn ratio(&self) -> f64 { self.starting_scale / self.target_scale }
+    pub const fn ratio(&self) -> f64 { self.starting_scale / self.target_scale }
 
     /// Position compensated for scale factor differences.
     ///
     /// Multiplies position by the ratio to account for winit dividing by launch scale.
     /// Returns None if position is not available (Wayland).
     #[must_use]
-    pub(crate) fn compensated_position(&self) -> Option<IVec2> {
+    pub fn compensated_position(&self) -> Option<IVec2> {
         let ratio = self.ratio();
         self.position.map(|pos| {
             IVec2::new(
@@ -237,7 +237,7 @@ impl TargetPosition {
     ///
     /// Multiplies size by the ratio to account for winit dividing by launch scale.
     #[must_use]
-    pub(crate) fn compensated_size(&self) -> UVec2 {
+    pub fn compensated_size(&self) -> UVec2 {
         let ratio = self.ratio();
         UVec2::new(
             (f64::from(self.width) * ratio).to_u32(),

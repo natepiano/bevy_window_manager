@@ -126,9 +126,11 @@ impl WindowManagerPlugin {
 impl Plugin for WindowManagerPlugin {
     #[expect(clippy::expect_used, reason = "fail fast if path cannot be determined")]
     fn build(&self, app: &mut App) {
-        let path =
-            persistence::get_default_state_path().expect("Could not determine state file path");
-        build_app(app, path, ManagedWindowPersistence::default());
+        app.add_plugins(WindowManagerPluginCustomPath {
+            path:        persistence::get_default_state_path()
+                .expect("Could not determine state file path"),
+            persistence: ManagedWindowPersistence::default(),
+        });
     }
 }
 
@@ -139,123 +141,121 @@ struct WindowManagerPluginCustomPath {
 }
 
 impl Plugin for WindowManagerPluginCustomPath {
-    fn build(&self, app: &mut App) { build_app(app, self.path.clone(), self.persistence.clone()); }
-}
+    fn build(&self, app: &mut App) {
+        let path = self.path.clone();
+        let persistence = self.persistence.clone();
 
-/// The run conditions allow us to separate the initial primary window restore from
-/// subsequent position saves — which we don't want to do until AFTER we've done
-/// the initial restore.
-fn build_app(app: &mut App, path: PathBuf, persistence: ManagedWindowPersistence) {
-    let platform = Platform::detect();
-    app.insert_resource(platform);
+        let platform = Platform::detect();
+        app.insert_resource(platform);
 
-    // Hide primary window to prevent flash at default position.
-    // Two cases to handle:
-    // 1. Window already exists (`WindowManagerPlugin` added after `DefaultPlugins`) — hide
-    //    immediately
-    // 2. Window doesn't exist yet (`WindowManagerPlugin` added before `DefaultPlugins`) — use
-    //    observer
-    //
-    // EXCEPTION: On Linux X11 with frame extent compensation (workaround-winit-4445),
-    // we cannot hide the window because the compensation system needs to query
-    // `_NET_FRAME_EXTENTS`, which requires the window to be visible/mapped.
-    let should_hide = platform.should_hide_on_startup();
+        // Hide primary window to prevent flash at default position.
+        // Two cases to handle:
+        // 1. Window already exists (`WindowManagerPlugin` added after `DefaultPlugins`) — hide
+        //    immediately
+        // 2. Window doesn't exist yet (`WindowManagerPlugin` added before `DefaultPlugins`) — use
+        //    observer
+        //
+        // EXCEPTION: On Linux X11 with frame extent compensation (workaround-winit-4445),
+        // we cannot hide the window because the compensation system needs to query
+        // `_NET_FRAME_EXTENTS`, which requires the window to be visible/mapped.
+        let should_hide = platform.should_hide_on_startup();
 
-    if should_hide {
-        let mut query = app
-            .world_mut()
-            .query_filtered::<&mut Window, With<PrimaryWindow>>();
-        if let Some(mut window) = query.iter_mut(app.world_mut()).next() {
-            debug!("[build_app] Window already exists, hiding immediately");
-            window.visible = false;
+        if should_hide {
+            let mut query = app
+                .world_mut()
+                .query_filtered::<&mut Window, With<PrimaryWindow>>();
+            if let Some(mut window) = query.iter_mut(app.world_mut()).next() {
+                debug!("[build] Window already exists, hiding immediately");
+                window.visible = false;
+            } else {
+                debug!("[build] Window doesn't exist yet, registering observer");
+                app.add_observer(observers::hide_window_on_creation);
+            }
         } else {
-            debug!("[build_app] Window doesn't exist yet, registering observer");
-            app.add_observer(observers::hide_window_on_creation);
+            debug!("[build] Linux X11: skipping window hide for frame extent compensation");
         }
-    } else {
-        debug!("[build_app] Linux X11: skipping window hide for frame extent compensation");
-    }
 
-    #[cfg(target_os = "macos")]
-    {
-        app.add_systems(Startup, macos_tabbing_fix::disable_tabbing_on_primary);
+        #[cfg(target_os = "macos")]
+        {
+            app.add_systems(Startup, macos_tabbing_fix::disable_tabbing_on_primary);
+            app.add_systems(
+                Update,
+                macos_tabbing_fix::disable_tabbing_on_managed.before(restore::restore_windows),
+            );
+        }
+
+        #[cfg(all(target_os = "windows", feature = "workaround-winit-4341"))]
+        {
+            app.add_systems(Startup, windows_dpi_fix::install_dpi_fix);
+            app.add_systems(Update, windows_dpi_fix::install_dpi_fix_on_managed);
+        }
+
+        app.add_plugins(MonitorPlugin)
+            .insert_resource(RestoreWindowConfig {
+                path,
+                loaded_states: std::collections::HashMap::new(),
+            })
+            .insert_resource(persistence)
+            .init_resource::<ManagedWindowRegistry>()
+            .add_observer(observers::on_managed_window_added)
+            .add_observer(observers::on_managed_window_removed)
+            .add_observer(observers::on_managed_window_load)
+            .add_systems(PreStartup, {
+                #[cfg(target_os = "linux")]
+                {
+                    // X11 fullscreen: move window to target monitor before first event loop.
+                    // Must be chained (not `.after()`) so `apply_deferred` runs between
+                    // `load_target_position` and `move_to_target_monitor` — otherwise the
+                    // `TargetPosition` component inserted via deferred commands won't exist yet.
+                    (
+                        restore::init_winit_info,
+                        restore::load_target_position,
+                        restore::move_to_target_monitor,
+                    )
+                        .chain()
+                        .after(monitors::init_monitors)
+                }
+                #[cfg(not(target_os = "linux"))]
+                {
+                    (restore::init_winit_info, restore::load_target_position)
+                        .chain()
+                        .after(monitors::init_monitors)
+                }
+            });
+
+        // X11 frame extent compensation (Linux + W6 + X11 only)
+        // Runs until all restoring windows have the `X11FrameCompensated` component
+        #[cfg(all(target_os = "linux", feature = "workaround-winit-4445"))]
         app.add_systems(
             Update,
-            macos_tabbing_fix::disable_tabbing_on_managed.before(restore::restore_windows),
+            x11_frame_extents::compensate_target_position
+                .run_if(observers::has_restoring_windows)
+                .run_if(|p: Res<Platform>| p.is_x11()),
+        );
+
+        // Restore windows — processes all entities with `TargetPosition` + `X11FrameCompensated`
+        app.add_systems(
+            Update,
+            (
+                restore::restore_windows,
+                restore::check_restore_settling.after(restore::restore_windows),
+            )
+                .run_if(observers::has_restoring_windows),
+        );
+
+        // Unified monitor detection + save window state
+        app.add_systems(
+            Update,
+            (
+                monitor::update_current_monitor,
+                persistence::save_window_state
+                    .run_if(observers::no_restoring_windows)
+                    .after(monitor::update_current_monitor),
+                observers::on_persistence_changed
+                    .run_if(resource_changed::<ManagedWindowPersistence>)
+                    .run_if(observers::no_restoring_windows)
+                    .after(monitor::update_current_monitor),
+            ),
         );
     }
-
-    #[cfg(all(target_os = "windows", feature = "workaround-winit-4341"))]
-    {
-        app.add_systems(Startup, windows_dpi_fix::install_dpi_fix);
-        app.add_systems(Update, windows_dpi_fix::install_dpi_fix_on_managed);
-    }
-
-    app.add_plugins(MonitorPlugin)
-        .insert_resource(RestoreWindowConfig {
-            path,
-            loaded_states: std::collections::HashMap::new(),
-        })
-        .insert_resource(persistence)
-        .init_resource::<ManagedWindowRegistry>()
-        .add_observer(observers::on_managed_window_added)
-        .add_observer(observers::on_managed_window_removed)
-        .add_observer(observers::on_managed_window_load)
-        .add_systems(PreStartup, {
-            #[cfg(target_os = "linux")]
-            {
-                // X11 fullscreen: move window to target monitor before first event loop.
-                // Must be chained (not `.after()`) so `apply_deferred` runs between
-                // `load_target_position` and `move_to_target_monitor` — otherwise the
-                // `TargetPosition` component inserted via deferred commands won't exist yet.
-                (
-                    restore::init_winit_info,
-                    restore::load_target_position,
-                    restore::move_to_target_monitor,
-                )
-                    .chain()
-                    .after(monitors::init_monitors)
-            }
-            #[cfg(not(target_os = "linux"))]
-            {
-                (restore::init_winit_info, restore::load_target_position)
-                    .chain()
-                    .after(monitors::init_monitors)
-            }
-        });
-
-    // X11 frame extent compensation (Linux + W6 + X11 only)
-    // Runs until all restoring windows have the `X11FrameCompensated` component
-    #[cfg(all(target_os = "linux", feature = "workaround-winit-4445"))]
-    app.add_systems(
-        Update,
-        x11_frame_extents::compensate_target_position
-            .run_if(observers::has_restoring_windows)
-            .run_if(|p: Res<Platform>| p.is_x11()),
-    );
-
-    // Restore windows — processes all entities with `TargetPosition` + `X11FrameCompensated`
-    app.add_systems(
-        Update,
-        (
-            restore::restore_windows,
-            restore::check_restore_settling.after(restore::restore_windows),
-        )
-            .run_if(observers::has_restoring_windows),
-    );
-
-    // Unified monitor detection + save window state
-    app.add_systems(
-        Update,
-        (
-            monitor::update_current_monitor,
-            persistence::save_window_state
-                .run_if(observers::no_restoring_windows)
-                .after(monitor::update_current_monitor),
-            observers::on_persistence_changed
-                .run_if(resource_changed::<ManagedWindowPersistence>)
-                .run_if(observers::no_restoring_windows)
-                .after(monitor::update_current_monitor),
-        ),
-    );
 }
