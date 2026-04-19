@@ -51,10 +51,7 @@ impl Platform {
     #[must_use]
     #[cfg(target_os = "linux")]
     pub fn detect() -> Self {
-        if std::env::var("WAYLAND_DISPLAY")
-            .map(|value| !value.is_empty())
-            .unwrap_or(false)
-        {
+        if std::env::var("WAYLAND_DISPLAY").is_ok_and(|value| !value.is_empty()) {
             Self::Wayland
         } else {
             Self::X11
