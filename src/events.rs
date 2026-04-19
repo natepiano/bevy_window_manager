@@ -33,19 +33,19 @@ use crate::WindowKey;
 #[derive(EntityEvent, Debug, Clone, Reflect)]
 pub struct WindowRestored {
     /// The window entity this event targets.
-    pub entity:        Entity,
+    pub entity:            Entity,
     /// Identifier for this window (primary or managed name).
-    pub window_id:     WindowKey,
+    pub window_id:         WindowKey,
     /// Target position that was applied (None on Wayland).
-    pub position:      Option<IVec2>,
+    pub physical_position: Option<IVec2>,
     /// Target physical size that was applied (content area).
-    pub size:          UVec2,
+    pub physical_size:     UVec2,
     /// Target logical size that was applied (content area).
-    pub logical_size:  UVec2,
+    pub logical_size:      UVec2,
     /// Window mode that was applied.
-    pub mode:          WindowMode,
+    pub mode:              WindowMode,
     /// Monitor index the window was restored to.
-    pub monitor_index: usize,
+    pub monitor_index:     usize,
 }
 
 /// Event fired when the actual window state doesn't match what was requested.
@@ -76,35 +76,42 @@ pub struct WindowRestored {
 /// This intentional split means a mismatch signals that the window hasn't fully settled
 /// — the compositor accepted the request but winit hasn't yet delivered all the
 /// resulting state changes.
+///
+/// ## Stable field layout
+///
+/// The `expected_*` / `actual_*` pairs are kept flat (rather than grouped into nested
+/// comparison structs) to preserve public-API compatibility. The `restore_window` example
+/// adapts this shape into nested `*Mismatch` types in `examples/restore_window/state.rs`;
+/// any future reshape of the fields here must update that adapter in tandem.
 #[derive(EntityEvent, Debug, Clone, Reflect)]
 pub struct WindowRestoreMismatch {
     /// The window entity this event targets.
-    pub entity:                Entity,
+    pub entity:                     Entity,
     /// Identifier for this window (primary or managed name).
-    pub window_id:             WindowKey,
+    pub window_id:                  WindowKey,
     /// Target position from `TargetPosition` (None on Wayland).
-    pub expected_position:     Option<IVec2>,
+    pub expected_physical_position: Option<IVec2>,
     /// Actual position from `Window.position` (None on Wayland).
-    pub actual_position:       Option<IVec2>,
+    pub actual_physical_position:   Option<IVec2>,
     /// Target physical size from `TargetPosition`.
-    pub expected_size:         UVec2,
+    pub expected_physical_size:     UVec2,
     /// Actual physical size from `Window.resolution`.
-    pub actual_size:           UVec2,
+    pub actual_physical_size:       UVec2,
     /// Expected logical size from `TargetPosition`.
-    pub expected_logical_size: UVec2,
+    pub expected_logical_size:      UVec2,
     /// Actual logical size from `Window.resolution.width()`/`height()`.
-    pub actual_logical_size:   UVec2,
+    pub actual_logical_size:        UVec2,
     /// Target window mode from `TargetPosition`.
-    pub expected_mode:         WindowMode,
+    pub expected_mode:              WindowMode,
     /// Actual window mode from `Window.mode`.
-    pub actual_mode:           WindowMode,
+    pub actual_mode:                WindowMode,
     /// Target monitor index from `TargetPosition`.
-    pub expected_monitor:      usize,
+    pub expected_monitor:           usize,
     /// Actual monitor index from `CurrentMonitor` (winit `current_monitor()`).
-    pub actual_monitor:        usize,
+    pub actual_monitor:             usize,
     /// Target scale factor from `TargetPosition.target_scale`.
-    pub expected_scale:        f64,
+    pub expected_scale:             f64,
     /// Actual scale factor from `Window.resolution.scale_factor()`.
     /// Lags behind monitor changes; updates only on winit `ScaleFactorChanged`.
-    pub actual_scale:          f64,
+    pub actual_scale:               f64,
 }

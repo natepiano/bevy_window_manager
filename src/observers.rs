@@ -112,7 +112,7 @@ pub(crate) fn on_managed_window_added(
             },
             _ => *monitors.first(),
         };
-        let logical_position = match window.position {
+        let position = match window.position {
             WindowPosition::At(pos) => {
                 let logical_x = (f64::from(pos.x) / monitor.scale).round().to_i32();
                 let logical_y = (f64::from(pos.y) / monitor.scale).round().to_i32();
@@ -121,13 +121,13 @@ pub(crate) fn on_managed_window_added(
             _ => None,
         };
         let window_state = WindowState {
-            logical_position,
-            logical_width: window.width().to_u32(),
-            logical_height: window.height().to_u32(),
-            monitor_scale: monitor.scale,
-            monitor_index: monitor.index,
-            mode: SavedWindowMode::Windowed,
-            app_name: String::new(),
+            logical_position: position,
+            logical_width:    window.width().to_u32(),
+            logical_height:   window.height().to_u32(),
+            scale:            monitor.scale,
+            monitor:          monitor.index,
+            mode:             SavedWindowMode::Windowed,
+            app_name:         String::new(),
         };
 
         let mut states = existing.unwrap_or_default();
@@ -245,8 +245,8 @@ pub(crate) fn on_managed_window_load(
         saved_state.logical_position,
         saved_state.logical_width,
         saved_state.logical_height,
-        saved_state.monitor_scale,
-        saved_state.monitor_index,
+        saved_state.scale,
+        saved_state.monitor,
         saved_state.mode
     );
 
@@ -300,16 +300,18 @@ fn restore_managed_window(
     primary_scale: f64,
     platform: Platform,
 ) {
-    let (target_info, fallback_position, used_fallback) =
-        restore::resolve_target_monitor_and_position(
-            saved_state.monitor_index,
-            saved_state.logical_position,
-            monitors,
-        );
-    if used_fallback {
+    let resolved = restore::resolve_target_monitor_and_position(
+        saved_state.monitor,
+        saved_state.logical_position,
+        monitors,
+    );
+    if matches!(
+        resolved.source,
+        restore::MonitorResolutionSource::FallbackToPrimary
+    ) {
         warn!(
             "[restore_managed_window] Target monitor {} not found, falling back to monitor 0",
-            saved_state.monitor_index
+            saved_state.monitor
         );
     }
 
@@ -320,8 +322,8 @@ fn restore_managed_window(
     // target monitor.
     let target = restore::compute_target_position(
         saved_state,
-        target_info,
-        fallback_position,
+        resolved.info,
+        resolved.position,
         decoration,
         primary_scale,
         platform,
@@ -330,17 +332,17 @@ fn restore_managed_window(
     debug!(
         "[restore_managed_window] saved_pos={:?} clamped_pos={:?} target_scale={} logical={}x{} physical={}x{} monitor={} mon_pos=({},{}) mon_size=({},{})",
         saved_state.logical_position,
-        target.position,
+        target.physical_position,
         target.target_scale,
-        target.logical_width,
-        target.logical_height,
-        target.width,
-        target.height,
-        target.target_monitor_index,
-        target_info.position.x,
-        target_info.position.y,
-        target_info.size.x,
-        target_info.size.y,
+        target.logical_size.x,
+        target.logical_size.y,
+        target.physical_size.x,
+        target.physical_size.y,
+        target.monitor_index,
+        resolved.info.position.x,
+        resolved.info.position.y,
+        resolved.info.size.x,
+        resolved.info.size.y,
     );
 
     let is_fullscreen = saved_state.mode.is_fullscreen();

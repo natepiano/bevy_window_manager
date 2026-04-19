@@ -33,35 +33,41 @@ impl Platform {
     /// On Linux, checks `WAYLAND_DISPLAY` to distinguish Wayland from X11.
     /// On macOS and Windows the result is compile-time constant.
     #[must_use]
-    #[allow(
-        clippy::missing_const_for_fn,
-        reason = "Linux platform detection reads WAYLAND_DISPLAY at runtime"
-    )]
+    #[cfg(target_os = "macos")]
+    pub const fn detect() -> Self { Self::MacOs }
+
+    /// Detect the current platform.
+    ///
+    /// On Linux, checks `WAYLAND_DISPLAY` to distinguish Wayland from X11.
+    /// On macOS and Windows the result is compile-time constant.
+    #[must_use]
+    #[cfg(target_os = "windows")]
+    pub const fn detect() -> Self { Self::Windows }
+
+    /// Detect the current platform.
+    ///
+    /// On Linux, checks `WAYLAND_DISPLAY` to distinguish Wayland from X11.
+    /// On macOS and Windows the result is compile-time constant.
+    #[must_use]
+    #[cfg(target_os = "linux")]
     pub fn detect() -> Self {
-        #[cfg(target_os = "macos")]
+        if std::env::var("WAYLAND_DISPLAY")
+            .map(|value| !value.is_empty())
+            .unwrap_or(false)
         {
-            Self::MacOs
-        }
-        #[cfg(target_os = "windows")]
-        {
-            Self::Windows
-        }
-        #[cfg(target_os = "linux")]
-        {
-            if std::env::var("WAYLAND_DISPLAY")
-                .map(|v| !v.is_empty())
-                .unwrap_or(false)
-            {
-                Self::Wayland
-            } else {
-                Self::X11
-            }
-        }
-        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-        {
-            compile_error!("Unsupported platform")
+            Self::Wayland
+        } else {
+            Self::X11
         }
     }
+
+    /// Detect the current platform.
+    ///
+    /// On Linux, checks `WAYLAND_DISPLAY` to distinguish Wayland from X11.
+    /// On macOS and Windows the result is compile-time constant.
+    #[must_use]
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    pub fn detect() -> Self { compile_error!("Unsupported platform") }
 
     #[must_use]
     pub const fn is_x11(self) -> bool { matches!(self, Self::X11) }

@@ -93,22 +93,22 @@ impl From<&WindowMode> for SavedWindowMode {
 /// to physical pixels using the target monitor's scale factor in
 /// [`compute_target_position`](crate::restore::plan::compute_target_position).
 ///
-/// `monitor_scale` records the scale factor of the monitor at save time. It is informational
+/// `scale` records the scale factor of the monitor at save time. It is informational
 /// only — restore uses the target monitor's live scale factor, not this saved value.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WindowState {
     /// Top-left corner of the window content area in logical pixels.
     /// `None` on Wayland where clients cannot access window position.
-    #[serde(alias = "position")]
     pub logical_position: Option<(i32, i32)>,
     /// Content area width in logical pixels (excludes window decoration).
     pub logical_width:    u32,
     /// Content area height in logical pixels (excludes window decoration).
     pub logical_height:   u32,
     /// Scale factor of the monitor at save time (informational, not used during restore).
-    #[serde(default = "default_monitor_scale")]
-    pub monitor_scale:    f64,
-    pub monitor_index:    usize,
+    #[serde(default = "default_monitor_scale", rename = "monitor_scale")]
+    pub scale:            f64,
+    #[serde(rename = "monitor_index")]
+    pub monitor:          usize,
     pub mode:             SavedWindowMode,
     #[serde(default)]
     pub app_name:         String,

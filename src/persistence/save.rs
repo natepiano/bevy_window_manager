@@ -5,6 +5,10 @@
 use bevy::ecs::system::NonSendMarker;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
+#[cfg(any(
+    target_os = "macos",
+    all(target_os = "linux", feature = "workaround-winit-4443")
+))]
 use bevy::winit::WINIT_WINDOWS;
 use bevy_kana::ToI32;
 use bevy_kana::ToU32;
@@ -47,11 +51,10 @@ pub fn save_all_states(
 /// Cached window state for change detection comparison.
 #[derive(Default)]
 pub struct CachedWindowState {
-    position:       Option<IVec2>,
-    logical_width:  u32,
-    logical_height: u32,
-    mode:           Option<SavedWindowMode>,
-    monitor_index:  Option<usize>,
+    position: Option<IVec2>,
+    size:     UVec2,
+    mode:     Option<SavedWindowMode>,
+    monitor:  Option<usize>,
 }
 
 /// Build state from all currently-active windows and write it to the state file.
@@ -113,7 +116,7 @@ pub fn save_active_window_state(
         );
         let mode: SavedWindowMode =
             existing_monitor.map_or_else(|| (&window.mode).into(), |m| (&m.effective_mode).into());
-        let logical_position = pos.map(|p| {
+        let position = pos.map(|p| {
             let logical_x = (f64::from(p.x) / monitor_scale).round().to_i32();
             let logical_y = (f64::from(p.y) / monitor_scale).round().to_i32();
             (logical_x, logical_y)
@@ -121,11 +124,11 @@ pub fn save_active_window_state(
         states.insert(
             key,
             WindowState {
-                logical_position,
+                logical_position: position,
                 logical_width: window.resolution.width().to_u32(),
                 logical_height: window.resolution.height().to_u32(),
-                monitor_scale,
-                monitor_index,
+                scale: monitor_scale,
+                monitor: monitor_index,
                 mode,
                 app_name: app_name.clone(),
             },
@@ -171,11 +174,11 @@ fn persist_remember_all(
         };
 
         if let Some(mode) = &entry.mode {
-            let monitor_index = entry.monitor_index.unwrap_or(0);
+            let monitor_index = entry.monitor.unwrap_or(0);
             let monitor_scale = monitors
                 .by_index(monitor_index)
                 .map_or(DEFAULT_SCALE_FACTOR, |m| m.scale);
-            let logical_position = entry.position.map(|p| {
+            let position = entry.position.map(|p| {
                 let logical_x = (f64::from(p.x) / monitor_scale).round().to_i32();
                 let logical_y = (f64::from(p.y) / monitor_scale).round().to_i32();
                 (logical_x, logical_y)
@@ -183,13 +186,13 @@ fn persist_remember_all(
             states.insert(
                 key,
                 WindowState {
-                    logical_position,
-                    logical_width: entry.logical_width,
-                    logical_height: entry.logical_height,
-                    monitor_scale,
-                    monitor_index,
-                    mode: mode.clone(),
-                    app_name: app_name.clone(),
+                    logical_position: position,
+                    logical_width:    entry.size.x,
+                    logical_height:   entry.size.y,
+                    scale:            monitor_scale,
+                    monitor:          monitor_index,
+                    mode:             mode.clone(),
+                    app_name:         app_name.clone(),
                 },
             );
         }
@@ -273,9 +276,9 @@ pub fn save_window_state(
 
         // Only save if position, size, or mode actually changed
         let position_changed = entry.position != pos;
-        let size_changed = entry.logical_width != logical_w || entry.logical_height != logical_h;
+        let size_changed = entry.size != UVec2::new(logical_w, logical_h);
         let mode_changed = entry.mode.as_ref() != Some(&mode);
-        let monitor_changed = entry.monitor_index != Some(monitor_index);
+        let monitor_changed = entry.monitor != Some(monitor_index);
 
         if !position_changed && !size_changed && !mode_changed && !monitor_changed {
             continue;
@@ -288,21 +291,20 @@ pub fn save_window_state(
         // Log monitor transitions with detailed info
         if monitor_changed {
             let prev_scale = entry
-                .monitor_index
+                .monitor
                 .and_then(|i| monitors.by_index(i))
                 .map(|m| m.scale);
             debug!(
                 "[save_window_state] [{key}] MONITOR CHANGE: {:?} (scale={prev_scale:?}) -> {monitor_index} (scale={monitor_scale})",
-                entry.monitor_index,
+                entry.monitor,
             );
         }
 
         // Update cache
         entry.position = pos;
-        entry.logical_width = logical_w;
-        entry.logical_height = logical_h;
+        entry.size = UVec2::new(logical_w, logical_h);
         entry.mode = Some(mode.clone());
-        entry.monitor_index = Some(monitor_index);
+        entry.monitor = Some(monitor_index);
 
         any_changed = true;
 

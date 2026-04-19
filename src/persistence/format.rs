@@ -127,8 +127,8 @@ impl WindowStateV1 {
             logical_position: self.position,
             logical_width:    self.width,
             logical_height:   self.height,
-            monitor_scale:    DEFAULT_SCALE_FACTOR,
-            monitor_index:    self.monitor_index,
+            scale:            DEFAULT_SCALE_FACTOR,
+            monitor:          self.monitor_index,
             mode:             self.mode,
             app_name:         self.app_name,
         }
@@ -226,16 +226,15 @@ mod tests {
     use super::SavedWindowMode;
     use super::WindowKey;
     use super::WindowState;
-    use super::decode;
-    use super::encode;
+    use crate::persistence::format;
 
     fn sample_state() -> WindowState {
         WindowState {
             logical_position: Some((10, 20)),
             logical_width:    800,
             logical_height:   600,
-            monitor_scale:    1.0,
-            monitor_index:    1,
+            scale:            1.0,
+            monitor:          1,
             mode:             SavedWindowMode::Windowed,
             app_name:         "test-app".to_string(),
         }
@@ -265,7 +264,7 @@ mod tests {
                 Err(error) => panic!("failed to serialize test state: {error}"),
             };
 
-        let decoded = decode(&contents);
+        let decoded = format::decode(&contents);
         assert!(decoded.is_some(), "expected v2 decode to succeed");
         let decoded = decoded.unwrap_or_default();
         assert!(decoded.contains_key(&WindowKey::Primary));
@@ -286,7 +285,7 @@ mod tests {
     app_name: \"test-app\",
 )";
 
-        let decoded = decode(legacy_ron);
+        let decoded = format::decode(legacy_ron);
         assert!(
             decoded.is_some(),
             "expected legacy single-window decode to succeed"
@@ -298,7 +297,7 @@ mod tests {
         assert_eq!(state.logical_position, Some((10, 20)));
         assert_eq!(state.logical_width, 800);
         assert_eq!(state.logical_height, 600);
-        assert!((state.monitor_scale - 1.0).abs() < f64::EPSILON);
+        assert!((state.scale - 1.0).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -321,13 +320,13 @@ mod tests {
     ],
 )";
 
-        let decoded = decode(v1_ron);
+        let decoded = format::decode(v1_ron);
         assert!(decoded.is_some(), "expected v1 decode to succeed");
         let decoded = decoded.unwrap_or_default();
         let state = &decoded[&WindowKey::Primary];
         assert_eq!(state.logical_width, 800);
         assert_eq!(state.logical_height, 600);
-        assert!((state.monitor_scale - 1.0).abs() < f64::EPSILON);
+        assert!((state.scale - 1.0).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -352,7 +351,7 @@ mod tests {
             };
 
         assert!(
-            decode(&contents).is_none(),
+            format::decode(&contents).is_none(),
             "duplicate keys should fail decode"
         );
     }
@@ -408,7 +407,7 @@ mod tests {
 
         #[test]
         fn decode_golden_legacy_windowed() {
-            let decoded = decode(WINDOWED);
+            let decoded = format::decode(WINDOWED);
             assert!(decoded.is_some(), "golden legacy windowed file must decode");
             let decoded = decoded.unwrap_or_default();
             assert_eq!(decoded.len(), 1);
@@ -416,15 +415,15 @@ mod tests {
             assert_eq!(state.logical_position, Some((200, 200)));
             assert_eq!(state.logical_width, 1600);
             assert_eq!(state.logical_height, 1200);
-            assert!((state.monitor_scale - 1.0).abs() < f64::EPSILON);
-            assert_eq!(state.monitor_index, 0);
+            assert!((state.scale - 1.0).abs() < f64::EPSILON);
+            assert_eq!(state.monitor, 0);
             assert_eq!(state.mode, SavedWindowMode::Windowed);
             assert_eq!(state.app_name, "restore_window");
         }
 
         #[test]
         fn decode_golden_legacy_borderless_fullscreen() {
-            let decoded = decode(BORDERLESS_FULLSCREEN);
+            let decoded = format::decode(BORDERLESS_FULLSCREEN);
             assert!(
                 decoded.is_some(),
                 "golden legacy borderless fullscreen file must decode"
@@ -439,7 +438,7 @@ mod tests {
 
         #[test]
         fn decode_golden_legacy_exclusive_fullscreen() {
-            let decoded = decode(EXCLUSIVE_FULLSCREEN);
+            let decoded = format::decode(EXCLUSIVE_FULLSCREEN);
             assert!(
                 decoded.is_some(),
                 "golden legacy exclusive fullscreen file must decode"
@@ -469,7 +468,7 @@ mod tests {
             (WindowKey::Managed("inspector".to_string()), sample_state()),
         ]);
 
-        let encoded = match encode(&states) {
+        let encoded = match format::encode(&states) {
             Ok(encoded) => encoded,
             Err(error) => panic!("failed to encode state: {error}"),
         };
@@ -493,29 +492,29 @@ mod tests {
                     logical_position: Some((100, 200)),
                     logical_width:    1024,
                     logical_height:   768,
-                    monitor_scale:    2.0,
-                    monitor_index:    0,
+                    scale:            2.0,
+                    monitor:          0,
                     mode:             SavedWindowMode::Windowed,
                     app_name:         "test-app".to_string(),
                 },
             ),
         ]);
 
-        let encoded = match encode(&states) {
+        let encoded = match format::encode(&states) {
             Ok(encoded) => encoded,
             Err(error) => panic!("failed to encode state: {error}"),
         };
-        let decoded = decode(&encoded);
+        let decoded = format::decode(&encoded);
         assert!(decoded.is_some(), "roundtrip decode should succeed");
         let decoded = decoded.unwrap_or_default();
         assert_eq!(decoded.len(), 2);
         let primary = &decoded[&WindowKey::Primary];
         assert_eq!(primary.logical_width, 800);
         assert_eq!(primary.logical_height, 600);
-        assert!((primary.monitor_scale - 1.0).abs() < f64::EPSILON);
+        assert!((primary.scale - 1.0).abs() < f64::EPSILON);
         let inspector = &decoded[&WindowKey::Managed("inspector".to_string())];
         assert_eq!(inspector.logical_width, 1024);
         assert_eq!(inspector.logical_height, 768);
-        assert!((inspector.monitor_scale - 2.0).abs() < f64::EPSILON);
+        assert!((inspector.scale - 2.0).abs() < f64::EPSILON);
     }
 }

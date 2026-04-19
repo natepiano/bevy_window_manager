@@ -10,6 +10,7 @@ pub(crate) use apply::load_target_position;
 #[cfg(target_os = "linux")]
 pub(crate) use apply::move_to_target_monitor;
 pub(crate) use apply::restore_windows;
+pub(crate) use plan::MonitorResolutionSource;
 pub(crate) use plan::compute_target_position;
 pub(crate) use plan::resolve_target_monitor_and_position;
 pub(crate) use settle::check_restore_settling;

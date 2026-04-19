@@ -80,7 +80,7 @@ pub(crate) fn compensate_target_position(
     _non_send: NonSendMarker,
 ) {
     for (entity, mut target) in &mut windows {
-        let Some(pos) = target.position else {
+        let Some(pos) = target.physical_position else {
             // No position to compensate (Wayland) - mark as done
             commands.entity(entity).insert(X11FrameCompensated);
             continue;
@@ -101,7 +101,7 @@ pub(crate) fn compensate_target_position(
 
         let compensated = IVec2::new(pos.x, pos.y - frame_top);
         info!("[W6] Compensating position: {pos:?} -> {compensated:?} (frame_top={frame_top})");
-        target.position = Some(compensated);
+        target.physical_position = Some(compensated);
         commands.entity(entity).insert(X11FrameCompensated);
     }
 }

@@ -157,33 +157,25 @@ pub enum MonitorScaleStrategy {
 pub struct TargetPosition {
     /// Final clamped position (adjusted to fit within target monitor).
     /// None on Wayland where clients can't access window position.
-    pub position:             Option<IVec2>,
-    /// Target width in physical pixels (content area, excluding window decoration).
-    /// Computed from `logical_width * target_scale`. Applied via `set_physical_resolution()`.
-    pub width:                u32,
-    /// Target height in physical pixels (content area, excluding window decoration).
-    /// Computed from `logical_height * target_scale`. Applied via `set_physical_resolution()`.
-    pub height:               u32,
-    /// Target width in logical pixels, from `WindowState.logical_width`.
-    /// Used for event reporting.
-    pub logical_width:        u32,
-    /// Target height in logical pixels, from `WindowState.logical_height`.
-    /// Used for event reporting.
-    pub logical_height:       u32,
+    pub physical_position: Option<IVec2>,
+    /// Target size in physical pixels (content area, excluding window decoration).
+    pub physical_size:     UVec2,
+    /// Target size in logical pixels from the saved state.
+    pub logical_size:      UVec2,
     /// Scale factor of the target monitor.
-    pub target_scale:         f64,
+    pub target_scale:      f64,
     /// Scale factor of the monitor where the window starts (keyboard focus monitor).
-    pub starting_scale:       f64,
+    pub starting_scale:    f64,
     /// Strategy for handling scale factor differences between monitors.
-    pub scale_strategy:       MonitorScaleStrategy,
+    pub scale_strategy:    MonitorScaleStrategy,
     /// Window mode to restore.
-    pub mode:                 SavedWindowMode,
+    pub mode:              SavedWindowMode,
     /// Target monitor index for fullscreen restore.
     /// On non-Wayland platforms, this could be derived from position, but Wayland
     /// doesn't provide window position, so we store it explicitly.
-    pub target_monitor_index: usize,
+    pub monitor_index:     usize,
     /// Fullscreen restore state (DX12/DXGI workaround).
-    pub fullscreen_state:     Option<FullscreenRestoreState>,
+    pub fullscreen_state:  Option<FullscreenRestoreState>,
     /// Settling state. When set, `try_apply_restore` has completed and we're waiting
     /// for the compositor/winit to deliver stable, matching state.
     ///
@@ -196,36 +188,22 @@ pub struct TargetPosition {
     /// This handles compositor artifacts like Wayland `wl_surface.enter`/`leave` bounces
     /// where `current_monitor()` transiently reports the wrong monitor during fullscreen
     /// transitions.
-    pub settle_state:         Option<SettleState>,
+    pub settle_state:      Option<SettleState>,
 }
 
 impl TargetPosition {
-    /// Get the target position as an `IVec2`, if available.
-    #[must_use]
-    pub const fn position(&self) -> Option<IVec2> { self.position }
-
-    /// Get the target physical size as a `UVec2`.
-    #[must_use]
-    pub const fn size(&self) -> UVec2 { UVec2::new(self.width, self.height) }
-
-    /// Get the target logical size as a `UVec2`.
-    #[must_use]
-    pub const fn logical_size(&self) -> UVec2 {
-        UVec2::new(self.logical_width, self.logical_height)
-    }
-
     /// Scale ratio between starting and target monitors.
     #[must_use]
     pub const fn ratio(&self) -> f64 { self.starting_scale / self.target_scale }
 
     /// Position compensated for scale factor differences.
     ///
-    /// Multiplies position by the ratio to account for winit dividing by launch scale.
+    /// Multiplies physical position by the ratio to account for winit dividing by launch scale.
     /// Returns None if position is not available (Wayland).
     #[must_use]
     pub fn compensated_position(&self) -> Option<IVec2> {
         let ratio = self.ratio();
-        self.position.map(|pos| {
+        self.physical_position.map(|pos| {
             IVec2::new(
                 (f64::from(pos.x) * ratio).to_i32(),
                 (f64::from(pos.y) * ratio).to_i32(),
@@ -235,13 +213,13 @@ impl TargetPosition {
 
     /// Size compensated for scale factor differences.
     ///
-    /// Multiplies size by the ratio to account for winit dividing by launch scale.
+    /// Multiplies physical size by the ratio to account for winit dividing by launch scale.
     #[must_use]
     pub fn compensated_size(&self) -> UVec2 {
         let ratio = self.ratio();
         UVec2::new(
-            (f64::from(self.width) * ratio).to_u32(),
-            (f64::from(self.height) * ratio).to_u32(),
+            (f64::from(self.physical_size.x) * ratio).to_u32(),
+            (f64::from(self.physical_size.y) * ratio).to_u32(),
         )
     }
 }

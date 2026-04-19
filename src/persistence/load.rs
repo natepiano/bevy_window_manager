@@ -8,8 +8,6 @@ use std::path::PathBuf;
 use super::format;
 use super::format::WindowKey;
 #[cfg(test)]
-use super::save;
-#[cfg(test)]
 use super::types::SavedWindowMode;
 use super::types::WindowState;
 use crate::constants::STATE_FILE;
@@ -61,16 +59,16 @@ mod tests {
     use super::SavedWindowMode;
     use super::WindowKey;
     use super::WindowState;
-    use super::load_all_states;
-    use super::save;
+    use crate::persistence::load;
+    use crate::persistence::save;
 
     fn sample_state() -> WindowState {
         WindowState {
             logical_position: Some((10, 20)),
             logical_width:    800,
             logical_height:   600,
-            monitor_scale:    1.0,
-            monitor_index:    0,
+            scale:            1.0,
+            monitor:          0,
             mode:             SavedWindowMode::Windowed,
             app_name:         "test-app".to_string(),
         }
@@ -90,7 +88,7 @@ mod tests {
         ]);
         save::save_all_states(path, &states);
 
-        let loaded = load_all_states(path);
+        let loaded = load::load_all_states(path);
         assert!(loaded.is_some(), "expected saved v1 state to load");
         let loaded = loaded.unwrap_or_default();
         assert!(loaded.contains_key(&WindowKey::Primary));
@@ -119,7 +117,7 @@ mod tests {
             panic!("failed to write legacy content: {error}");
         }
 
-        let states = load_all_states(path);
+        let states = load::load_all_states(path);
         assert!(states.is_some(), "expected legacy content to decode");
         let states = states.unwrap_or_default();
         save::save_all_states(path, &states);

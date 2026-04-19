@@ -10,19 +10,36 @@ use crate::monitors::MonitorInfo;
 use crate::monitors::Monitors;
 use crate::persistence::WindowState;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MonitorResolutionSource {
+    Requested,
+    FallbackToPrimary,
+}
+
+pub struct ResolvedMonitor<'a> {
+    pub info:     &'a MonitorInfo,
+    pub position: Option<(i32, i32)>,
+    pub source:   MonitorResolutionSource,
+}
+
 /// Resolve the target monitor from saved state and return an adjusted saved position.
-///
-/// If the saved monitor no longer exists, falls back to monitor 0 and drops saved position
-/// because the coordinates referred to the missing monitor.
 #[must_use]
 pub fn resolve_target_monitor_and_position(
     saved_monitor_index: usize,
     saved_position: Option<(i32, i32)>,
     monitors: &Monitors,
-) -> (&MonitorInfo, Option<(i32, i32)>, bool) {
+) -> ResolvedMonitor<'_> {
     monitors.by_index(saved_monitor_index).map_or_else(
-        || (monitors.first(), None, true),
-        |info| (info, saved_position, false),
+        || ResolvedMonitor {
+            info:     monitors.first(),
+            position: None,
+            source:   MonitorResolutionSource::FallbackToPrimary,
+        },
+        |info| ResolvedMonitor {
+            info,
+            position: saved_position,
+            source: MonitorResolutionSource::Requested,
+        },
     )
 }
 
@@ -36,14 +53,12 @@ pub fn compute_target_position(
     starting_scale: f64,
     platform: Platform,
 ) -> TargetPosition {
-    let logical_width = saved_state.logical_width;
-    let logical_height = saved_state.logical_height;
     let target_scale = target_info.scale;
 
     // Convert logical → physical using the target monitor's scale factor.
     // This is the single conversion point for size values.
-    let width = (f64::from(logical_width) * target_scale).to_u32();
-    let height = (f64::from(logical_height) * target_scale).to_u32();
+    let width = (f64::from(saved_state.logical_width) * target_scale).to_u32();
+    let height = (f64::from(saved_state.logical_height) * target_scale).to_u32();
 
     let outer_width = width + decoration.x;
     let outer_height = height + decoration.y;
@@ -62,21 +77,18 @@ pub fn compute_target_position(
     });
 
     TargetPosition {
-        position,
-        width,
-        height,
-        logical_width,
-        logical_height,
+        physical_position: position,
+        physical_size: UVec2::new(width, height),
+        logical_size: UVec2::new(saved_state.logical_width, saved_state.logical_height),
         target_scale,
         starting_scale,
         scale_strategy: platform.scale_strategy(starting_scale, target_scale),
         mode: saved_state.mode.clone(),
-        target_monitor_index: target_info.index,
-        fullscreen_state: if saved_state.mode.is_fullscreen() {
-            Some(platform.fullscreen_restore_state())
-        } else {
-            None
-        },
+        monitor_index: target_info.index,
+        fullscreen_state: saved_state
+            .mode
+            .is_fullscreen()
+            .then_some(platform.fullscreen_restore_state()),
         settle_state: None,
     }
 }
