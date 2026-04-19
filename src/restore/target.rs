@@ -158,6 +158,9 @@ pub struct TargetPosition {
     /// Final clamped position (adjusted to fit within target monitor).
     /// None on Wayland where clients can't access window position.
     pub physical_position: Option<IVec2>,
+    /// Pre-scale position from the saved state, preserved for event reporting.
+    /// None on Wayland (no position was ever saved) or when the saved state had none.
+    pub logical_position:  Option<IVec2>,
     /// Target size in physical pixels (content area, excluding window decoration).
     pub physical_size:     UVec2,
     /// Target size in logical pixels from the saved state.

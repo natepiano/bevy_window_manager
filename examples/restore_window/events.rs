@@ -51,11 +51,12 @@ pub(crate) fn on_window_restored(
 ) {
     let event = trigger.event();
     info!(
-        "[on_window_restored] Restore complete: window_id={} entity={:?} position={:?} physical={} logical={} mode={:?} monitor={}",
+        "[on_window_restored] Restore complete: window_id={} entity={:?} physical_position={:?} logical_position={:?} physical_size={} logical_size={} mode={:?} monitor={}",
         event.window_id,
         event.entity,
         event.physical_position,
-        event.logical_size,
+        event.logical_position,
+        event.physical_size,
         event.logical_size,
         event.mode,
         event.monitor_index
@@ -64,17 +65,18 @@ pub(crate) fn on_window_restored(
     restored_states.states.insert(
         event.entity,
         CachedRestoredState {
-            position: event.physical_position,
-            size:     event.logical_size,
-            logical:  event.logical_size,
-            monitor:  event.monitor_index,
-            mode:     event.mode,
+            physical_position: event.physical_position,
+            logical_position:  event.logical_position,
+            physical_size:     event.physical_size,
+            logical_size:      event.logical_size,
+            monitor:           event.monitor_index,
+            mode:              event.mode,
         },
     );
 
     commands.insert_resource(WindowRestoredReceived {
         position: event.physical_position,
-        size:     event.logical_size,
+        size:     event.physical_size,
         mode:     event.mode,
         monitor:  event.monitor_index,
     });
@@ -105,38 +107,43 @@ pub(crate) fn on_window_restore_mismatch(
     restored_states.states.insert(
         event.entity,
         CachedRestoredState {
-            position: event.expected_physical_position,
-            size:     event.expected_physical_size,
-            logical:  event.expected_logical_size,
-            monitor:  event.expected_monitor,
-            mode:     event.expected_mode,
+            physical_position: event.expected_physical_position,
+            logical_position:  event.expected_logical_position,
+            physical_size:     event.expected_physical_size,
+            logical_size:      event.expected_logical_size,
+            monitor:           event.expected_monitor,
+            mode:              event.expected_mode,
         },
     );
 
     mismatch_states.states.insert(
         event.entity,
         CachedMismatchState {
-            position: PositionMismatch {
+            physical_position: PositionMismatch {
                 expected: event.expected_physical_position,
                 actual:   event.actual_physical_position,
             },
-            size:     SizeMismatch {
+            logical_position:  PositionMismatch {
+                expected: event.expected_logical_position,
+                actual:   event.actual_logical_position,
+            },
+            physical_size:     SizeMismatch {
                 expected: event.expected_physical_size,
                 actual:   event.actual_physical_size,
             },
-            logical:  SizeMismatch {
+            logical_size:      SizeMismatch {
                 expected: event.expected_logical_size,
                 actual:   event.actual_logical_size,
             },
-            mode:     ModeMismatch {
+            mode:              ModeMismatch {
                 expected: event.expected_mode,
                 actual:   event.actual_mode,
             },
-            monitor:  MonitorMismatch {
+            monitor:           MonitorMismatch {
                 expected: event.expected_monitor,
                 actual:   event.actual_monitor,
             },
-            scale:    ScaleMismatch {
+            scale:             ScaleMismatch {
                 expected: event.expected_scale,
                 actual:   event.actual_scale,
             },

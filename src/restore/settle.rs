@@ -6,6 +6,7 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy::window::WindowMode;
+use bevy_kana::ToI32;
 use bevy_kana::ToU32;
 
 use super::target::TargetPosition;
@@ -226,6 +227,10 @@ pub fn check_restore_settling(
             .position_available()
             .then_some(target.physical_position)
             .flatten();
+        let target_logical_position = platform
+            .position_available()
+            .then_some(target.logical_position)
+            .flatten();
         let key = resolve_window_key(entity, &primary_q, &managed_q);
         let (current_snapshot, actual_scale) =
             build_actual_snapshot(window, current_monitor, *platform);
@@ -278,6 +283,7 @@ pub fn check_restore_settling(
 
         let settle_target = SettleTarget {
             physical_position: target_physical_position,
+            logical_position:  target_logical_position,
             physical_size:     target_physical_size,
             logical_size:      target_logical_size,
             mode:              target_mode,
@@ -324,6 +330,7 @@ struct SettleActual {
 /// Extracted target values for settle resolution, avoiding too-many-arguments.
 struct SettleTarget {
     physical_position: Option<IVec2>,
+    logical_position:  Option<IVec2>,
     logical_size:      UVec2,
     physical_size:     UVec2,
     mode:              WindowMode,
@@ -350,6 +357,7 @@ fn emit_settle_success(
             entity,
             window_id: key,
             physical_position: target.physical_position,
+            logical_position: target.logical_position,
             logical_size: target.logical_size,
             physical_size: target.physical_size,
             mode: target.mode,
@@ -387,6 +395,12 @@ fn emit_settle_mismatch(
         target.scale,
         actual.scale,
     );
+    let actual_logical_position = actual.snapshot.position.map(|pos| {
+        IVec2::new(
+            (f64::from(pos.x) / actual.scale).round().to_i32(),
+            (f64::from(pos.y) / actual.scale).round().to_i32(),
+        )
+    });
     commands
         .entity(entity)
         .trigger(|entity| WindowRestoreMismatch {
@@ -394,6 +408,8 @@ fn emit_settle_mismatch(
             window_id: key,
             expected_physical_position: target.physical_position,
             actual_physical_position: actual.snapshot.position,
+            expected_logical_position: target.logical_position,
+            actual_logical_position,
             expected_physical_size: target.physical_size,
             actual_physical_size: actual.snapshot.size,
             expected_logical_size: target.logical_size,

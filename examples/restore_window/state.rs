@@ -11,7 +11,7 @@ pub(crate) const SECONDARY_WINDOW_HEIGHT: u32 = 400;
 pub(crate) const MISMATCH_COLOR: Color = Color::linear_rgb(1.0, 0.3, 0.3);
 pub(crate) const MISMATCH_WARN_COLOR: Color = Color::linear_rgb(1.0, 0.7, 0.2);
 pub(crate) const DEFAULT_COLOR: Color = Color::WHITE;
-pub(crate) const LABEL_WIDTH: usize = 18;
+pub(crate) const LABEL_WIDTH: usize = 22;
 
 #[derive(Resource, Clone, Copy)]
 pub(crate) enum KeyboardInputMode {
@@ -119,12 +119,13 @@ pub(crate) struct WindowsSettledCount {
 
 #[derive(Clone)]
 pub(crate) struct CachedMismatchState {
-    pub(crate) position: PositionMismatch,
-    pub(crate) size:     SizeMismatch,
-    pub(crate) logical:  SizeMismatch,
-    pub(crate) mode:     ModeMismatch,
-    pub(crate) monitor:  MonitorMismatch,
-    pub(crate) scale:    ScaleMismatch,
+    pub(crate) physical_position: PositionMismatch,
+    pub(crate) logical_position:  PositionMismatch,
+    pub(crate) physical_size:     SizeMismatch,
+    pub(crate) logical_size:      SizeMismatch,
+    pub(crate) mode:              ModeMismatch,
+    pub(crate) monitor:           MonitorMismatch,
+    pub(crate) scale:             ScaleMismatch,
 }
 
 #[derive(Resource, Default)]
@@ -138,9 +139,10 @@ pub(crate) struct RestoredStates {
 }
 
 pub(crate) struct CachedRestoredState {
-    pub(crate) position: Option<IVec2>,
-    pub(crate) size:     UVec2,
-    pub(crate) logical:  UVec2,
-    pub(crate) monitor:  usize,
-    pub(crate) mode:     WindowMode,
+    pub(crate) physical_position: Option<IVec2>,
+    pub(crate) logical_position:  Option<IVec2>,
+    pub(crate) physical_size:     UVec2,
+    pub(crate) logical_size:      UVec2,
+    pub(crate) monitor:           usize,
+    pub(crate) mode:              WindowMode,
 }

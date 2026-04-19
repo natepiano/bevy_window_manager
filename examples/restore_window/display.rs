@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use bevy::window::Monitor;
 use bevy::window::PrimaryWindow;
 use bevy::window::WindowPosition;
+use bevy_kana::ToI32;
 use bevy_kana::ToU32;
 use bevy_window_manager::CurrentMonitor;
 use bevy_window_manager::ManagedWindow;
@@ -23,12 +24,13 @@ use super::state::SecondaryDisplay;
 use super::state::SelectedVideoModes;
 
 struct CurrentValues {
-    position:  String,
-    size_phys: String,
-    size_log:  String,
-    scale:     String,
-    monitor:   String,
-    mode:      String,
+    position_phys: String,
+    position_log:  String,
+    size_phys:     String,
+    size_log:      String,
+    scale:         String,
+    monitor:       String,
+    mode:          String,
 }
 
 /// Build comparison spans (restored vs current) for a window and add them as `TextSpan` children.
@@ -44,19 +46,27 @@ fn build_comparison_spans(
     let scale = window.resolution.scale_factor();
 
     let current = CurrentValues {
-        position:  match window.position {
+        position_phys: match window.position {
             WindowPosition::At(pos) => format!("({}, {})", pos.x, pos.y),
             _ => "Automatic".to_string(),
         },
-        size_phys: format!("{}x{}", window.physical_width(), window.physical_height()),
-        size_log:  format!(
+        position_log:  match window.position {
+            WindowPosition::At(pos) => {
+                let logical_x = (f64::from(pos.x) / f64::from(scale)).round().to_i32();
+                let logical_y = (f64::from(pos.y) / f64::from(scale)).round().to_i32();
+                format!("({logical_x}, {logical_y})")
+            },
+            _ => "Automatic".to_string(),
+        },
+        size_phys:     format!("{}x{}", window.physical_width(), window.physical_height()),
+        size_log:      format!(
             "{}x{}",
             window.resolution.width().to_u32(),
             window.resolution.height().to_u32()
         ),
-        scale:     format!("{scale}"),
-        monitor:   format!("{}", monitor.index),
-        mode:      format!("{effective_mode:?}"),
+        scale:         format!("{scale}"),
+        monitor:       format!("{}", monitor.index),
+        mode:          format!("{effective_mode:?}"),
     };
 
     if let Some(state) = restored_state {
@@ -85,16 +95,20 @@ fn build_restored_spans(
     current: &CurrentValues,
     font: &TextFont,
 ) {
-    let file_pos = state
-        .position
+    let file_pos_phys = state
+        .physical_position
         .map_or_else(|| "None".to_string(), |p| format!("({}, {})", p.x, p.y));
-    let file_size_phys = format!("{}x{}", state.size.x, state.size.y);
-    let file_size_log = format!("{}x{}", state.logical.x, state.logical.y);
+    let file_pos_log = state
+        .logical_position
+        .map_or_else(|| "None".to_string(), |p| format!("({}, {})", p.x, p.y));
+    let file_size_phys = format!("{}x{}", state.physical_size.x, state.physical_size.y);
+    let file_size_log = format!("{}x{}", state.logical_size.x, state.logical_size.y);
     let file_monitor = format!("{}", state.monitor);
     let file_mode = format!("{:?}", state.mode);
 
     let col1_width = [
-        file_pos.len(),
+        file_pos_phys.len(),
+        file_pos_log.len(),
         file_size_phys.len(),
         file_monitor.len(),
         file_mode.len(),
@@ -120,14 +134,14 @@ fn build_restored_spans(
         add_span(cb, font, &header, DEFAULT_COLOR);
     }
 
-    // Position
+    // Position (physical)
     let mm = mismatch_state.map(|m| {
         let exp = m
-            .position
+            .physical_position
             .expected
             .map_or_else(|| "None".to_string(), |p| format!("({}, {})", p.x, p.y));
         let act = m
-            .position
+            .physical_position
             .actual
             .map_or_else(|| "None".to_string(), |p| format!("({}, {})", p.x, p.y));
         (exp, act)
@@ -135,9 +149,31 @@ fn build_restored_spans(
     add_row(
         cb,
         font,
-        "Position:",
-        &file_pos,
-        &current.position,
+        "Position (physical):",
+        &file_pos_phys,
+        &current.position_phys,
+        mm.as_ref(),
+        col1_width,
+    );
+
+    // Position (logical)
+    let mm = mismatch_state.map(|m| {
+        let exp = m
+            .logical_position
+            .expected
+            .map_or_else(|| "None".to_string(), |p| format!("({}, {})", p.x, p.y));
+        let act = m
+            .logical_position
+            .actual
+            .map_or_else(|| "None".to_string(), |p| format!("({}, {})", p.x, p.y));
+        (exp, act)
+    });
+    add_row(
+        cb,
+        font,
+        "Position (logical):",
+        &file_pos_log,
+        &current.position_log,
         mm.as_ref(),
         col1_width,
     );
@@ -145,8 +181,11 @@ fn build_restored_spans(
     // Size (physical)
     let mm = mismatch_state.map(|m| {
         (
-            format!("{}x{}", m.size.expected.x, m.size.expected.y),
-            format!("{}x{}", m.size.actual.x, m.size.actual.y),
+            format!(
+                "{}x{}",
+                m.physical_size.expected.x, m.physical_size.expected.y
+            ),
+            format!("{}x{}", m.physical_size.actual.x, m.physical_size.actual.y),
         )
     });
     add_row(
@@ -162,8 +201,11 @@ fn build_restored_spans(
     // Size (logical)
     let mm = mismatch_state.map(|m| {
         (
-            format!("{}x{}", m.logical.expected.x, m.logical.expected.y),
-            format!("{}x{}", m.logical.actual.x, m.logical.actual.y),
+            format!(
+                "{}x{}",
+                m.logical_size.expected.x, m.logical_size.expected.y
+            ),
+            format!("{}x{}", m.logical_size.actual.x, m.logical_size.actual.y),
         )
     });
     add_row(
@@ -247,7 +289,19 @@ fn build_current_only_spans(
     add_span(
         cb,
         font,
-        &format!("{:<LABEL_WIDTH$}{}\n", "Position:", current.position),
+        &format!(
+            "{:<LABEL_WIDTH$}{}\n",
+            "Position (physical):", current.position_phys
+        ),
+        DEFAULT_COLOR,
+    );
+    add_span(
+        cb,
+        font,
+        &format!(
+            "{:<LABEL_WIDTH$}{}\n",
+            "Position (logical):", current.position_log
+        ),
         DEFAULT_COLOR,
     );
     add_span(

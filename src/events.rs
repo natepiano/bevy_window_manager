@@ -36,8 +36,11 @@ pub struct WindowRestored {
     pub entity:            Entity,
     /// Identifier for this window (primary or managed name).
     pub window_id:         WindowKey,
-    /// Target position that was applied (None on Wayland).
+    /// Target position in physical pixels (None on Wayland).
     pub physical_position: Option<IVec2>,
+    /// Target position in logical pixels (pre-scale, from the saved state).
+    /// None on Wayland or when the saved state had no position.
+    pub logical_position:  Option<IVec2>,
     /// Target physical size that was applied (content area).
     pub physical_size:     UVec2,
     /// Target logical size that was applied (content area).
@@ -77,22 +80,29 @@ pub struct WindowRestored {
 /// — the compositor accepted the request but winit hasn't yet delivered all the
 /// resulting state changes.
 ///
-/// ## Stable field layout
+/// ## Field layout
 ///
-/// The `expected_*` / `actual_*` pairs are kept flat (rather than grouped into nested
-/// comparison structs) to preserve public-API compatibility. The `restore_window` example
-/// adapts this shape into nested `*Mismatch` types in `examples/restore_window/state.rs`;
-/// any future reshape of the fields here must update that adapter in tandem.
+/// The `expected_*` / `actual_*` pairs are deliberately flat rather than grouped into
+/// nested comparison structs — the event is primarily consumed via reflection (BRP /
+/// observers), where flat fields are easier to address than nested ones. The
+/// `restore_window` example adapts this flat shape into nested `*Mismatch` types in
+/// `examples/restore_window/state.rs`; any future reshape of the fields here must
+/// update that adapter in tandem.
 #[derive(EntityEvent, Debug, Clone, Reflect)]
 pub struct WindowRestoreMismatch {
     /// The window entity this event targets.
     pub entity:                     Entity,
     /// Identifier for this window (primary or managed name).
     pub window_id:                  WindowKey,
-    /// Target position from `TargetPosition` (None on Wayland).
+    /// Target physical position from `TargetPosition` (None on Wayland).
     pub expected_physical_position: Option<IVec2>,
-    /// Actual position from `Window.position` (None on Wayland).
+    /// Actual physical position from `Window.position` (None on Wayland).
     pub actual_physical_position:   Option<IVec2>,
+    /// Target logical position from the saved state (None on Wayland or when unsaved).
+    pub expected_logical_position:  Option<IVec2>,
+    /// Actual logical position, derived from `Window.position / actual_scale`.
+    /// None on Wayland.
+    pub actual_logical_position:    Option<IVec2>,
     /// Target physical size from `TargetPosition`.
     pub expected_physical_size:     UVec2,
     /// Actual physical size from `Window.resolution`.

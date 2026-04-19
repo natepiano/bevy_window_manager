@@ -55,7 +55,7 @@ fn main() {
         .add_observer(mode_observers::on_clear_state_and_quit)
         .add_observer(mode_observers::on_quit_app)
         .insert_resource(KeyboardInputMode::from(
-            !std::env::var(TEST_MODE_ENV_VAR).is_ok(),
+            std::env::var(TEST_MODE_ENV_VAR).is_err(),
         ))
         .init_resource::<SelectedVideoModes>()
         .init_resource::<WindowCounter>()

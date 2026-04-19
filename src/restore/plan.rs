@@ -78,6 +78,7 @@ pub fn compute_target_position(
 
     TargetPosition {
         physical_position: position,
+        logical_position: fallback_position.map(|(x, y)| IVec2::new(x, y)),
         physical_size: UVec2::new(width, height),
         logical_size: UVec2::new(saved_state.logical_width, saved_state.logical_height),
         target_scale,
