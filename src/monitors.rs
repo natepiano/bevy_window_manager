@@ -24,13 +24,13 @@ impl Plugin for MonitorPlugin {
 #[derive(Clone, Copy, Debug, Reflect)]
 pub struct MonitorInfo {
     /// Index in the sorted monitor list.
-    pub index:    usize,
+    pub index:             usize,
     /// Scale factor (typically 1.0 or 2.0 on macOS).
-    pub scale:    f64,
-    /// Physical position of top-left corner.
-    pub position: IVec2,
-    /// Physical size in pixels.
-    pub size:     UVec2,
+    pub scale:             f64,
+    /// Top-left corner of the monitor.
+    pub physical_position: IVec2,
+    /// Monitor dimensions in pixels.
+    pub physical_size:     UVec2,
 }
 
 /// Sorted monitor list, updated when monitors change.
@@ -78,10 +78,10 @@ impl Monitors {
     #[must_use]
     pub fn at(&self, x: i32, y: i32) -> Option<&MonitorInfo> {
         self.list.iter().find(|mon| {
-            x >= mon.position.x
-                && x < mon.position.x + mon.size.x.to_i32()
-                && y >= mon.position.y
-                && y < mon.position.y + mon.size.y.to_i32()
+            x >= mon.physical_position.x
+                && x < mon.physical_position.x + mon.physical_size.x.to_i32()
+                && y >= mon.physical_position.y
+                && y < mon.physical_position.y + mon.physical_size.y.to_i32()
         })
     }
 
@@ -145,19 +145,19 @@ impl Monitors {
         self.list
             .iter()
             .min_by_key(|mon| {
-                let right = mon.position.x + mon.size.x.to_i32();
-                let bottom = mon.position.y + mon.size.y.to_i32();
+                let right = mon.physical_position.x + mon.physical_size.x.to_i32();
+                let bottom = mon.physical_position.y + mon.physical_size.y.to_i32();
 
-                let dx = if x < mon.position.x {
-                    mon.position.x - x
+                let dx = if x < mon.physical_position.x {
+                    mon.physical_position.x - x
                 } else if x >= right {
                     x - right + 1
                 } else {
                     0
                 };
 
-                let dy = if y < mon.position.y {
-                    mon.position.y - y
+                let dy = if y < mon.physical_position.y {
+                    mon.physical_position.y - y
                 } else if y >= bottom {
                     y - bottom + 1
                 } else {
@@ -176,10 +176,10 @@ fn build_monitors(monitors: &Query<&Monitor>) -> Monitors {
         .iter()
         .enumerate()
         .map(|(idx, mon)| MonitorInfo {
-            index:    idx,
-            scale:    mon.scale_factor,
-            position: mon.physical_position,
-            size:     mon.physical_size(),
+            index:             idx,
+            scale:             mon.scale_factor,
+            physical_position: mon.physical_position,
+            physical_size:     mon.physical_size(),
         })
         .collect();
 
@@ -196,7 +196,12 @@ pub(crate) fn init_monitors(mut commands: Commands, monitors: Query<&Monitor>) {
     for mon in &monitors_resource.list {
         debug!(
             "[init_monitors] Monitor {}: pos=({}, {}) size={}x{} scale={}",
-            mon.index, mon.position.x, mon.position.y, mon.size.x, mon.size.y, mon.scale
+            mon.index,
+            mon.physical_position.x,
+            mon.physical_position.y,
+            mon.physical_size.x,
+            mon.physical_size.y,
+            mon.scale
         );
     }
     commands.insert_resource(monitors_resource);

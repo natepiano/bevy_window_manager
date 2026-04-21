@@ -1,17 +1,17 @@
-//! Example demonstrating custom app name with `WindowManagerPlugin`.
+//! Example demonstrating explicit path configuration with `WindowManagerPlugin`.
 //!
-//! Run with: `cargo run --example custom_app_name`
+//! Run with: `cargo run --example custom_path`
 //!
-//! This shows how to specify a custom app name for the config directory
-//! while using the default config location and filename.
+//! This shows how to manually construct a cross-platform config path using `dirs`,
+//! giving you full control over the app name and filename. Of course you can put it anywhere you
+//! want, we're just using `dirs` for convenience in this example.
 //!
 //! Window state is saved to:
-//! - macOS: `~/Library/Application Support/my_awesome_game/windows.ron`
-//! - Linux: `~/.config/my_awesome_game/windows.ron`
-//! - Windows: `C:\Users\{user}\AppData\Roaming\my_awesome_game\windows.ron`
-//!
-//! For full control over file placement, use `WindowManagerPlugin::with_path()` instead.
-//! See the `custom_path` example for details.
+//! - macOS: `~/Library/Application Support/my_custom_app/window_state.ron`
+//! - Linux: `~/.config/my_custom_app/window_state.ron`
+//! - Windows: `C:\Users\{user}\AppData\Roaming\my_custom_app\window_state.ron`
+
+mod constants;
 
 use bevy::prelude::*;
 use bevy::window::Monitor;
@@ -19,19 +19,29 @@ use bevy::window::PrimaryWindow;
 use bevy_window_manager::CurrentMonitor;
 use bevy_window_manager::WindowManagerPlugin;
 
-const FONT_SIZE: f32 = 20.0;
-const MARGIN: Val = Val::Px(10.0);
+use self::constants::FONT_SIZE;
+use self::constants::MARGIN;
 
+#[expect(
+    clippy::expect_used,
+    reason = "example code - panicking on missing config dir is acceptable"
+)]
 fn main() {
+    // Construct a cross-platform config path manually.
+    let config_path = dirs::config_dir()
+        .expect("Could not find config directory")
+        .join("my_custom_app")
+        .join("window_state.ron");
+
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                title: "Custom App Name Example".to_string(),
+                title: "Custom Path Example".to_string(),
                 ..default()
             }),
             ..default()
         }))
-        .add_plugins(WindowManagerPlugin::with_app_name("my_awesome_game"))
+        .add_plugins(WindowManagerPlugin::with_path(config_path))
         .add_systems(Startup, setup)
         .add_systems(Update, update_info_text)
         .run();
@@ -67,10 +77,10 @@ fn update_info_text(
     let (window, monitor) = *window_query;
     let effective_mode = monitor.effective_mode;
 
-    // Find refresh rate from Bevy's Monitor by matching position
+    // Find refresh rate from Bevy's `Monitor` by matching position.
     let refresh_rate = bevy_monitors
         .iter()
-        .find(|m| m.physical_position == monitor.position)
+        .find(|m| m.physical_position == monitor.physical_position)
         .and_then(|m| m.refresh_rate_millihertz)
         .map(|r| r / 1000);
 
@@ -93,10 +103,10 @@ fn update_info_text(
         window.mode,
         effective_mode,
         monitor.index,
-        monitor.position.x,
-        monitor.position.y,
-        monitor.size.x,
-        monitor.size.y,
+        monitor.physical_position.x,
+        monitor.physical_position.y,
+        monitor.physical_size.x,
+        monitor.physical_size.y,
         monitor.scale,
         refresh_display
     );

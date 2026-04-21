@@ -323,7 +323,7 @@ fn restore_managed_window(
     let target = restore::compute_target_position(
         saved_state,
         resolved.info,
-        resolved.position,
+        resolved.logical_position,
         decoration,
         primary_scale,
         platform,
@@ -339,10 +339,10 @@ fn restore_managed_window(
         target.physical_size.x,
         target.physical_size.y,
         target.monitor_index,
-        resolved.info.position.x,
-        resolved.info.position.y,
-        resolved.info.size.x,
-        resolved.info.size.y,
+        resolved.info.physical_position.x,
+        resolved.info.physical_position.y,
+        resolved.info.physical_size.x,
+        resolved.info.physical_size.y,
     );
 
     let is_fullscreen = saved_state.mode.is_fullscreen();

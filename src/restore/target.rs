@@ -9,8 +9,8 @@ use crate::persistence::SavedWindowMode;
 
 /// Window decoration dimensions (title bar, borders).
 pub struct WindowDecoration {
-    pub width:  u32,
-    pub height: u32,
+    pub physical_width:  u32,
+    pub physical_height: u32,
 }
 
 /// Information from winit captured at startup.
@@ -24,7 +24,10 @@ impl WinitInfo {
     /// Get window decoration dimensions as a `UVec2`.
     #[must_use]
     pub const fn decoration(&self) -> UVec2 {
-        UVec2::new(self.decoration.width, self.decoration.height)
+        UVec2::new(
+            self.decoration.physical_width,
+            self.decoration.physical_height,
+        )
     }
 }
 

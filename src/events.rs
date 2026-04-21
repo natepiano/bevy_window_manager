@@ -16,7 +16,7 @@ use crate::WindowKey;
 /// // For all windows
 /// app.add_observer(|trigger: On<WindowRestored>| {
 ///     let event = trigger.event();
-///     // Use event.entity, event.size, event.mode, etc.
+///     // Use `event.entity`, `event.physical_size`, `event.mode`, etc.
 /// });
 ///
 /// // For primary window only - check event.entity against PrimaryWindow query
@@ -66,15 +66,16 @@ pub struct WindowRestored {
 /// **Actual values** come from two live ECS sources, each chosen for accuracy:
 ///
 /// - **`monitor_index`** → [`CurrentMonitor`](crate::CurrentMonitor) component, maintained by
-///   `update_current_monitor` which queries winit's `current_monitor()` and maps it to the
+///   `update_current_monitor`, which queries winit's `current_monitor()` and maps it to the
 ///   `Monitors` list. This updates quickly when the compositor moves the window.
 ///
-/// - **`position`, `size`, `mode`, `scale`** → the [`Window`](bevy::window::Window) component.
-///   Position and size reflect `window.position` / `window.resolution`, and scale comes from
-///   `window.resolution.scale_factor()`. These lag behind the compositor because they only update
-///   when winit fires corresponding events (`ScaleFactorChanged`, `Resized`, `Moved`). A common
-///   mismatch is the scale factor still reflecting the launch monitor while `CurrentMonitor` has
-///   already updated to the target monitor.
+/// - **`physical_position`, `logical_position`, `physical_size`, `logical_size`, `mode`, `scale`**
+///   → the [`Window`](bevy::window::Window) component. Position and size reflect `Window.position`
+///   / `Window.resolution`, and scale comes from `Window.resolution.scale_factor()`. These lag
+///   behind the compositor because they only update when winit fires corresponding events
+///   (`ScaleFactorChanged`, `Resized`, `Moved`). A common mismatch is the scale factor still
+///   reflecting the launch monitor while `CurrentMonitor` has already updated to the target
+///   monitor.
 ///
 /// This intentional split means a mismatch signals that the window hasn't fully settled
 /// — the compositor accepted the request but winit hasn't yet delivered all the
@@ -86,7 +87,7 @@ pub struct WindowRestored {
 /// nested comparison structs — the event is primarily consumed via reflection (BRP /
 /// observers), where flat fields are easier to address than nested ones. The
 /// `restore_window` example adapts this flat shape into nested `*Mismatch` types in
-/// `examples/restore_window/state.rs`; any future reshape of the fields here must
+/// `examples/restore_window/events.rs`; any future reshape of the fields here must
 /// update that adapter in tandem.
 #[derive(EntityEvent, Debug, Clone, Reflect)]
 pub struct WindowRestoreMismatch {

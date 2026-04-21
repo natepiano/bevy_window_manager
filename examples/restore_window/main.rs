@@ -13,6 +13,7 @@
 //! - Press `Ctrl+Shift+Backspace` to clear saved state and quit
 //! - Press `Q` to quit
 
+mod constants;
 mod debug;
 mod display;
 mod events;
@@ -24,13 +25,13 @@ mod state;
 use bevy::prelude::*;
 use bevy_brp_extras::BrpExtrasPlugin;
 use bevy_window_manager::WindowManagerPlugin;
+use constants::TEST_MODE_ENV_VAR;
+use events::MismatchStates;
+use events::RestoredStates;
+use events::WindowsSettledCount;
 use state::KeyboardInputMode;
-use state::MismatchStates;
-use state::RestoredStates;
 use state::SelectedVideoModes;
-use state::TEST_MODE_ENV_VAR;
 use state::WindowCounter;
-use state::WindowsSettledCount;
 
 fn main() {
     App::new()

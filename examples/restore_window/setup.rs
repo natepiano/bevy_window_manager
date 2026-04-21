@@ -6,12 +6,12 @@ use bevy::window::WindowRef;
 use bevy::window::WindowResolution;
 use bevy_window_manager::ManagedWindow;
 
+use super::constants::FONT_SIZE;
+use super::constants::MARGIN;
+use super::constants::SECONDARY_WINDOW_HEIGHT;
+use super::constants::SECONDARY_WINDOW_WIDTH;
 use super::events::SpawnManagedWindow;
-use super::state::FONT_SIZE;
-use super::state::MARGIN;
 use super::state::PrimaryDisplay;
-use super::state::SECONDARY_WINDOW_HEIGHT;
-use super::state::SECONDARY_WINDOW_WIDTH;
 use super::state::SecondaryDisplay;
 use super::state::WindowCounter;
 

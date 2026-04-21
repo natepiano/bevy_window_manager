@@ -46,10 +46,10 @@ impl SettleState {
 /// Snapshot of compared values for change detection between frames.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect)]
 pub struct SettleSnapshot {
-    pub position: Option<IVec2>,
-    pub size:     UVec2,
-    pub mode:     WindowMode,
-    pub monitor:  usize,
+    pub physical_position: Option<IVec2>,
+    pub physical_size:     UVec2,
+    pub mode:              WindowMode,
+    pub monitor:           usize,
 }
 
 /// Build a [`SettleSnapshot`] from the current window state, returning the snapshot
@@ -73,10 +73,10 @@ fn build_actual_snapshot(
     );
     (
         SettleSnapshot {
-            position,
-            size,
-            mode: window.mode,
-            monitor: current_monitor.map_or(0, |cm| cm.monitor.index),
+            physical_position: position,
+            physical_size:     size,
+            mode:              window.mode,
+            monitor:           current_monitor.map_or(0, |cm| cm.monitor.index),
         },
         f64::from(window.resolution.scale_factor()),
     )
@@ -102,11 +102,11 @@ fn check_settle_matches(
     let position_matches = if is_fullscreen {
         true
     } else if platform.position_reliable_for_settle() {
-        target_physical_position == actual.position
+        target_physical_position == actual.physical_position
     } else {
         true // X11 W6: target is frame coords, actual is client area — skip
     };
-    let size_match = is_fullscreen || target_physical_size == actual.size;
+    let size_match = is_fullscreen || target_physical_size == actual.physical_size;
     let mode_match = platform.modes_match(target_mode, actual.mode);
     let monitor_match = target_monitor == actual.monitor;
     SettleComparison {
@@ -276,7 +276,7 @@ pub fn check_restore_settling(
             comparison.size.is_match(),
             comparison.mode.is_match(),
             comparison.monitor.is_match(),
-            current_snapshot.size,
+            current_snapshot.physical_size,
             current_snapshot.mode,
             current_snapshot.monitor,
         );
@@ -378,16 +378,16 @@ fn emit_settle_mismatch(
 ) {
     warn!(
         "[check_restore_settling] [{key}] Settle timeout after {total_elapsed_ms:.0}ms — \
-         mismatch remains: \
+        mismatch remains: \
          position: {:?} vs {:?}, \
          size: {} vs {}, \
          mode: {:?} vs {:?}, \
          monitor: {} vs {}, \
          scale: {} vs {}",
         target.physical_position,
-        actual.snapshot.position,
+        actual.snapshot.physical_position,
         target.physical_size,
-        actual.snapshot.size,
+        actual.snapshot.physical_size,
         target.mode,
         actual.snapshot.mode,
         target.monitor,
@@ -395,7 +395,7 @@ fn emit_settle_mismatch(
         target.scale,
         actual.scale,
     );
-    let actual_logical_position = actual.snapshot.position.map(|pos| {
+    let actual_logical_position = actual.snapshot.physical_position.map(|pos| {
         IVec2::new(
             (f64::from(pos.x) / actual.scale).round().to_i32(),
             (f64::from(pos.y) / actual.scale).round().to_i32(),
@@ -407,11 +407,11 @@ fn emit_settle_mismatch(
             entity,
             window_id: key,
             expected_physical_position: target.physical_position,
-            actual_physical_position: actual.snapshot.position,
+            actual_physical_position: actual.snapshot.physical_position,
             expected_logical_position: target.logical_position,
             actual_logical_position,
             expected_physical_size: target.physical_size,
-            actual_physical_size: actual.snapshot.size,
+            actual_physical_size: actual.snapshot.physical_size,
             expected_logical_size: target.logical_size,
             actual_logical_size: actual.logical_size,
             expected_mode: target.mode,

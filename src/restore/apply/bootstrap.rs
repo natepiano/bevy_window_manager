@@ -45,8 +45,8 @@ pub fn init_winit_info(
             let outer = winit_window.outer_size();
             let inner = winit_window.inner_size();
             let decoration = WindowDecoration {
-                width:  outer.width.saturating_sub(inner.width),
-                height: outer.height.saturating_sub(inner.height),
+                physical_width:  outer.width.saturating_sub(inner.width),
+                physical_height: outer.height.saturating_sub(inner.height),
             };
 
             let position = winit_window.outer_position().map_or(
@@ -84,7 +84,10 @@ pub fn init_winit_info(
 
             debug!(
                 "[init_winit_info] decoration={}x{} pos=({}, {}) starting_monitor={starting_monitor_index}",
-                decoration.width, decoration.height, position.x, position.y,
+                decoration.physical_width,
+                decoration.physical_height,
+                position.x,
+                position.y,
             );
 
             commands.entity(*window_entity).insert(CurrentMonitor {
@@ -154,7 +157,7 @@ pub fn load_target_position(
     let target = plan::compute_target_position(
         &state,
         resolved.info,
-        resolved.position,
+        resolved.logical_position,
         winit_info.decoration(),
         starting_scale,
         *platform,

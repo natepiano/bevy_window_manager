@@ -9,17 +9,17 @@ use bevy_window_manager::ManagedWindow;
 use bevy_window_manager::ManagedWindowPersistence;
 use bevy_window_manager::Monitors;
 
+use super::constants::DEFAULT_COLOR;
+use super::constants::FONT_SIZE;
+use super::constants::LABEL_WIDTH;
+use super::constants::MISMATCH_COLOR;
+use super::constants::MISMATCH_WARN_COLOR;
+use super::events::CachedMismatchState;
+use super::events::CachedRestoredState;
+use super::events::MismatchStates;
+use super::events::RestoredStates;
 use super::input;
-use super::state::CachedMismatchState;
-use super::state::CachedRestoredState;
-use super::state::DEFAULT_COLOR;
-use super::state::FONT_SIZE;
-use super::state::LABEL_WIDTH;
-use super::state::MISMATCH_COLOR;
-use super::state::MISMATCH_WARN_COLOR;
-use super::state::MismatchStates;
 use super::state::PrimaryDisplay;
-use super::state::RestoredStates;
 use super::state::SecondaryDisplay;
 use super::state::SelectedVideoModes;
 
@@ -31,6 +31,61 @@ struct CurrentValues {
     scale:         String,
     monitor:       String,
     mode:          String,
+}
+
+struct ComparisonMismatch {
+    expected: String,
+    actual:   String,
+}
+
+struct ComparisonRow<'a> {
+    label:    &'a str,
+    restored: String,
+    current:  String,
+    mismatch: Option<ComparisonMismatch>,
+}
+
+struct RestoredValues {
+    physical_position: String,
+    logical_position:  String,
+    physical_size:     String,
+    logical_size:      String,
+    monitor:           String,
+    mode:              String,
+}
+
+impl RestoredValues {
+    fn from_state(state: &CachedRestoredState) -> Self {
+        Self {
+            physical_position: state.physical_position.map_or_else(
+                || "None".to_string(),
+                |position| format!("({}, {})", position.x, position.y),
+            ),
+            logical_position:  state.logical_position.map_or_else(
+                || "None".to_string(),
+                |position| format!("({}, {})", position.x, position.y),
+            ),
+            physical_size:     format!("{}x{}", state.physical_size.x, state.physical_size.y),
+            logical_size:      format!("{}x{}", state.logical_size.x, state.logical_size.y),
+            monitor:           state.monitor.to_string(),
+            mode:              format!("{:?}", state.mode),
+        }
+    }
+
+    fn comparison_width(&self) -> usize {
+        [
+            self.physical_position.len(),
+            self.logical_position.len(),
+            self.physical_size.len(),
+            self.logical_size.len(),
+            self.monitor.len(),
+            self.mode.len(),
+        ]
+        .into_iter()
+        .max()
+        .unwrap_or(0)
+            + 2
+    }
 }
 
 /// Build comparison spans (restored vs current) for a window and add them as `TextSpan` children.
@@ -84,10 +139,6 @@ fn build_comparison_spans(
 }
 
 /// Render comparison rows when restore data is available.
-#[expect(
-    clippy::too_many_lines,
-    reason = "UI builder — splitting would scatter tightly-coupled formatting logic"
-)]
 fn build_restored_spans(
     cb: &mut ChildSpawnerCommands,
     state: &CachedRestoredState,
@@ -95,187 +146,214 @@ fn build_restored_spans(
     current: &CurrentValues,
     font: &TextFont,
 ) {
-    let file_pos_phys = state
-        .physical_position
-        .map_or_else(|| "None".to_string(), |p| format!("({}, {})", p.x, p.y));
-    let file_pos_log = state
-        .logical_position
-        .map_or_else(|| "None".to_string(), |p| format!("({}, {})", p.x, p.y));
-    let file_size_phys = format!("{}x{}", state.physical_size.x, state.physical_size.y);
-    let file_size_log = format!("{}x{}", state.logical_size.x, state.logical_size.y);
-    let file_monitor = format!("{}", state.monitor);
-    let file_mode = format!("{:?}", state.mode);
+    let restored = RestoredValues::from_state(state);
+    let col_width = restored.comparison_width().max(16);
 
-    let col1_width = [
-        file_pos_phys.len(),
-        file_pos_log.len(),
-        file_size_phys.len(),
-        file_monitor.len(),
-        file_mode.len(),
-    ]
-    .into_iter()
-    .max()
-    .unwrap_or(0)
-        + 2;
-    let col1_width = col1_width.max(16);
+    add_restored_header(cb, font, mismatch_state.is_some(), col_width);
+    add_position_rows(cb, font, &restored, current, mismatch_state, col_width);
+    add_size_rows(cb, font, &restored, current, mismatch_state, col_width);
+    add_scale_row(cb, font, current, mismatch_state, col_width);
+    add_monitor_row(cb, font, &restored, current, mismatch_state, col_width);
+    add_mode_row(cb, font, &restored, current, mismatch_state, col_width);
+}
 
-    // Header
-    if mismatch_state.is_some() {
-        let header = format!(
-            "{:LABEL_WIDTH$}{:<col1_width$}{:<col1_width$}{:<col1_width$}{}\n",
+fn add_restored_header(
+    cb: &mut ChildSpawnerCommands,
+    font: &TextFont,
+    has_mismatch: bool,
+    col_width: usize,
+) {
+    let header = if has_mismatch {
+        format!(
+            "{:LABEL_WIDTH$}{:<col_width$}{:<col_width$}{:<col_width$}{}\n",
             "", "Restored", "Current", "Expected", "Actual"
-        );
-        add_span(cb, font, &header, DEFAULT_COLOR);
+        )
     } else {
-        let header = format!(
-            "{:LABEL_WIDTH$}{:<col1_width$}{}\n",
+        format!(
+            "{:LABEL_WIDTH$}{:<col_width$}{}\n",
             "", "Restored", "Current"
-        );
-        add_span(cb, font, &header, DEFAULT_COLOR);
-    }
-
-    // Position (physical)
-    let mm = mismatch_state.map(|m| {
-        let exp = m
-            .physical_position
-            .expected
-            .map_or_else(|| "None".to_string(), |p| format!("({}, {})", p.x, p.y));
-        let act = m
-            .physical_position
-            .actual
-            .map_or_else(|| "None".to_string(), |p| format!("({}, {})", p.x, p.y));
-        (exp, act)
-    });
-    add_row(
-        cb,
-        font,
-        "Position (physical):",
-        &file_pos_phys,
-        &current.position_phys,
-        mm.as_ref(),
-        col1_width,
-    );
-
-    // Position (logical)
-    let mm = mismatch_state.map(|m| {
-        let exp = m
-            .logical_position
-            .expected
-            .map_or_else(|| "None".to_string(), |p| format!("({}, {})", p.x, p.y));
-        let act = m
-            .logical_position
-            .actual
-            .map_or_else(|| "None".to_string(), |p| format!("({}, {})", p.x, p.y));
-        (exp, act)
-    });
-    add_row(
-        cb,
-        font,
-        "Position (logical):",
-        &file_pos_log,
-        &current.position_log,
-        mm.as_ref(),
-        col1_width,
-    );
-
-    // Size (physical)
-    let mm = mismatch_state.map(|m| {
-        (
-            format!(
-                "{}x{}",
-                m.physical_size.expected.x, m.physical_size.expected.y
-            ),
-            format!("{}x{}", m.physical_size.actual.x, m.physical_size.actual.y),
         )
-    });
+    };
+    add_span(cb, font, &header, DEFAULT_COLOR);
+}
+
+fn add_position_rows(
+    cb: &mut ChildSpawnerCommands,
+    font: &TextFont,
+    restored: &RestoredValues,
+    current: &CurrentValues,
+    mismatch_state: Option<&CachedMismatchState>,
+    col_width: usize,
+) {
     add_row(
         cb,
         font,
-        "Size (physical):",
-        &file_size_phys,
-        &current.size_phys,
-        mm.as_ref(),
-        col1_width,
+        &ComparisonRow {
+            label:    "Position (physical):",
+            restored: restored.physical_position.clone(),
+            current:  current.position_phys.clone(),
+            mismatch: mismatch_state.map(|mismatch| ComparisonMismatch {
+                expected: mismatch.physical_position.expected.map_or_else(
+                    || "None".to_string(),
+                    |position| format!("({}, {})", position.x, position.y),
+                ),
+                actual:   mismatch.physical_position.actual.map_or_else(
+                    || "None".to_string(),
+                    |position| format!("({}, {})", position.x, position.y),
+                ),
+            }),
+        },
+        col_width,
     );
-
-    // Size (logical)
-    let mm = mismatch_state.map(|m| {
-        (
-            format!(
-                "{}x{}",
-                m.logical_size.expected.x, m.logical_size.expected.y
-            ),
-            format!("{}x{}", m.logical_size.actual.x, m.logical_size.actual.y),
-        )
-    });
     add_row(
         cb,
         font,
-        "Size (logical):",
-        &file_size_log,
-        &current.size_log,
-        mm.as_ref(),
-        col1_width,
+        &ComparisonRow {
+            label:    "Position (logical):",
+            restored: restored.logical_position.clone(),
+            current:  current.position_log.clone(),
+            mismatch: mismatch_state.map(|mismatch| ComparisonMismatch {
+                expected: mismatch.logical_position.expected.map_or_else(
+                    || "None".to_string(),
+                    |position| format!("({}, {})", position.x, position.y),
+                ),
+                actual:   mismatch.logical_position.actual.map_or_else(
+                    || "None".to_string(),
+                    |position| format!("({}, {})", position.x, position.y),
+                ),
+            }),
+        },
+        col_width,
     );
+}
 
-    // Scale (no file value; custom no-mismatch rendering)
-    if let Some(m) = mismatch_state {
-        let exp_scale = format!("{}", m.scale.expected);
-        let act_scale = format!("{}", m.scale.actual);
-        add_comparison_row_5(
-            cb,
-            font,
-            "Scale:",
-            "",
-            &current.scale,
-            &exp_scale,
-            &act_scale,
-            col1_width,
-        );
-    } else {
+fn add_size_rows(
+    cb: &mut ChildSpawnerCommands,
+    font: &TextFont,
+    restored: &RestoredValues,
+    current: &CurrentValues,
+    mismatch_state: Option<&CachedMismatchState>,
+    col_width: usize,
+) {
+    add_row(
+        cb,
+        font,
+        &ComparisonRow {
+            label:    "Size (physical):",
+            restored: restored.physical_size.clone(),
+            current:  current.size_phys.clone(),
+            mismatch: mismatch_state.map(|mismatch| ComparisonMismatch {
+                expected: format!(
+                    "{}x{}",
+                    mismatch.physical_size.expected.x, mismatch.physical_size.expected.y
+                ),
+                actual:   format!(
+                    "{}x{}",
+                    mismatch.physical_size.actual.x, mismatch.physical_size.actual.y
+                ),
+            }),
+        },
+        col_width,
+    );
+    add_row(
+        cb,
+        font,
+        &ComparisonRow {
+            label:    "Size (logical):",
+            restored: restored.logical_size.clone(),
+            current:  current.size_log.clone(),
+            mismatch: mismatch_state.map(|mismatch| ComparisonMismatch {
+                expected: format!(
+                    "{}x{}",
+                    mismatch.logical_size.expected.x, mismatch.logical_size.expected.y
+                ),
+                actual:   format!(
+                    "{}x{}",
+                    mismatch.logical_size.actual.x, mismatch.logical_size.actual.y
+                ),
+            }),
+        },
+        col_width,
+    );
+}
+
+fn add_scale_row(
+    cb: &mut ChildSpawnerCommands,
+    font: &TextFont,
+    current: &CurrentValues,
+    mismatch_state: Option<&CachedMismatchState>,
+    col_width: usize,
+) {
+    if mismatch_state.is_none() {
         add_span(
             cb,
             font,
             &format!(
-                "{:<LABEL_WIDTH$}{:<col1_width$}{}\n",
+                "{:<LABEL_WIDTH$}{:<col_width$}{}\n",
                 "Scale:", "", current.scale
             ),
             DEFAULT_COLOR,
         );
+        return;
     }
 
-    // Monitor
-    let mm = mismatch_state.map(|m| {
-        (
-            format!("{}", m.monitor.expected),
-            format!("{}", m.monitor.actual),
-        )
-    });
-    add_row(
-        cb,
-        font,
-        "Monitor:",
-        &file_monitor,
-        &current.monitor,
-        mm.as_ref(),
-        col1_width,
-    );
+    let row = ComparisonRow {
+        label:    "Scale:",
+        restored: String::new(),
+        current:  current.scale.clone(),
+        mismatch: mismatch_state.map(|mismatch| ComparisonMismatch {
+            expected: mismatch.scale.expected.to_string(),
+            actual:   mismatch.scale.actual.to_string(),
+        }),
+    };
+    add_row(cb, font, &row, col_width);
+}
 
-    // Mode
-    let mm = mismatch_state.map(|m| {
-        (
-            format!("{:?}", m.mode.expected),
-            format!("{:?}", m.mode.actual),
-        )
-    });
+fn add_monitor_row(
+    cb: &mut ChildSpawnerCommands,
+    font: &TextFont,
+    restored: &RestoredValues,
+    current: &CurrentValues,
+    mismatch_state: Option<&CachedMismatchState>,
+    col_width: usize,
+) {
     add_row(
         cb,
         font,
-        "Mode:",
-        &file_mode,
-        &current.mode,
-        mm.as_ref(),
-        col1_width,
+        &ComparisonRow {
+            label:    "Monitor:",
+            restored: restored.monitor.clone(),
+            current:  current.monitor.clone(),
+            mismatch: mismatch_state.map(|mismatch| ComparisonMismatch {
+                expected: mismatch.monitor.expected.to_string(),
+                actual:   mismatch.monitor.actual.to_string(),
+            }),
+        },
+        col_width,
+    );
+}
+
+fn add_mode_row(
+    cb: &mut ChildSpawnerCommands,
+    font: &TextFont,
+    restored: &RestoredValues,
+    current: &CurrentValues,
+    mismatch_state: Option<&CachedMismatchState>,
+    col_width: usize,
+) {
+    add_row(
+        cb,
+        font,
+        &ComparisonRow {
+            label:    "Mode:",
+            restored: restored.mode.clone(),
+            current:  current.mode.clone(),
+            mismatch: mismatch_state.map(|mismatch| ComparisonMismatch {
+                expected: format!("{:?}", mismatch.mode.expected),
+                actual:   format!("{:?}", mismatch.mode.actual),
+            }),
+        },
+        col_width,
     );
 }
 
@@ -343,38 +421,24 @@ fn build_current_only_spans(
 fn add_row(
     cb: &mut ChildSpawnerCommands,
     font: &TextFont,
-    label: &str,
-    file_val: &str,
-    current_val: &str,
-    mismatch: Option<&(String, String)>,
+    row: &ComparisonRow<'_>,
     col_width: usize,
 ) {
-    if let Some((expected, actual)) = mismatch {
-        add_comparison_row_5(
-            cb,
-            font,
-            label,
-            file_val,
-            current_val,
-            expected,
-            actual,
-            col_width,
-        );
+    if let Some(mismatch) = row.mismatch.as_ref() {
+        add_extended_comparison_row(cb, font, row, mismatch, col_width);
     } else {
-        add_comparison_row(cb, font, label, file_val, current_val, col_width);
+        add_standard_comparison_row(cb, font, row, col_width);
     }
 }
 
 /// Add a comparison row: label + file value (white) + current value (white or red if mismatch).
-fn add_comparison_row(
+fn add_standard_comparison_row(
     cb: &mut ChildSpawnerCommands,
     font: &TextFont,
-    label: &str,
-    file_val: &str,
-    current_val: &str,
+    row: &ComparisonRow<'_>,
     col_width: usize,
 ) {
-    let color = if file_val == current_val {
+    let color = if row.restored == row.current {
         DEFAULT_COLOR
     } else {
         MISMATCH_COLOR
@@ -384,31 +448,32 @@ fn add_comparison_row(
     add_span(
         cb,
         font,
-        &format!("{label:<LABEL_WIDTH$}{file_val:<col_width$}"),
+        &format!(
+            "{label:<LABEL_WIDTH$}{restored:<col_width$}",
+            label = row.label,
+            restored = row.restored
+        ),
         DEFAULT_COLOR,
     );
     // Current value (colored)
-    add_span(cb, font, &format!("{current_val}\n"), color);
+    add_span(cb, font, &format!("{}\n", row.current), color);
 }
 
 /// Add a 5-column comparison row: label + restored + current + expected + actual.
 /// Expected/actual columns use warning color when they differ.
-fn add_comparison_row_5(
+fn add_extended_comparison_row(
     cb: &mut ChildSpawnerCommands,
     font: &TextFont,
-    label: &str,
-    file_val: &str,
-    current_val: &str,
-    expected_val: &str,
-    actual_val: &str,
+    row: &ComparisonRow<'_>,
+    mismatch: &ComparisonMismatch,
     col_width: usize,
 ) {
-    let current_color = if file_val == current_val {
+    let current_color = if row.restored == row.current {
         DEFAULT_COLOR
     } else {
         MISMATCH_COLOR
     };
-    let mismatch_color = if expected_val == actual_val {
+    let mismatch_color = if mismatch.expected == mismatch.actual {
         DEFAULT_COLOR
     } else {
         MISMATCH_WARN_COLOR
@@ -418,25 +483,29 @@ fn add_comparison_row_5(
     add_span(
         cb,
         font,
-        &format!("{label:<LABEL_WIDTH$}{file_val:<col_width$}"),
+        &format!(
+            "{label:<LABEL_WIDTH$}{restored:<col_width$}",
+            label = row.label,
+            restored = row.restored
+        ),
         DEFAULT_COLOR,
     );
     // Current value
     add_span(
         cb,
         font,
-        &format!("{current_val:<col_width$}"),
+        &format!("{current:<col_width$}", current = row.current),
         current_color,
     );
     // Expected value (always white)
     add_span(
         cb,
         font,
-        &format!("{expected_val:<col_width$}"),
+        &format!("{expected:<col_width$}", expected = mismatch.expected),
         DEFAULT_COLOR,
     );
     // Actual value (warning color if mismatch)
-    add_span(cb, font, &format!("{actual_val}\n"), mismatch_color);
+    add_span(cb, font, &format!("{}\n", mismatch.actual), mismatch_color);
 }
 
 /// Add a single `TextSpan` child.

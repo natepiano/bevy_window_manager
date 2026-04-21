@@ -11,12 +11,12 @@ use bevy_window_manager::Monitors;
 
 use super::events::ClearStateAndQuit;
 use super::events::QuitApp;
+use super::events::RestoredStates;
 use super::events::SetBorderlessFullscreen;
 use super::events::SetExclusiveFullscreen;
 use super::events::SetWindowed;
 use super::events::SpawnManagedWindow;
 use super::events::TogglePersistence;
-use super::state::RestoredStates;
 use super::state::SelectedVideoModes;
 
 pub(crate) fn handle_global_input(
@@ -94,7 +94,7 @@ pub(crate) fn handle_window_mode_input(
 
     let video_modes: Vec<VideoMode> = bevy_monitors
         .iter()
-        .find(|(_, bevy_monitor)| bevy_monitor.physical_position == monitor.position)
+        .find(|(_, bevy_monitor)| bevy_monitor.physical_position == monitor.physical_position)
         .map(|(_, bevy_monitor)| bevy_monitor.video_modes.clone())
         .unwrap_or_default();
 
@@ -123,7 +123,7 @@ pub(crate) fn get_video_modes_for_monitor<'a>(
 ) -> (Vec<&'a VideoMode>, Option<u32>) {
     bevy_monitors
         .iter()
-        .find(|(_, bevy_monitor)| bevy_monitor.physical_position == monitor.position)
+        .find(|(_, bevy_monitor)| bevy_monitor.physical_position == monitor.physical_position)
         .map(|(_, bevy_monitor)| {
             (
                 bevy_monitor.video_modes.iter().collect(),

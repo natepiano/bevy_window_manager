@@ -27,10 +27,10 @@
 //! The plugin automatically hides the window during startup and shows it after positioning
 //! is complete, preventing any visual flash at the default position.
 //!
-//! See `examples/custom_app_name.rs` for how to override the `app_name` used in the path
-//! (default is to choose executable name).
+//! See the `custom_app_name` example for how to override the `app_name` used in the path
+//! (default is to choose the executable name).
 //!
-//! See `examples/custom_path.rs` for how to override the full path to the state file.
+//! See the `custom_path` example for how to override the full path to the state file.
 
 mod config;
 mod constants;

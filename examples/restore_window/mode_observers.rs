@@ -59,7 +59,9 @@ pub(crate) fn on_set_exclusive_fullscreen(
 
     let video_modes: Vec<VideoMode> = bevy_monitors
         .iter()
-        .find(|(_, bevy_monitor)| bevy_monitor.physical_position == monitor.monitor.position)
+        .find(|(_, bevy_monitor)| {
+            bevy_monitor.physical_position == monitor.monitor.physical_position
+        })
         .map(|(_, bevy_monitor)| bevy_monitor.video_modes.clone())
         .unwrap_or_default();
 

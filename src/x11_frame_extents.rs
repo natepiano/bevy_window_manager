@@ -30,7 +30,7 @@ use super::restore::X11FrameCompensated;
 /// Returns the top extent (title bar height), or `None` if not yet available.
 /// Does not block - returns immediately if the WM hasn't set the property yet.
 fn query_frame_top(window_id: u32) -> Option<i32> {
-    let (conn, _screen_num) = XCBConnection::connect(None).ok()?;
+    let (conn, _) = XCBConnection::connect(None).ok()?;
 
     let atom_cookie = conn.intern_atom(false, b"_NET_FRAME_EXTENTS").ok()?;
     let atom = atom_cookie.reply().ok()?.atom;

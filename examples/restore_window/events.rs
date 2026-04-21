@@ -1,19 +1,9 @@
+use std::collections::HashMap;
+
 use bevy::prelude::*;
+use bevy::window::WindowMode;
 use bevy_window_manager::WindowRestoreMismatch;
 use bevy_window_manager::WindowRestored;
-
-use super::state::CachedMismatchState;
-use super::state::CachedRestoredState;
-use super::state::MismatchStates;
-use super::state::ModeMismatch;
-use super::state::MonitorMismatch;
-use super::state::PositionMismatch;
-use super::state::RestoredStates;
-use super::state::ScaleMismatch;
-use super::state::SizeMismatch;
-use super::state::WindowRestoreMismatchReceived;
-use super::state::WindowRestoredReceived;
-use super::state::WindowsSettledCount;
 
 #[derive(Event, Reflect)]
 #[reflect(Event)]
@@ -42,6 +32,92 @@ pub(crate) struct ClearStateAndQuit;
 #[derive(Event, Reflect)]
 #[reflect(Event)]
 pub(crate) struct QuitApp;
+
+#[derive(Debug, Clone, Reflect)]
+pub(crate) struct MonitorMismatch {
+    pub(crate) expected: usize,
+    pub(crate) actual:   usize,
+}
+
+#[derive(Debug, Clone, Reflect)]
+pub(crate) struct ModeMismatch {
+    pub(crate) expected: WindowMode,
+    pub(crate) actual:   WindowMode,
+}
+
+#[derive(Debug, Clone, Reflect)]
+pub(crate) struct PositionMismatch {
+    pub(crate) expected: Option<IVec2>,
+    pub(crate) actual:   Option<IVec2>,
+}
+
+#[derive(Debug, Clone, Reflect)]
+pub(crate) struct SizeMismatch {
+    pub(crate) expected: UVec2,
+    pub(crate) actual:   UVec2,
+}
+
+#[derive(Debug, Clone, Reflect)]
+pub(crate) struct ScaleMismatch {
+    pub(crate) expected: f64,
+    pub(crate) actual:   f64,
+}
+
+#[derive(Resource, Debug, Clone, Reflect)]
+#[reflect(Resource)]
+pub(crate) struct WindowRestoredReceived {
+    pub(crate) physical_position: Option<IVec2>,
+    pub(crate) physical_size:     UVec2,
+    pub(crate) mode:              WindowMode,
+    pub(crate) monitor:           usize,
+}
+
+/// Adapts the flat `expected_*` / `actual_*` shape of `WindowRestoreMismatch` into
+/// nested comparison structs for BRP inspection. If the public event's field layout
+/// changes, this resource's unpacking (in `on_window_restore_mismatch`) must change with it.
+#[derive(Resource, Debug, Clone, Reflect)]
+#[reflect(Resource)]
+pub(crate) struct WindowRestoreMismatchReceived {
+    pub(crate) monitor:       MonitorMismatch,
+    pub(crate) physical_size: SizeMismatch,
+    pub(crate) mode:          ModeMismatch,
+}
+
+#[derive(Resource, Debug, Default, Reflect)]
+#[reflect(Resource)]
+pub(crate) struct WindowsSettledCount {
+    pub(crate) count: usize,
+}
+
+#[derive(Clone)]
+pub(crate) struct CachedMismatchState {
+    pub(crate) physical_position: PositionMismatch,
+    pub(crate) logical_position:  PositionMismatch,
+    pub(crate) physical_size:     SizeMismatch,
+    pub(crate) logical_size:      SizeMismatch,
+    pub(crate) mode:              ModeMismatch,
+    pub(crate) monitor:           MonitorMismatch,
+    pub(crate) scale:             ScaleMismatch,
+}
+
+#[derive(Resource, Default)]
+pub(crate) struct MismatchStates {
+    pub(crate) states: HashMap<Entity, CachedMismatchState>,
+}
+
+#[derive(Resource, Default)]
+pub(crate) struct RestoredStates {
+    pub(crate) states: HashMap<Entity, CachedRestoredState>,
+}
+
+pub(crate) struct CachedRestoredState {
+    pub(crate) physical_position: Option<IVec2>,
+    pub(crate) logical_position:  Option<IVec2>,
+    pub(crate) physical_size:     UVec2,
+    pub(crate) logical_size:      UVec2,
+    pub(crate) monitor:           usize,
+    pub(crate) mode:              WindowMode,
+}
 
 pub(crate) fn on_window_restored(
     trigger: On<WindowRestored>,
@@ -75,10 +151,10 @@ pub(crate) fn on_window_restored(
     );
 
     commands.insert_resource(WindowRestoredReceived {
-        position: event.physical_position,
-        size:     event.physical_size,
-        mode:     event.mode,
-        monitor:  event.monitor_index,
+        physical_position: event.physical_position,
+        physical_size:     event.physical_size,
+        mode:              event.mode,
+        monitor:           event.monitor_index,
     });
     settled_count.count += 1;
 }
@@ -151,15 +227,15 @@ pub(crate) fn on_window_restore_mismatch(
     );
 
     commands.insert_resource(WindowRestoreMismatchReceived {
-        monitor: MonitorMismatch {
+        monitor:       MonitorMismatch {
             expected: event.expected_monitor,
             actual:   event.actual_monitor,
         },
-        size:    SizeMismatch {
+        physical_size: SizeMismatch {
             expected: event.expected_physical_size,
             actual:   event.actual_physical_size,
         },
-        mode:    ModeMismatch {
+        mode:          ModeMismatch {
             expected: event.expected_mode,
             actual:   event.actual_mode,
         },

@@ -17,9 +17,9 @@ pub enum MonitorResolutionSource {
 }
 
 pub struct ResolvedMonitor<'a> {
-    pub info:     &'a MonitorInfo,
-    pub position: Option<(i32, i32)>,
-    pub source:   MonitorResolutionSource,
+    pub info:             &'a MonitorInfo,
+    pub logical_position: Option<(i32, i32)>,
+    pub source:           MonitorResolutionSource,
 }
 
 /// Resolve the target monitor from saved state and return an adjusted saved position.
@@ -31,13 +31,13 @@ pub fn resolve_target_monitor_and_position(
 ) -> ResolvedMonitor<'_> {
     monitors.by_index(saved_monitor_index).map_or_else(
         || ResolvedMonitor {
-            info:     monitors.first(),
-            position: None,
-            source:   MonitorResolutionSource::FallbackToPrimary,
+            info:             monitors.first(),
+            logical_position: None,
+            source:           MonitorResolutionSource::FallbackToPrimary,
         },
         |info| ResolvedMonitor {
             info,
-            position: saved_position,
+            logical_position: saved_position,
             source: MonitorResolutionSource::Requested,
         },
     )
@@ -111,8 +111,8 @@ fn clamp_position_to_monitor(
     platform: Platform,
 ) -> IVec2 {
     if platform.should_clamp_position() {
-        let monitor_right = target_info.position.x + target_info.size.x.to_i32();
-        let monitor_bottom = target_info.position.y + target_info.size.y.to_i32();
+        let monitor_right = target_info.physical_position.x + target_info.physical_size.x.to_i32();
+        let monitor_bottom = target_info.physical_position.y + target_info.physical_size.y.to_i32();
 
         let mut x = saved_x;
         let mut y = saved_y;
@@ -123,8 +123,8 @@ fn clamp_position_to_monitor(
         if y + outer_height.to_i32() > monitor_bottom {
             y = monitor_bottom - outer_height.to_i32();
         }
-        x = x.max(target_info.position.x);
-        y = y.max(target_info.position.y);
+        x = x.max(target_info.physical_position.x);
+        y = y.max(target_info.physical_position.y);
 
         if x != saved_x || y != saved_y {
             debug!(
