@@ -21,7 +21,7 @@ use crate::restore::target::X11FrameCompensated;
 pub fn restore_windows(
     mut scale_changed_messages: MessageReader<WindowScaleFactorChanged>,
     mut windows: Query<(Entity, &mut TargetPosition, &mut Window), With<X11FrameCompensated>>,
-    _non_send: NonSendMarker,
+    _: NonSendMarker,
     platform: Res<Platform>,
 ) {
     let scale_changed = scale_changed_messages.read().last().is_some();

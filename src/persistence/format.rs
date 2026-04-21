@@ -145,7 +145,6 @@ struct PersistedEntryV1 {
 /// v1 persisted state wrapper.
 #[derive(Debug, Clone, Deserialize)]
 struct PersistedStateV1 {
-    #[allow(dead_code, reason = "field required for v1 deserialization")]
     version: u8,
     entries: Vec<PersistedEntryV1>,
 }
@@ -158,6 +157,10 @@ fn decode_legacy_single_window(contents: &str) -> Option<HashMap<WindowKey, Wind
 
 fn decode_v1(contents: &str) -> Option<HashMap<WindowKey, WindowState>> {
     let v1 = ron::from_str::<PersistedStateV1>(contents).ok()?;
+    if v1.version != 1 {
+        warn!("[decode] Invalid v1 persisted state version {}", v1.version);
+        return None;
+    }
 
     let mut states = HashMap::with_capacity(v1.entries.len());
     for entry in v1.entries {
@@ -220,6 +223,7 @@ mod tests {
     use bevy::prelude::*;
 
     use super::CURRENT_STATE_VERSION;
+    use super::DEFAULT_SCALE_FACTOR;
     use super::PersistedEntry;
     use super::PersistedState;
     use super::SavedVideoMode;
@@ -233,7 +237,7 @@ mod tests {
             logical_position: Some((10, 20)),
             logical_width:    800,
             logical_height:   600,
-            scale:            1.0,
+            scale:            DEFAULT_SCALE_FACTOR,
             monitor:          1,
             mode:             SavedWindowMode::Windowed,
             app_name:         "test-app".to_string(),
@@ -297,7 +301,7 @@ mod tests {
         assert_eq!(state.logical_position, Some((10, 20)));
         assert_eq!(state.logical_width, 800);
         assert_eq!(state.logical_height, 600);
-        assert!((state.scale - 1.0).abs() < f64::EPSILON);
+        assert!((state.scale - DEFAULT_SCALE_FACTOR).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -326,7 +330,7 @@ mod tests {
         let state = &decoded[&WindowKey::Primary];
         assert_eq!(state.logical_width, 800);
         assert_eq!(state.logical_height, 600);
-        assert!((state.scale - 1.0).abs() < f64::EPSILON);
+        assert!((state.scale - DEFAULT_SCALE_FACTOR).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -415,7 +419,7 @@ mod tests {
             assert_eq!(state.logical_position, Some((200, 200)));
             assert_eq!(state.logical_width, 1600);
             assert_eq!(state.logical_height, 1200);
-            assert!((state.scale - 1.0).abs() < f64::EPSILON);
+            assert!((state.scale - DEFAULT_SCALE_FACTOR).abs() < f64::EPSILON);
             assert_eq!(state.monitor, 0);
             assert_eq!(state.mode, SavedWindowMode::Windowed);
             assert_eq!(state.app_name, "restore_window");
@@ -511,7 +515,7 @@ mod tests {
         let primary = &decoded[&WindowKey::Primary];
         assert_eq!(primary.logical_width, 800);
         assert_eq!(primary.logical_height, 600);
-        assert!((primary.scale - 1.0).abs() < f64::EPSILON);
+        assert!((primary.scale - DEFAULT_SCALE_FACTOR).abs() < f64::EPSILON);
         let inspector = &decoded[&WindowKey::Managed("inspector".to_string())];
         assert_eq!(inspector.logical_width, 1024);
         assert_eq!(inspector.logical_height, 768);

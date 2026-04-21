@@ -59,6 +59,8 @@ mod tests {
     use super::SavedWindowMode;
     use super::WindowKey;
     use super::WindowState;
+    use crate::constants::CURRENT_STATE_VERSION;
+    use crate::constants::DEFAULT_SCALE_FACTOR;
     use crate::persistence::load;
     use crate::persistence::save;
 
@@ -67,7 +69,7 @@ mod tests {
             logical_position: Some((10, 20)),
             logical_width:    800,
             logical_height:   600,
-            scale:            1.0,
+            scale:            DEFAULT_SCALE_FACTOR,
             monitor:          0,
             mode:             SavedWindowMode::Windowed,
             app_name:         "test-app".to_string(),
@@ -126,7 +128,7 @@ mod tests {
         assert!(contents.is_ok(), "expected rewritten file to be readable");
         let contents = contents.unwrap_or_default();
         assert!(
-            contents.contains("version: 2"),
+            contents.contains(&format!("version: {CURRENT_STATE_VERSION}")),
             "expected rewritten file to contain v2 version marker"
         );
         assert!(

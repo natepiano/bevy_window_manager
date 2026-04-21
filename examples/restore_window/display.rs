@@ -45,6 +45,12 @@ struct ComparisonRow<'a> {
     mismatch: Option<ComparisonMismatch>,
 }
 
+#[derive(Clone, Copy)]
+enum ComparisonLayout {
+    CurrentOnly,
+    WithMismatchColumns,
+}
+
 struct RestoredValues {
     physical_position: String,
     logical_position:  String,
@@ -148,8 +154,13 @@ fn build_restored_spans(
 ) {
     let restored = RestoredValues::from_state(state);
     let col_width = restored.comparison_width().max(16);
+    let layout = if mismatch_state.is_some() {
+        ComparisonLayout::WithMismatchColumns
+    } else {
+        ComparisonLayout::CurrentOnly
+    };
 
-    add_restored_header(cb, font, mismatch_state.is_some(), col_width);
+    add_restored_header(cb, font, layout, col_width);
     add_position_rows(cb, font, &restored, current, mismatch_state, col_width);
     add_size_rows(cb, font, &restored, current, mismatch_state, col_width);
     add_scale_row(cb, font, current, mismatch_state, col_width);
@@ -160,10 +171,10 @@ fn build_restored_spans(
 fn add_restored_header(
     cb: &mut ChildSpawnerCommands,
     font: &TextFont,
-    has_mismatch: bool,
+    layout: ComparisonLayout,
     col_width: usize,
 ) {
-    let header = if has_mismatch {
+    let header = if matches!(layout, ComparisonLayout::WithMismatchColumns) {
         format!(
             "{:LABEL_WIDTH$}{:<col_width$}{:<col_width$}{:<col_width$}{}\n",
             "", "Restored", "Current", "Expected", "Actual"

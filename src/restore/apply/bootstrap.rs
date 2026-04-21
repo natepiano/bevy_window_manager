@@ -32,7 +32,7 @@ pub fn init_winit_info(
     mut commands: Commands,
     window_entity: Single<Entity, With<PrimaryWindow>>,
     monitors: Res<Monitors>,
-    _non_send: NonSendMarker,
+    _: NonSendMarker,
 ) {
     assert!(
         !monitors.is_empty(),

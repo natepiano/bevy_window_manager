@@ -28,7 +28,7 @@ pub(crate) fn debug_winit_monitor(
     window: Single<Entity, With<PrimaryWindow>>,
     monitors: Res<Monitors>,
     mut cached_monitor: Local<Option<usize>>,
-    _non_send: NonSendMarker,
+    _: NonSendMarker,
 ) {
     let window_entity = *window;
 

@@ -32,7 +32,7 @@ pub(crate) fn update_current_monitor(
         Or<(With<PrimaryWindow>, With<ManagedWindow>)>,
     >,
     monitors: Res<Monitors>,
-    _non_send: NonSendMarker,
+    _: NonSendMarker,
 ) {
     if monitors.is_empty() {
         return;

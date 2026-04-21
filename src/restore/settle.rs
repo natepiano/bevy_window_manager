@@ -147,16 +147,27 @@ impl SettleComparison {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TimeoutState {
+    Active,
+    TimedOut,
+}
+
+#[derive(Clone, Copy)]
+enum ChangeHandling {
+    Skip,
+    Continue,
+}
+
 /// Detect whether the settle snapshot changed from the previous frame and reset the
-/// stability timer if so. Returns `true` if the caller should skip further checks
-/// this frame (snapshot just changed and we haven't timed out yet).
+/// stability timer if so.
 fn detect_settle_change(
     settle: &mut SettleState,
     snapshot: SettleSnapshot,
     key: &WindowKey,
     total_elapsed_ms: f32,
-    total_timed_out: bool,
-) -> bool {
+    timeout_state: TimeoutState,
+) -> ChangeHandling {
     let changed = settle.last_snapshot.as_ref() != Some(&snapshot);
     if changed {
         if settle.last_snapshot.is_some() {
@@ -167,10 +178,12 @@ fn detect_settle_change(
         }
         settle.stability_timer.reset();
         settle.last_snapshot = Some(snapshot);
-        // Don't check stability this frame — we just reset
-        !total_timed_out
+        match timeout_state {
+            TimeoutState::TimedOut => ChangeHandling::Continue,
+            TimeoutState::Active => ChangeHandling::Skip,
+        }
     } else {
-        false
+        ChangeHandling::Continue
     }
 }
 
@@ -244,14 +257,21 @@ pub fn check_restore_settling(
 
         let total_elapsed_ms = settle.total_timeout.elapsed_secs() * 1000.0;
         let stability_elapsed_ms = settle.stability_timer.elapsed_secs() * 1000.0;
-        let total_timed_out = settle.total_timeout.is_finished();
+        let timeout_state = if settle.total_timeout.is_finished() {
+            TimeoutState::TimedOut
+        } else {
+            TimeoutState::Active
+        };
 
-        if detect_settle_change(
-            settle,
-            current_snapshot,
-            &key,
-            total_elapsed_ms,
-            total_timed_out,
+        if matches!(
+            detect_settle_change(
+                settle,
+                current_snapshot,
+                &key,
+                total_elapsed_ms,
+                timeout_state,
+            ),
+            ChangeHandling::Skip
         ) {
             continue;
         }
@@ -299,21 +319,13 @@ pub fn check_restore_settling(
                 total_elapsed_ms,
                 stability_elapsed_ms,
             );
-        } else if total_timed_out {
-            let settle_actual = SettleActual {
-                snapshot:     current_snapshot,
-                scale:        actual_scale,
-                logical_size: UVec2::new(
-                    window.resolution.width().to_u32(),
-                    window.resolution.height().to_u32(),
-                ),
-            };
+        } else if timeout_state == TimeoutState::TimedOut {
             emit_settle_mismatch(
                 &mut commands,
                 entity,
                 key,
                 &settle_target,
-                &settle_actual,
+                &build_settle_actual(window, current_snapshot, actual_scale),
                 total_elapsed_ms,
             );
         }
@@ -325,6 +337,17 @@ struct SettleActual {
     snapshot:     SettleSnapshot,
     scale:        f64,
     logical_size: UVec2,
+}
+
+fn build_settle_actual(window: &Window, snapshot: SettleSnapshot, scale: f64) -> SettleActual {
+    SettleActual {
+        snapshot,
+        scale,
+        logical_size: UVec2::new(
+            window.resolution.width().to_u32(),
+            window.resolution.height().to_u32(),
+        ),
+    }
 }
 
 /// Extracted target values for settle resolution, avoiding too-many-arguments.

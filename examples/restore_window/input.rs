@@ -8,6 +8,8 @@ use bevy::window::WindowMode;
 use bevy_window_manager::CurrentMonitor;
 use bevy_window_manager::ManagedWindow;
 use bevy_window_manager::Monitors;
+#[cfg(target_os = "linux")]
+use bevy_window_manager::Platform;
 
 use super::events::ClearStateAndQuit;
 use super::events::QuitApp;
@@ -179,8 +181,6 @@ pub(crate) fn sync_selected_to_active(
 
 #[cfg(target_os = "linux")]
 pub(crate) fn platform_suffix() -> &'static str {
-    use bevy_window_manager::Platform;
-
     if Platform::detect().is_wayland() {
         " (Wayland)"
     } else {

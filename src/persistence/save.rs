@@ -232,7 +232,7 @@ pub fn save_window_state(
     >,
     primary_q: Query<(), With<PrimaryWindow>>,
     mut cached: Local<std::collections::HashMap<Entity, CachedWindowState>>,
-    _non_send: NonSendMarker,
+    _: NonSendMarker,
 ) {
     // Can't save state if no monitors exist (e.g., laptop lid closed).
     if monitors.is_empty() {

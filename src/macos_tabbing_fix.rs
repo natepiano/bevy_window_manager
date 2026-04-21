@@ -42,7 +42,7 @@ fn get_ns_window(entity: Entity) -> Option<Retained<NSWindow>> {
 /// fullscreen gets auto-tabbed before our `Update` systems can intervene.
 pub(crate) fn disable_tabbing_on_primary(
     window_entity: Single<Entity, With<PrimaryWindow>>,
-    _non_send: NonSendMarker,
+    _: NonSendMarker,
 ) {
     let Some(ns_window) = get_ns_window(*window_entity) else {
         warn!("[macos_tabbing_fix] Could not get NSWindow for primary window");
@@ -56,7 +56,7 @@ pub(crate) fn disable_tabbing_on_primary(
 /// Disable tabbing on newly added `ManagedWindow` entities.
 pub(crate) fn disable_tabbing_on_managed(
     new_windows: Query<Entity, Added<ManagedWindow>>,
-    _non_send: NonSendMarker,
+    _: NonSendMarker,
 ) {
     for entity in &new_windows {
         let Some(ns_window) = get_ns_window(entity) else {

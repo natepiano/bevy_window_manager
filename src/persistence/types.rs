@@ -1,5 +1,10 @@
 //! Saved/persistence types for window state serialization.
 
+#![allow(
+    clippy::used_underscore_binding,
+    reason = "false positive on enum variant fields"
+)]
+
 use bevy::prelude::*;
 use bevy::window::MonitorSelection;
 use bevy::window::VideoMode;

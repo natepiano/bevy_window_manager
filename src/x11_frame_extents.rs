@@ -77,7 +77,7 @@ fn get_x11_window_id<W: HasWindowHandle>(window: &W) -> Option<u32> {
 pub(crate) fn compensate_target_position(
     mut commands: Commands,
     mut windows: Query<(Entity, &mut TargetPosition), Without<X11FrameCompensated>>,
-    _non_send: NonSendMarker,
+    _: NonSendMarker,
 ) {
     for (entity, mut target) in &mut windows {
         let Some(pos) = target.physical_position else {

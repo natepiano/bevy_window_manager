@@ -98,8 +98,8 @@ unsafe extern "system" fn subclass_proc(
     msg: u32,
     wparam: WPARAM,
     lparam: LPARAM,
-    _uidsubclass: usize,
-    _dwrefdata: usize,
+    _: usize,
+    _: usize,
 ) -> LRESULT {
     if msg == WM_DPICHANGED {
         debug!("[windows_dpi_fix] Intercepted WM_DPICHANGED");
@@ -131,7 +131,7 @@ impl Drop for DpiFixGuard {
 pub(crate) fn install_dpi_fix(
     mut commands: Commands,
     window_entity: Single<Entity, With<PrimaryWindow>>,
-    _non_send: NonSendMarker,
+    _: NonSendMarker,
 ) {
     let Some(hwnd) = get_hwnd(*window_entity) else {
         warn!("[windows_dpi_fix] Could not get HWND for primary window");
@@ -154,7 +154,7 @@ pub(crate) fn install_dpi_fix(
 /// Install DPI fix on newly added `ManagedWindow` entities.
 pub(crate) fn install_dpi_fix_on_managed(
     new_windows: Query<Entity, Added<ManagedWindow>>,
-    _non_send: NonSendMarker,
+    _: NonSendMarker,
 ) {
     for entity in &new_windows {
         let Some(hwnd) = get_hwnd(entity) else {

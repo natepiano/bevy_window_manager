@@ -41,10 +41,6 @@ mod managed;
 mod monitor;
 mod monitors;
 mod observers;
-#[allow(
-    clippy::used_underscore_binding,
-    reason = "false positive on enum variant fields"
-)]
 mod persistence;
 mod platform;
 mod restore;
