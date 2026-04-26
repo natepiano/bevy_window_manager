@@ -11,10 +11,10 @@ use bevy::window::WindowMode;
 use bevy::winit::WINIT_WINDOWS;
 use bevy_kana::ToI32;
 
-use crate::ManagedWindow;
-use crate::monitors::CurrentMonitor;
-use crate::monitors::MonitorInfo;
-use crate::monitors::Monitors;
+use super::ManagedWindow;
+use super::monitors::CurrentMonitor;
+use super::monitors::MonitorInfo;
+use super::monitors::Monitors;
 
 /// Unified monitor detection system. Maintains `CurrentMonitor` on all managed windows.
 ///

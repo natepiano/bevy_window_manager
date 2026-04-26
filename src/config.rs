@@ -4,8 +4,8 @@ use std::path::PathBuf;
 
 use bevy::prelude::*;
 
-use crate::WindowKey;
-use crate::persistence::WindowState;
+use super::WindowKey;
+use super::persistence::WindowState;
 
 /// Configuration for the `RestoreWindowPlugin`.
 #[derive(Resource, Clone)]

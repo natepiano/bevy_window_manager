@@ -60,24 +60,28 @@ struct RestoredValues {
     mode:              String,
 }
 
-impl RestoredValues {
-    fn from_state(state: &CachedRestoredState) -> Self {
+impl From<&CachedRestoredState> for RestoredValues {
+    fn from(cached_restored_state: &CachedRestoredState) -> Self {
+        let physical_size = cached_restored_state.physical_size;
+        let logical_size = cached_restored_state.logical_size;
         Self {
-            physical_position: state.physical_position.map_or_else(
+            physical_position: cached_restored_state.physical_position.map_or_else(
                 || "None".to_string(),
                 |position| format!("({}, {})", position.x, position.y),
             ),
-            logical_position:  state.logical_position.map_or_else(
+            logical_position:  cached_restored_state.logical_position.map_or_else(
                 || "None".to_string(),
                 |position| format!("({}, {})", position.x, position.y),
             ),
-            physical_size:     format!("{}x{}", state.physical_size.x, state.physical_size.y),
-            logical_size:      format!("{}x{}", state.logical_size.x, state.logical_size.y),
-            monitor:           state.monitor.to_string(),
-            mode:              format!("{:?}", state.mode),
+            physical_size:     format!("{}x{}", physical_size.x, physical_size.y),
+            logical_size:      format!("{}x{}", logical_size.x, logical_size.y),
+            monitor:           cached_restored_state.monitor.to_string(),
+            mode:              format!("{:?}", cached_restored_state.mode),
         }
     }
+}
 
+impl RestoredValues {
     fn comparison_width(&self) -> usize {
         [
             self.physical_position.len(),
@@ -106,7 +110,7 @@ fn build_comparison_spans(
     let effective_mode = monitor.effective_mode;
     let scale = window.resolution.scale_factor();
 
-    let current = CurrentValues {
+    let current_values = CurrentValues {
         position_phys: match window.position {
             WindowPosition::At(pos) => format!("({}, {})", pos.x, pos.y),
             _ => "Automatic".to_string(),
@@ -130,10 +134,16 @@ fn build_comparison_spans(
         mode:          format!("{effective_mode:?}"),
     };
 
-    if let Some(state) = restored_state {
-        build_restored_spans(cb, state, mismatch_state, &current, font);
+    if let Some(cached_restored_state) = restored_state {
+        build_restored_spans(
+            cb,
+            cached_restored_state,
+            mismatch_state,
+            &current_values,
+            font,
+        );
     } else {
-        build_current_only_spans(cb, &current, font);
+        build_current_only_spans(cb, &current_values, font);
     }
 
     add_span(
@@ -147,13 +157,13 @@ fn build_comparison_spans(
 /// Render comparison rows when restore data is available.
 fn build_restored_spans(
     cb: &mut ChildSpawnerCommands,
-    state: &CachedRestoredState,
+    cached_restored_state: &CachedRestoredState,
     mismatch_state: Option<&CachedMismatchState>,
-    current: &CurrentValues,
+    current_values: &CurrentValues,
     font: &TextFont,
 ) {
-    let restored = RestoredValues::from_state(state);
-    let col_width = restored.comparison_width().max(16);
+    let restored_values = RestoredValues::from(cached_restored_state);
+    let col_width = restored_values.comparison_width().max(16);
     let layout = if mismatch_state.is_some() {
         ComparisonLayout::WithMismatchColumns
     } else {
@@ -161,11 +171,39 @@ fn build_restored_spans(
     };
 
     add_restored_header(cb, font, layout, col_width);
-    add_position_rows(cb, font, &restored, current, mismatch_state, col_width);
-    add_size_rows(cb, font, &restored, current, mismatch_state, col_width);
-    add_scale_row(cb, font, current, mismatch_state, col_width);
-    add_monitor_row(cb, font, &restored, current, mismatch_state, col_width);
-    add_mode_row(cb, font, &restored, current, mismatch_state, col_width);
+    add_position_rows(
+        cb,
+        font,
+        &restored_values,
+        current_values,
+        mismatch_state,
+        col_width,
+    );
+    add_size_rows(
+        cb,
+        font,
+        &restored_values,
+        current_values,
+        mismatch_state,
+        col_width,
+    );
+    add_scale_row(cb, font, current_values, mismatch_state, col_width);
+    add_monitor_row(
+        cb,
+        font,
+        &restored_values,
+        current_values,
+        mismatch_state,
+        col_width,
+    );
+    add_mode_row(
+        cb,
+        font,
+        &restored_values,
+        current_values,
+        mismatch_state,
+        col_width,
+    );
 }
 
 fn add_restored_header(
@@ -191,8 +229,8 @@ fn add_restored_header(
 fn add_position_rows(
     cb: &mut ChildSpawnerCommands,
     font: &TextFont,
-    restored: &RestoredValues,
-    current: &CurrentValues,
+    restored_values: &RestoredValues,
+    current_values: &CurrentValues,
     mismatch_state: Option<&CachedMismatchState>,
     col_width: usize,
 ) {
@@ -201,8 +239,8 @@ fn add_position_rows(
         font,
         &ComparisonRow {
             label:    "Position (physical):",
-            restored: restored.physical_position.clone(),
-            current:  current.position_phys.clone(),
+            restored: restored_values.physical_position.clone(),
+            current:  current_values.position_phys.clone(),
             mismatch: mismatch_state.map(|mismatch| ComparisonMismatch {
                 expected: mismatch.physical_position.expected.map_or_else(
                     || "None".to_string(),
@@ -221,8 +259,8 @@ fn add_position_rows(
         font,
         &ComparisonRow {
             label:    "Position (logical):",
-            restored: restored.logical_position.clone(),
-            current:  current.position_log.clone(),
+            restored: restored_values.logical_position.clone(),
+            current:  current_values.position_log.clone(),
             mismatch: mismatch_state.map(|mismatch| ComparisonMismatch {
                 expected: mismatch.logical_position.expected.map_or_else(
                     || "None".to_string(),
@@ -241,8 +279,8 @@ fn add_position_rows(
 fn add_size_rows(
     cb: &mut ChildSpawnerCommands,
     font: &TextFont,
-    restored: &RestoredValues,
-    current: &CurrentValues,
+    restored_values: &RestoredValues,
+    current_values: &CurrentValues,
     mismatch_state: Option<&CachedMismatchState>,
     col_width: usize,
 ) {
@@ -251,8 +289,8 @@ fn add_size_rows(
         font,
         &ComparisonRow {
             label:    "Size (physical):",
-            restored: restored.physical_size.clone(),
-            current:  current.size_phys.clone(),
+            restored: restored_values.physical_size.clone(),
+            current:  current_values.size_phys.clone(),
             mismatch: mismatch_state.map(|mismatch| ComparisonMismatch {
                 expected: format!(
                     "{}x{}",
@@ -271,8 +309,8 @@ fn add_size_rows(
         font,
         &ComparisonRow {
             label:    "Size (logical):",
-            restored: restored.logical_size.clone(),
-            current:  current.size_log.clone(),
+            restored: restored_values.logical_size.clone(),
+            current:  current_values.size_log.clone(),
             mismatch: mismatch_state.map(|mismatch| ComparisonMismatch {
                 expected: format!(
                     "{}x{}",
@@ -291,7 +329,7 @@ fn add_size_rows(
 fn add_scale_row(
     cb: &mut ChildSpawnerCommands,
     font: &TextFont,
-    current: &CurrentValues,
+    current_values: &CurrentValues,
     mismatch_state: Option<&CachedMismatchState>,
     col_width: usize,
 ) {
@@ -301,7 +339,7 @@ fn add_scale_row(
             font,
             &format!(
                 "{:<LABEL_WIDTH$}{:<col_width$}{}\n",
-                "Scale:", "", current.scale
+                "Scale:", "", current_values.scale
             ),
             DEFAULT_COLOR,
         );
@@ -311,7 +349,7 @@ fn add_scale_row(
     let row = ComparisonRow {
         label:    "Scale:",
         restored: String::new(),
-        current:  current.scale.clone(),
+        current:  current_values.scale.clone(),
         mismatch: mismatch_state.map(|mismatch| ComparisonMismatch {
             expected: mismatch.scale.expected.to_string(),
             actual:   mismatch.scale.actual.to_string(),
@@ -323,8 +361,8 @@ fn add_scale_row(
 fn add_monitor_row(
     cb: &mut ChildSpawnerCommands,
     font: &TextFont,
-    restored: &RestoredValues,
-    current: &CurrentValues,
+    restored_values: &RestoredValues,
+    current_values: &CurrentValues,
     mismatch_state: Option<&CachedMismatchState>,
     col_width: usize,
 ) {
@@ -333,8 +371,8 @@ fn add_monitor_row(
         font,
         &ComparisonRow {
             label:    "Monitor:",
-            restored: restored.monitor.clone(),
-            current:  current.monitor.clone(),
+            restored: restored_values.monitor.clone(),
+            current:  current_values.monitor.clone(),
             mismatch: mismatch_state.map(|mismatch| ComparisonMismatch {
                 expected: mismatch.monitor.expected.to_string(),
                 actual:   mismatch.monitor.actual.to_string(),
@@ -347,8 +385,8 @@ fn add_monitor_row(
 fn add_mode_row(
     cb: &mut ChildSpawnerCommands,
     font: &TextFont,
-    restored: &RestoredValues,
-    current: &CurrentValues,
+    restored_values: &RestoredValues,
+    current_values: &CurrentValues,
     mismatch_state: Option<&CachedMismatchState>,
     col_width: usize,
 ) {
@@ -357,8 +395,8 @@ fn add_mode_row(
         font,
         &ComparisonRow {
             label:    "Mode:",
-            restored: restored.mode.clone(),
-            current:  current.mode.clone(),
+            restored: restored_values.mode.clone(),
+            current:  current_values.mode.clone(),
             mismatch: mismatch_state.map(|mismatch| ComparisonMismatch {
                 expected: format!("{:?}", mismatch.mode.expected),
                 actual:   format!("{:?}", mismatch.mode.actual),
@@ -371,7 +409,7 @@ fn add_mode_row(
 /// Render current-only values when no restore data exists.
 fn build_current_only_spans(
     cb: &mut ChildSpawnerCommands,
-    current: &CurrentValues,
+    current_values: &CurrentValues,
     font: &TextFont,
 ) {
     add_span(cb, font, "State: No restore data\n\n", MISMATCH_COLOR);
@@ -380,7 +418,7 @@ fn build_current_only_spans(
         font,
         &format!(
             "{:<LABEL_WIDTH$}{}\n",
-            "Position (physical):", current.position_phys
+            "Position (physical):", current_values.position_phys
         ),
         DEFAULT_COLOR,
     );
@@ -389,7 +427,7 @@ fn build_current_only_spans(
         font,
         &format!(
             "{:<LABEL_WIDTH$}{}\n",
-            "Position (logical):", current.position_log
+            "Position (logical):", current_values.position_log
         ),
         DEFAULT_COLOR,
     );
@@ -398,32 +436,35 @@ fn build_current_only_spans(
         font,
         &format!(
             "{:<LABEL_WIDTH$}{}\n",
-            "Size (physical):", current.size_phys
+            "Size (physical):", current_values.size_phys
         ),
         DEFAULT_COLOR,
     );
     add_span(
         cb,
         font,
-        &format!("{:<LABEL_WIDTH$}{}\n", "Size (logical):", current.size_log),
+        &format!(
+            "{:<LABEL_WIDTH$}{}\n",
+            "Size (logical):", current_values.size_log
+        ),
         DEFAULT_COLOR,
     );
     add_span(
         cb,
         font,
-        &format!("{:<LABEL_WIDTH$}{}\n", "Scale:", current.scale),
+        &format!("{:<LABEL_WIDTH$}{}\n", "Scale:", current_values.scale),
         DEFAULT_COLOR,
     );
     add_span(
         cb,
         font,
-        &format!("{:<LABEL_WIDTH$}{}\n", "Monitor:", current.monitor),
+        &format!("{:<LABEL_WIDTH$}{}\n", "Monitor:", current_values.monitor),
         DEFAULT_COLOR,
     );
     add_span(
         cb,
         font,
-        &format!("{:<LABEL_WIDTH$}{}\n", "Mode:", current.mode),
+        &format!("{:<LABEL_WIDTH$}{}\n", "Mode:", current_values.mode),
         DEFAULT_COLOR,
     );
 }

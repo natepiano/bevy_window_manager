@@ -74,13 +74,13 @@ fn update_info_text(
     bevy_monitors: Query<&Monitor>,
     mut text: Single<&mut Text, With<InfoText>>,
 ) {
-    let (window, monitor) = *window_query;
-    let effective_mode = monitor.effective_mode;
+    let (window, current_monitor) = *window_query;
+    let effective_mode = current_monitor.effective_mode;
 
     // Find refresh rate from Bevy's `Monitor` by matching position.
     let refresh_rate = bevy_monitors
         .iter()
-        .find(|m| m.physical_position == monitor.physical_position)
+        .find(|monitor| monitor.physical_position == current_monitor.physical_position)
         .and_then(|m| m.refresh_rate_millihertz)
         .map(|r| r / 1000);
 
@@ -102,12 +102,12 @@ fn update_info_text(
         window.physical_height(),
         window.mode,
         effective_mode,
-        monitor.index,
-        monitor.physical_position.x,
-        monitor.physical_position.y,
-        monitor.physical_size.x,
-        monitor.physical_size.y,
-        monitor.scale,
+        current_monitor.index,
+        current_monitor.physical_position.x,
+        current_monitor.physical_position.y,
+        current_monitor.physical_size.x,
+        current_monitor.physical_size.y,
+        current_monitor.scale,
         refresh_display
     );
 }

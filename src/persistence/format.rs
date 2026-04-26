@@ -88,7 +88,7 @@ struct VersionProbe {
 pub(super) fn decode(contents: &str) -> Option<HashMap<WindowKey, WindowState>> {
     // Probe the version field without requiring any particular entry shape.
     if let Ok(probe) = ron::from_str::<VersionProbe>(contents) {
-        return match probe.version {
+        match probe.version {
             1 => decode_v1(contents),
             2 => decode_v2(contents),
             unsupported => {
@@ -98,13 +98,13 @@ pub(super) fn decode(contents: &str) -> Option<HashMap<WindowKey, WindowState>> 
                 );
                 None
             },
-        };
+        }
+    } else {
+        // Legacy unversioned format — bare `WindowState` from before multi-window
+        // support. Cannot participate in the version match above because it has no
+        // `version` field.
+        decode_legacy_single_window(contents)
     }
-
-    // Legacy unversioned format — bare `WindowState` from before multi-window
-    // support. Cannot participate in the version match above because it has no
-    // `version` field.
-    decode_legacy_single_window(contents)
 }
 
 /// v1 window state layout (used `width`/`height` field names).

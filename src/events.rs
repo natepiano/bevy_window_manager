@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use bevy::window::WindowMode;
 
-use crate::WindowKey;
+use super::WindowKey;
 
 /// Event fired when a window restore completes and the window becomes visible.
 ///
