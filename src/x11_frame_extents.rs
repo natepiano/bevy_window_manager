@@ -14,6 +14,7 @@ use bevy::prelude::*;
 use bevy::winit::WINIT_WINDOWS;
 use bevy_kana::ToI32;
 use bevy_kana::ToU32;
+use bevy_kana::ToUsize;
 use raw_window_handle::HasWindowHandle;
 use raw_window_handle::RawWindowHandle;
 use x11rb::protocol::xproto::AtomEnum;
@@ -48,7 +49,7 @@ fn query_frame_top(window_id: u32) -> Option<i32> {
     let property = property_cookie.reply().ok()?;
 
     let values: Vec<u32> = property.value32()?.collect();
-    if values.len() >= FRAME_EXTENT_COUNT as usize {
+    if values.len() >= FRAME_EXTENT_COUNT.to_usize() {
         Some(values[FRAME_EXTENT_TOP_INDEX].to_i32()) // top extent
     } else {
         None

@@ -8,8 +8,8 @@ use std::path::PathBuf;
 use super::format;
 use super::format::WindowKey;
 #[cfg(test)]
-use super::types::SavedWindowMode;
-use super::types::WindowState;
+use super::state::SavedWindowMode;
+use super::state::WindowState;
 use crate::constants::STATE_FILE;
 
 /// Get the default state file path using the executable name.
@@ -21,7 +21,7 @@ use crate::constants::STATE_FILE;
 pub(crate) fn get_default_state_path() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let exe_name = exe.file_stem()?.to_str()?;
-    let is_cargo_example = exe.parent().and_then(|p| p.file_name()) == Some("examples".as_ref());
+    let is_cargo_example = exe.parent().and_then(Path::file_name) == Some("examples".as_ref());
 
     if is_cargo_example {
         dirs::config_dir().map(|d| {

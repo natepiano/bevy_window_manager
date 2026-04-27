@@ -36,9 +36,9 @@ use serde::Deserialize;
 use serde::Serialize;
 
 #[cfg(test)]
-use super::types::SavedVideoMode;
-use super::types::SavedWindowMode;
-use super::types::WindowState;
+use super::state::SavedVideoMode;
+use super::state::SavedWindowMode;
+use super::state::WindowState;
 use crate::constants::CURRENT_STATE_VERSION;
 use crate::constants::DEFAULT_SCALE_FACTOR;
 use crate::constants::PRIMARY_WINDOW_KEY;

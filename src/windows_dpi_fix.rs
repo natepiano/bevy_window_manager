@@ -5,7 +5,7 @@
 //! when dragged between monitors.
 //!
 //! This module subclasses the window to intercept `WM_DPICHANGED` and handle it
-//! using Microsoft's recommended simple approach: use the suggested RECT from lparam.
+//! using Microsoft's recommended simple approach: use the suggested `RECT` from `lparam`.
 //!
 //! See: <https://github.com/rust-windowing/winit/issues/4041>
 //!
@@ -34,21 +34,21 @@ use windows::Win32::UI::WindowsAndMessaging::WM_DPICHANGED;
 use super::ManagedWindow;
 use super::constants::SUBCLASS_ID;
 
-/// Wrapper around HWND that implements Send + Sync.
+/// Wrapper around `HWND` that implements `Send` + `Sync`.
 ///
 /// # Safety
 ///
-/// HWND is a handle to a window created on the main thread. Window handles
+/// `HWND` is a handle to a window created on the main thread. Window handles
 /// are valid to use from any thread for read-only operations like removing
 /// a subclass. The guard only stores the handle and removes the subclass on drop.
 struct SendSyncHwnd(HWND);
 
-// SAFETY: HWND is just a pointer/handle that can be sent between threads.
+// SAFETY: `HWND` is just a pointer/handle that can be sent between threads.
 // The actual window operations are thread-safe when using proper Win32 APIs.
 unsafe impl Send for SendSyncHwnd {}
 unsafe impl Sync for SendSyncHwnd {}
 
-/// Get the HWND from a Bevy window entity.
+/// Get the `HWND` from a Bevy window entity.
 fn get_hwnd(window_entity: Entity) -> Option<HWND> {
     WINIT_WINDOWS.with(|winit_windows| {
         let winit_windows = winit_windows.borrow();
@@ -62,13 +62,13 @@ fn get_hwnd(window_entity: Entity) -> Option<HWND> {
 
 /// Handle `WM_DPICHANGED` using Microsoft's recommended simple approach.
 ///
-/// The lparam contains a pointer to a RECT with the suggested new size/position.
+/// The `lparam` contains a pointer to a `RECT` with the suggested new size/position.
 /// We simply apply it using `SetWindowPos`.
 fn handle_dpi_changed(hwnd: HWND, lparam: LPARAM) -> LRESULT {
-    // SAFETY: lparam is a valid pointer to RECT per `WM_DPICHANGED` contract
+    // SAFETY: `lparam` is a valid pointer to `RECT` per the `WM_DPICHANGED` contract.
     let suggested_rect = unsafe { &*(lparam.0 as *const RECT) };
 
-    // SAFETY: SetWindowPos is safe with valid HWND and dimensions
+    // SAFETY: `SetWindowPos` is safe with a valid `HWND` and dimensions.
     let result = unsafe {
         SetWindowPos(
             hwnd,
@@ -106,8 +106,8 @@ unsafe extern "system" fn subclass_proc(
         return handle_dpi_changed(hwnd, lparam);
     }
 
-    // Pass all other messages to the original window procedure
-    // SAFETY: DefSubclassProc is safe when called from a subclass proc
+    // Pass all other messages to the original window procedure.
+    // SAFETY: `DefSubclassProc` is safe when called from a subclass proc.
     unsafe { DefSubclassProc(hwnd, msg, wparam, lparam) }
 }
 
@@ -119,7 +119,7 @@ pub(crate) struct DpiFixGuard {
 
 impl Drop for DpiFixGuard {
     fn drop(&mut self) {
-        // SAFETY: RemoveWindowSubclass is safe with valid HWND and matching subclass ID
+        // SAFETY: `RemoveWindowSubclass` is safe with a valid `HWND` and matching subclass ID.
         let result = unsafe { RemoveWindowSubclass(self.hwnd.0, Some(subclass_proc), SUBCLASS_ID) };
         if result.as_bool() {
             debug!("[windows_dpi_fix] Removed DPI fix subclass");
@@ -138,7 +138,7 @@ pub(crate) fn install_dpi_fix(
         return;
     };
 
-    // SAFETY: SetWindowSubclass is safe with valid HWND
+    // SAFETY: `SetWindowSubclass` is safe with a valid `HWND`.
     let result = unsafe { SetWindowSubclass(hwnd, Some(subclass_proc), SUBCLASS_ID, 0) };
 
     if result.as_bool() {
@@ -162,7 +162,7 @@ pub(crate) fn install_dpi_fix_on_managed(
             continue;
         };
 
-        // SAFETY: SetWindowSubclass is safe with valid HWND
+        // SAFETY: `SetWindowSubclass` is safe with a valid `HWND`.
         let result = unsafe { SetWindowSubclass(hwnd, Some(subclass_proc), SUBCLASS_ID, 0) };
 
         if result.as_bool() {

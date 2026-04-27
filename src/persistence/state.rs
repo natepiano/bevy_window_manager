@@ -1,4 +1,4 @@
-//! Saved/persistence types for window state serialization.
+//! Saved window state types for persistence serialization.
 
 #![allow(
     clippy::used_underscore_binding,
