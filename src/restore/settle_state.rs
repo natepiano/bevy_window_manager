@@ -9,8 +9,8 @@ use bevy::window::WindowMode;
 use bevy_kana::ToI32;
 use bevy_kana::ToU32;
 
-use super::target::TargetPosition;
-use super::target::X11FrameCompensated;
+use super::target_position::TargetPosition;
+use super::winit_info::X11FrameCompensated;
 use crate::ManagedWindow;
 use crate::Platform;
 use crate::WindowKey;
@@ -22,13 +22,13 @@ use crate::monitors::CurrentMonitor;
 
 /// Tracks the two-timer settling state after restore completes.
 #[derive(Debug, Clone, Reflect)]
-pub struct SettleState {
+pub(super) struct SettleState {
     /// Hard deadline timer — fires mismatch if stability is never reached.
-    pub total_timeout:   Timer,
+    total_timeout:   Timer,
     /// Resets whenever any compared value changes between frames.
-    pub stability_timer: Timer,
+    stability_timer: Timer,
     /// Snapshot of last frame's compared values, used to detect changes.
-    pub last_snapshot:   Option<SettleSnapshot>,
+    last_snapshot:   Option<SettleSnapshot>,
 }
 
 impl SettleState {
@@ -45,11 +45,11 @@ impl SettleState {
 
 /// Snapshot of compared values for change detection between frames.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect)]
-pub struct SettleSnapshot {
-    pub physical_position: Option<IVec2>,
-    pub physical_size:     UVec2,
-    pub mode:              WindowMode,
-    pub monitor:           usize,
+struct SettleSnapshot {
+    physical_position: Option<IVec2>,
+    physical_size:     UVec2,
+    mode:              WindowMode,
+    monitor:           usize,
 }
 
 /// Build a [`SettleSnapshot`] from the current window state, returning the snapshot
@@ -229,7 +229,6 @@ pub fn check_restore_settling(
     platform: Res<Platform>,
 ) {
     for (entity, mut target, window, current_monitor) in &mut windows {
-        // Read target fields before borrowing settle_state mutably
         let target_mode = target.mode.to_window_mode(target.monitor_index);
         let target_physical_size = target.physical_size;
         let target_logical_size = target.logical_size;
@@ -248,7 +247,6 @@ pub fn check_restore_settling(
         let (current_snapshot, actual_scale) =
             build_actual_snapshot(window, current_monitor, *platform);
 
-        // Now borrow settle_state mutably for timer ticking and change detection
         let Some(settle) = target.settle_state.as_mut() else {
             continue;
         };

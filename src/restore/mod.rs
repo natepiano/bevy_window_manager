@@ -1,22 +1,20 @@
-//! Window restore pipeline: target definition, planning, execution, and verification.
+//! Window restore startup, target state, and settle verification.
 
-mod apply;
-mod plan;
-mod settle;
-mod target;
+mod settle_state;
+mod target_position;
+mod winit_info;
 
-pub(crate) use apply::init_winit_info;
-pub(crate) use apply::load_target_position;
-#[cfg(target_os = "linux")]
-pub(crate) use apply::move_to_target_monitor;
-pub(crate) use apply::restore_windows;
-pub(crate) use plan::MonitorResolutionSource;
-pub(crate) use plan::compute_target_position;
-pub(crate) use plan::resolve_target_monitor_and_position;
-pub(crate) use settle::check_restore_settling;
-pub(crate) use target::FullscreenRestoreState;
-pub(crate) use target::MonitorScaleStrategy;
-pub(crate) use target::TargetPosition;
-pub(crate) use target::WindowRestoreState;
-pub(crate) use target::WinitInfo;
-pub(crate) use target::X11FrameCompensated;
+pub(crate) use settle_state::check_restore_settling;
+pub(crate) use target_position::FullscreenRestoreState;
+pub(crate) use target_position::MonitorResolutionSource;
+pub(crate) use target_position::MonitorScaleStrategy;
+pub(crate) use target_position::TargetPosition;
+pub(crate) use target_position::WindowRestoreState;
+pub(crate) use target_position::compute_target_position;
+pub(crate) use target_position::resolve_target_monitor_and_position;
+pub(crate) use target_position::restore_windows;
+pub(crate) use winit_info::WinitInfo;
+pub(crate) use winit_info::X11FrameCompensated;
+pub(crate) use winit_info::init_winit_info;
+pub(crate) use winit_info::load_target_position;
+pub(crate) use winit_info::move_to_target_monitor;

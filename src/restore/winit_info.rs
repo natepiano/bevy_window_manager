@@ -2,10 +2,12 @@ use bevy::ecs::system::NonSendMarker;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy::window::WindowMode;
-#[cfg(target_os = "linux")]
 use bevy::window::WindowPosition;
 use bevy::winit::WINIT_WINDOWS;
 
+use super::target_position;
+use super::target_position::MonitorResolutionSource;
+use super::target_position::TargetPosition;
 use crate::Platform;
 use crate::WindowKey;
 use crate::config::RestoreWindowConfig;
@@ -15,12 +17,40 @@ use crate::monitors::Monitors;
 use crate::persistence;
 #[cfg(all(target_os = "windows", feature = "workaround-winit-3124"))]
 use crate::persistence::SavedWindowMode;
-use crate::restore::plan;
-#[cfg(target_os = "linux")]
-use crate::restore::target::TargetPosition;
-use crate::restore::target::WindowDecoration;
-use crate::restore::target::WinitInfo;
-use crate::restore::target::X11FrameCompensated;
+
+/// Window decoration dimensions (title bar, borders).
+struct WindowDecoration {
+    physical_width:  u32,
+    physical_height: u32,
+}
+
+/// Information from winit captured at startup.
+#[derive(Resource)]
+pub struct WinitInfo {
+    starting_monitor_index: usize,
+    decoration:             WindowDecoration,
+}
+
+impl WinitInfo {
+    /// Get window decoration dimensions as a `UVec2`.
+    #[must_use]
+    pub const fn decoration(&self) -> UVec2 {
+        UVec2::new(
+            self.decoration.physical_width,
+            self.decoration.physical_height,
+        )
+    }
+}
+
+/// Token indicating X11 frame extent compensation is complete (W6 workaround).
+///
+/// This component gates `restore_windows` - the restore system cannot process
+/// a window until this token exists on the entity. On Linux X11 with W6 workaround
+/// enabled, this ensures frame extents are queried and position is compensated
+/// before restore proceeds. On other platforms/configurations, the token is
+/// inserted immediately during `load_target_position` since no compensation is needed.
+#[derive(Component)]
+pub struct X11FrameCompensated;
 
 /// Populate `WinitInfo` resource from winit (decoration and starting monitor).
 ///
@@ -142,19 +172,19 @@ pub fn load_target_position(
         .by_index(starting_monitor_index)
         .map_or(DEFAULT_SCALE_FACTOR, |monitor| monitor.scale);
 
-    let resolved =
-        plan::resolve_target_monitor_and_position(state.monitor, state.logical_position, &monitors);
-    if matches!(
-        resolved.source,
-        plan::MonitorResolutionSource::FallbackToPrimary
-    ) {
+    let resolved = target_position::resolve_target_monitor_and_position(
+        state.monitor,
+        state.logical_position,
+        &monitors,
+    );
+    if matches!(resolved.source, MonitorResolutionSource::FallbackToPrimary) {
         warn!(
             "[load_target_position] Target monitor {} not found, falling back to monitor 0",
             state.monitor
         );
     }
 
-    let target = plan::compute_target_position(
+    let target = target_position::compute_target_position(
         &state,
         resolved.info,
         resolved.logical_position,
@@ -191,13 +221,16 @@ pub fn load_target_position(
 }
 
 /// Move the primary window to the target monitor for fullscreen restore on X11.
-#[cfg(target_os = "linux")]
+///
+/// Body is platform-neutral Bevy code; only the `add_systems` registration in
+/// `lib.rs` is gated to Linux. The early `is_wayland` check makes the system
+/// inert on Wayland; non-Linux platforms never schedule it at all.
 pub fn move_to_target_monitor(
     mut window: Single<&mut Window, With<PrimaryWindow>>,
     targets: Query<&TargetPosition, With<PrimaryWindow>>,
     platform: Res<Platform>,
 ) {
-    if platform.is_wayland() {
+    if !platform.is_x11() {
         return;
     }
 

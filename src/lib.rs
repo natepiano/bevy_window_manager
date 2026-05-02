@@ -47,7 +47,7 @@ mod restore;
 #[cfg(all(target_os = "windows", feature = "workaround-winit-4341"))]
 mod windows_dpi_fix;
 #[cfg(all(target_os = "linux", feature = "workaround-winit-4445"))]
-mod x11_frame_extents;
+mod x11_position_fix;
 
 use std::path::PathBuf;
 
@@ -196,35 +196,27 @@ impl Plugin for WindowManagerPluginCustomPath {
             .add_observer(observers::on_managed_window_added)
             .add_observer(observers::on_managed_window_removed)
             .add_observer(observers::on_managed_window_load)
-            .add_systems(PreStartup, {
-                #[cfg(target_os = "linux")]
-                {
-                    // X11 fullscreen: move window to target monitor before first event loop.
-                    // Must be chained (not `.after()`) so `apply_deferred` runs between
-                    // `load_target_position` and `move_to_target_monitor` — otherwise the
-                    // `TargetPosition` component inserted via deferred commands won't exist yet.
-                    (
-                        restore::init_winit_info,
-                        restore::load_target_position,
-                        restore::move_to_target_monitor,
-                    )
-                        .chain()
-                        .after(monitors::init_monitors)
-                }
-                #[cfg(not(target_os = "linux"))]
-                {
-                    (restore::init_winit_info, restore::load_target_position)
-                        .chain()
-                        .after(monitors::init_monitors)
-                }
-            });
+            .add_systems(
+                PreStartup,
+                // X11 fullscreen: move window to target monitor before first event loop.
+                // Must be chained (not `.after()`) so `apply_deferred` runs between
+                // `load_target_position` and `move_to_target_monitor` — otherwise the
+                // `TargetPosition` component inserted via deferred commands won't exist yet.
+                // `move_to_target_monitor` self-guards on `platform.is_x11()`.
+                (
+                    restore::init_winit_info,
+                    restore::load_target_position,
+                    restore::move_to_target_monitor,
+                )
+                    .chain()
+                    .after(monitors::init_monitors),
+            );
 
-        // X11 frame extent compensation (Linux + W6 + X11 only)
-        // Runs until all restoring windows have the `X11FrameCompensated` component
+        // X11 frame extent compensation (W6 workaround, winit #4445).
         #[cfg(all(target_os = "linux", feature = "workaround-winit-4445"))]
         app.add_systems(
             Update,
-            x11_frame_extents::compensate_target_position
+            x11_position_fix::compensate_target_position
                 .run_if(observers::has_restoring_windows)
                 .run_if(|p: Res<Platform>| p.is_x11()),
         );
