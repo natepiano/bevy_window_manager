@@ -1,13 +1,13 @@
 //! Cross-module constants.
 
+// Managed window naming
+/// First numeric suffix appended to deduplicate a managed window name (e.g. `name-2`).
+pub(crate) const FIRST_DUPLICATE_SUFFIX: u32 = 2;
+
 // Persistence
 pub(crate) const CURRENT_STATE_VERSION: u8 = 2;
 pub(crate) const PRIMARY_WINDOW_KEY: &str = "primary";
 pub(crate) const STATE_FILE: &str = "windows.ron";
-
-// Managed window naming
-/// First numeric suffix appended to deduplicate a managed window name (e.g. `name-2`).
-pub(crate) const FIRST_DUPLICATE_SUFFIX: u32 = 2;
 
 // Scale factor
 /// Fallback scale factor when the monitor cannot be determined.
