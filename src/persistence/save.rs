@@ -51,10 +51,10 @@ pub fn save_all_states(
 /// Cached window state for change detection comparison.
 #[derive(Default)]
 pub struct CachedWindowState {
-    position: Option<IVec2>,
-    size:     UVec2,
-    mode:     Option<SavedWindowMode>,
-    monitor:  Option<usize>,
+    physical_position: Option<IVec2>,
+    logical_size:      UVec2,
+    mode:              Option<SavedWindowMode>,
+    monitor:           Option<usize>,
 }
 
 /// Build state from all currently-active windows and write it to the state file.
@@ -105,7 +105,7 @@ pub fn save_active_window_state(
             continue;
         };
 
-        let pos = get_window_position(entity, window);
+        let physical_position = get_window_position(entity, window);
 
         let (monitor_index, monitor_scale) = existing_monitor.map_or_else(
             || {
@@ -116,7 +116,7 @@ pub fn save_active_window_state(
         );
         let mode: SavedWindowMode =
             existing_monitor.map_or_else(|| (&window.mode).into(), |m| (&m.effective_mode).into());
-        let position = pos.map(|p| {
+        let logical_position = physical_position.map(|p| {
             let logical_x = (f64::from(p.x) / monitor_scale).round().to_i32();
             let logical_y = (f64::from(p.y) / monitor_scale).round().to_i32();
             (logical_x, logical_y)
@@ -124,7 +124,7 @@ pub fn save_active_window_state(
         states.insert(
             key,
             WindowState {
-                logical_position: position,
+                logical_position,
                 logical_width: window.resolution.width().to_u32(),
                 logical_height: window.resolution.height().to_u32(),
                 scale: monitor_scale,
@@ -178,7 +178,7 @@ fn persist_remember_all(
             let monitor_scale = monitors
                 .by_index(monitor_index)
                 .map_or(DEFAULT_SCALE_FACTOR, |m| m.scale);
-            let position = entry.position.map(|p| {
+            let logical_position = entry.physical_position.map(|p| {
                 let logical_x = (f64::from(p.x) / monitor_scale).round().to_i32();
                 let logical_y = (f64::from(p.y) / monitor_scale).round().to_i32();
                 (logical_x, logical_y)
@@ -186,13 +186,13 @@ fn persist_remember_all(
             states.insert(
                 key,
                 WindowState {
-                    logical_position: position,
-                    logical_width:    entry.size.x,
-                    logical_height:   entry.size.y,
-                    scale:            monitor_scale,
-                    monitor:          monitor_index,
-                    mode:             mode.clone(),
-                    app_name:         app_name.clone(),
+                    logical_position,
+                    logical_width: entry.logical_size.x,
+                    logical_height: entry.logical_size.y,
+                    scale: monitor_scale,
+                    monitor: monitor_index,
+                    mode: mode.clone(),
+                    app_name: app_name.clone(),
                 },
             );
         }
@@ -252,7 +252,7 @@ pub fn save_window_state(
         };
 
         // Get window position for saving state.
-        let pos = get_window_position(window_entity, window);
+        let physical_position = get_window_position(window_entity, window);
 
         let physical_w = window.resolution.physical_width();
         let physical_h = window.resolution.physical_height();
@@ -275,8 +275,8 @@ pub fn save_window_state(
         let entry = cached.entry(window_entity).or_default();
 
         // Only save if position, size, or mode actually changed
-        let position_changed = entry.position != pos;
-        let size_changed = entry.size != UVec2::new(logical_w, logical_h);
+        let position_changed = entry.physical_position != physical_position;
+        let size_changed = entry.logical_size != UVec2::new(logical_w, logical_h);
         let mode_changed = entry.mode.as_ref() != Some(&mode);
         let monitor_changed = entry.monitor != Some(monitor_index);
 
@@ -285,7 +285,7 @@ pub fn save_window_state(
         }
 
         debug!(
-            "[save_window_state] [{key}] SAVE DETAIL: pos={pos:?} physical={physical_w}x{physical_h} logical={logical_w}x{logical_h} res_scale={res_scale} monitor={monitor_index} mode={mode:?}",
+            "[save_window_state] [{key}] SAVE DETAIL: pos={physical_position:?} physical={physical_w}x{physical_h} logical={logical_w}x{logical_h} res_scale={res_scale} monitor={monitor_index} mode={mode:?}",
         );
 
         // Log monitor transitions with detailed info
@@ -301,15 +301,15 @@ pub fn save_window_state(
         }
 
         // Update cache
-        entry.position = pos;
-        entry.size = UVec2::new(logical_w, logical_h);
+        entry.physical_position = physical_position;
+        entry.logical_size = UVec2::new(logical_w, logical_h);
         entry.mode = Some(mode.clone());
         entry.monitor = Some(monitor_index);
 
         any_changed = true;
 
         debug!(
-            "[save_window_state] [{key}] pos={pos:?} logical={logical_w}x{logical_h} physical={physical_w}x{physical_h} monitor={monitor_index} scale={monitor_scale} mode={mode:?}",
+            "[save_window_state] [{key}] pos={physical_position:?} logical={logical_w}x{logical_h} physical={physical_w}x{physical_h} monitor={monitor_index} scale={monitor_scale} mode={mode:?}",
         );
     }
 

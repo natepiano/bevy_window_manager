@@ -11,6 +11,11 @@ use bevy_window_manager::Monitors;
 #[cfg(target_os = "linux")]
 use bevy_window_manager::Platform;
 
+use super::constants::BACKWARD_SCROLL_OFFSET;
+use super::constants::FORWARD_SCROLL_OFFSET;
+use super::constants::MILLIHERTZ_PER_HERTZ;
+use super::constants::VIDEO_MODE_CENTER_PADDING;
+use super::constants::VISIBLE_VIDEO_MODE_COUNT;
 use super::events::ClearStateAndQuit;
 use super::events::QuitApp;
 use super::events::RestoredStates;
@@ -129,7 +134,9 @@ pub(crate) fn get_video_modes_for_monitor<'a>(
         .map(|(_, bevy_monitor)| {
             (
                 bevy_monitor.video_modes.iter().collect(),
-                bevy_monitor.refresh_rate_millihertz.map(|rate| rate / 1000),
+                bevy_monitor
+                    .refresh_rate_millihertz
+                    .map(|rate| rate / MILLIHERTZ_PER_HERTZ),
             )
         })
         .unwrap_or_default()
@@ -138,7 +145,7 @@ pub(crate) fn get_video_modes_for_monitor<'a>(
 pub(crate) fn format_refresh_rate(window: &Window, monitor_refresh: Option<u32>) -> String {
     let active_refresh = match &window.mode {
         WindowMode::Fullscreen(_, VideoModeSelection::Specific(mode)) => {
-            Some(mode.refresh_rate_millihertz / 1000)
+            Some(mode.refresh_rate_millihertz / MILLIHERTZ_PER_HERTZ)
         },
         _ => monitor_refresh,
     };
@@ -217,23 +224,23 @@ pub(crate) fn build_video_modes_display(
     let selected_idx = selected_idx.min(video_modes.len().saturating_sub(1));
     let len = video_modes.len();
 
-    let start = if len <= 5 {
+    let start = if len <= VISIBLE_VIDEO_MODE_COUNT {
         0
     } else {
         let center_target = active_mode_idx.unwrap_or(selected_idx);
-        let ideal_start = center_target.saturating_sub(2);
-        let ideal_end = ideal_start + 5;
+        let ideal_start = center_target.saturating_sub(VIDEO_MODE_CENTER_PADDING);
+        let ideal_end = ideal_start + VISIBLE_VIDEO_MODE_COUNT;
 
         if selected_idx < ideal_start {
-            selected_idx.saturating_sub(2)
+            selected_idx.saturating_sub(BACKWARD_SCROLL_OFFSET)
         } else if selected_idx >= ideal_end {
-            (selected_idx + 3).saturating_sub(5)
+            (selected_idx + FORWARD_SCROLL_OFFSET).saturating_sub(VISIBLE_VIDEO_MODE_COUNT)
         } else {
             ideal_start
         }
-        .min(len.saturating_sub(5))
+        .min(len.saturating_sub(VISIBLE_VIDEO_MODE_COUNT))
     };
-    let end = (start + 5).min(len);
+    let end = (start + VISIBLE_VIDEO_MODE_COUNT).min(len);
 
     video_modes[start..end]
         .iter()
@@ -250,7 +257,7 @@ pub(crate) fn build_video_modes_display(
                 "  {left_marker} {}x{} @ {}Hz{right_marker}",
                 mode.physical_size.x,
                 mode.physical_size.y,
-                mode.refresh_rate_millihertz / 1000
+                mode.refresh_rate_millihertz / MILLIHERTZ_PER_HERTZ
             )
         })
         .collect::<Vec<_>>()

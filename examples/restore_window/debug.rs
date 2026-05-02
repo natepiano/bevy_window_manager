@@ -55,11 +55,11 @@ pub(crate) fn debug_winit_monitor(
 
 #[derive(Default)]
 pub(crate) struct CachedWindowDebug {
-    position: Option<WindowPosition>,
-    width:    u32,
-    height:   u32,
-    mode:     Option<WindowMode>,
-    focus:    FocusState,
+    position:        Option<WindowPosition>,
+    physical_width:  u32,
+    physical_height: u32,
+    mode:            Option<WindowMode>,
+    focus:           FocusState,
 }
 
 pub(crate) fn debug_window_changed(
@@ -69,8 +69,8 @@ pub(crate) fn debug_window_changed(
     let window = *window;
 
     let position_changed = cached.position.as_ref() != Some(&window.position);
-    let size_changed =
-        cached.width != window.physical_width() || cached.height != window.physical_height();
+    let size_changed = cached.physical_width != window.physical_width()
+        || cached.physical_height != window.physical_height();
     let mode_changed = cached.mode.as_ref() != Some(&window.mode);
     let focus = FocusState::from(window.focused);
     let focused_changed = cached.focus != focus;
@@ -85,8 +85,8 @@ pub(crate) fn debug_window_changed(
     if size_changed {
         changes.push(format!(
             "size: {}x{} -> {}x{}",
-            cached.width,
-            cached.height,
+            cached.physical_width,
+            cached.physical_height,
             window.physical_width(),
             window.physical_height()
         ));
@@ -103,8 +103,8 @@ pub(crate) fn debug_window_changed(
     }
 
     cached.position = Some(window.position);
-    cached.width = window.physical_width();
-    cached.height = window.physical_height();
+    cached.physical_width = window.physical_width();
+    cached.physical_height = window.physical_height();
     cached.mode = Some(window.mode);
     cached.focus = focus;
 }

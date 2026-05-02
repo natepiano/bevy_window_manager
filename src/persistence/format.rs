@@ -107,26 +107,29 @@ pub(super) fn decode(contents: &str) -> Option<HashMap<WindowKey, WindowState>> 
     }
 }
 
-/// v1 window state layout (used `width`/`height` field names).
+/// v1 window state layout (used `width`/`height` field names on the wire).
 /// Used only for deserializing v1 and legacy files.
 #[derive(Debug, Clone, Deserialize)]
 struct WindowStateV1 {
-    position:      Option<(i32, i32)>,
-    width:         u32,
-    height:        u32,
-    monitor_index: usize,
-    mode:          SavedWindowMode,
+    #[serde(rename = "position")]
+    logical_position: Option<(i32, i32)>,
+    #[serde(rename = "width")]
+    logical_width:    u32,
+    #[serde(rename = "height")]
+    logical_height:   u32,
+    monitor_index:    usize,
+    mode:             SavedWindowMode,
     #[serde(default)]
-    app_name:      String,
+    app_name:         String,
 }
 
 impl WindowStateV1 {
     /// Convert to current `WindowState`, treating v1 values as logical (assumes scale 1.0).
     fn into_current(self) -> WindowState {
         WindowState {
-            logical_position: self.position,
-            logical_width:    self.width,
-            logical_height:   self.height,
+            logical_position: self.logical_position,
+            logical_width:    self.logical_width,
+            logical_height:   self.logical_height,
             scale:            DEFAULT_SCALE_FACTOR,
             monitor:          self.monitor_index,
             mode:             self.mode,

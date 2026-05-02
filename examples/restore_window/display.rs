@@ -9,9 +9,11 @@ use bevy_window_manager::ManagedWindow;
 use bevy_window_manager::ManagedWindowPersistence;
 use bevy_window_manager::Monitors;
 
+use super::constants::COMPARISON_COLUMN_PADDING;
 use super::constants::DEFAULT_COLOR;
 use super::constants::FONT_SIZE;
 use super::constants::LABEL_WIDTH;
+use super::constants::MIN_COMPARISON_COLUMN_WIDTH;
 use super::constants::MISMATCH_COLOR;
 use super::constants::MISMATCH_WARN_COLOR;
 use super::events::CachedMismatchState;
@@ -94,7 +96,7 @@ impl RestoredValues {
         .into_iter()
         .max()
         .unwrap_or(0)
-            + 2
+            + COMPARISON_COLUMN_PADDING
     }
 }
 
@@ -163,7 +165,9 @@ fn build_restored_spans(
     font: &TextFont,
 ) {
     let restored_values = RestoredValues::from(cached_restored_state);
-    let col_width = restored_values.comparison_width().max(16);
+    let col_width = restored_values
+        .comparison_width()
+        .max(MIN_COMPARISON_COLUMN_WIDTH);
     let layout = if mismatch_state.is_some() {
         ComparisonLayout::WithMismatchColumns
     } else {

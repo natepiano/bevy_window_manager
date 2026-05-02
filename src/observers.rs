@@ -10,6 +10,7 @@ use super::ManagedWindowPersistence;
 use super::WindowKey;
 use super::config::RestoreWindowConfig;
 use super::constants::DEFAULT_SCALE_FACTOR;
+use super::constants::FIRST_DUPLICATE_SUFFIX;
 use super::constants::PRIMARY_WINDOW_KEY;
 use super::managed::ManagedWindowRegistry;
 use super::monitors::CurrentMonitor;
@@ -74,7 +75,7 @@ pub(crate) fn on_managed_window_added(
 
     let unique_name = if registry.names.contains(&name) {
         debug_assert!(false, "Duplicate ManagedWindow name: \"{name}\"");
-        let mut suffix = 2;
+        let mut suffix = FIRST_DUPLICATE_SUFFIX;
         loop {
             let candidate = format!("{name}-{suffix}");
             if !registry.names.contains(&candidate) {
@@ -112,7 +113,7 @@ pub(crate) fn on_managed_window_added(
             },
             _ => *monitors.first(),
         };
-        let position = match window.position {
+        let logical_position = match window.position {
             WindowPosition::At(pos) => {
                 let logical_x = (f64::from(pos.x) / monitor.scale).round().to_i32();
                 let logical_y = (f64::from(pos.y) / monitor.scale).round().to_i32();
@@ -121,13 +122,13 @@ pub(crate) fn on_managed_window_added(
             _ => None,
         };
         let window_state = WindowState {
-            logical_position: position,
-            logical_width:    window.width().to_u32(),
-            logical_height:   window.height().to_u32(),
-            scale:            monitor.scale,
-            monitor:          monitor.index,
-            mode:             SavedWindowMode::Windowed,
-            app_name:         String::new(),
+            logical_position,
+            logical_width: window.width().to_u32(),
+            logical_height: window.height().to_u32(),
+            scale: monitor.scale,
+            monitor: monitor.index,
+            mode: SavedWindowMode::Windowed,
+            app_name: String::new(),
         };
 
         let mut states = existing.unwrap_or_default();

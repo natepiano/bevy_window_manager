@@ -23,6 +23,7 @@ use bevy_window_manager::WindowManagerPlugin;
 
 use self::constants::FONT_SIZE;
 use self::constants::MARGIN;
+use self::constants::MILLIHERTZ_PER_HERTZ;
 
 fn main() {
     App::new()
@@ -74,7 +75,7 @@ fn update_info_text(
         .iter()
         .find(|monitor| monitor.physical_position == current_monitor.physical_position)
         .and_then(|m| m.refresh_rate_millihertz)
-        .map(|r| r / 1000);
+        .map(|r| r / MILLIHERTZ_PER_HERTZ);
 
     let refresh_display = refresh_rate.map_or_else(|| "N/A".into(), |hz| format!("{hz}Hz"));
 
