@@ -68,7 +68,7 @@
           "validate": ["position", "size", "monitor_index", "mode"]
         },
         "window-1": {
-          "spawn_event": "restore_window::SpawnManagedWindow",
+          "spawn_event": "restore_window::events::SpawnManagedWindow",
           "validate": ["position", "size", "monitor_index", "mode"]
         }
       }
@@ -178,7 +178,7 @@
           "validate": ["position", "size", "monitor_index", "mode"]
         },
         "window-1": {
-          "spawn_event": "restore_window::SpawnManagedWindow",
+          "spawn_event": "restore_window::events::SpawnManagedWindow",
           "validate": ["position", "size", "monitor_index", "mode"]
         }
       }
@@ -197,7 +197,7 @@
           "validate": ["position", "size", "monitor_index", "mode"]
         },
         "window-1": {
-          "spawn_event": "restore_window::SpawnManagedWindow",
+          "spawn_event": "restore_window::events::SpawnManagedWindow",
           "validate": ["position", "size", "monitor_index", "mode"]
         }
       }
@@ -216,7 +216,7 @@
           "validate": ["position", "size", "monitor_index", "mode"]
         },
         "window-1": {
-          "spawn_event": "restore_window::SpawnManagedWindow",
+          "spawn_event": "restore_window::events::SpawnManagedWindow",
           "validate": ["position", "size", "monitor_index", "mode"]
         }
       }

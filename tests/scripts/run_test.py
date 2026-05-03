@@ -66,9 +66,9 @@ COMP_CURRENT_MONITOR: Final = "bevy_window_manager::monitors::CurrentMonitor"
 COMP_MONITORS: Final = "bevy_window_manager::monitors::Monitors"
 COMP_MONITOR: Final = "bevy_window::monitor::Monitor"
 COMP_PERSISTENCE: Final = "bevy_window_manager::managed::ManagedWindowPersistence"
-RES_RESTORED: Final = "restore_window::WindowRestoredReceived"
-RES_MISMATCH: Final = "restore_window::WindowRestoreMismatchReceived"
-RES_SETTLED_COUNT: Final = "restore_window::WindowsSettledCount"
+RES_RESTORED: Final = "restore_window::events::WindowRestoredReceived"
+RES_MISMATCH: Final = "restore_window::events::WindowRestoreMismatchReceived"
+RES_SETTLED_COUNT: Final = "restore_window::events::WindowsSettledCount"
 
 # JSON dict type alias for BRP responses (deeply nested, untyped JSON)
 type JsonDict = dict[str, object]
