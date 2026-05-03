@@ -12,6 +12,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `expected_logical_position` and `actual_logical_position` fields on `WindowRestoreMismatch` event. `actual_logical_position` is derived from the window's physical position divided by its current scale factor.
 - `logical_position` field on `TargetPosition` component (visible via BRP reflection).
 
+### Fixed
+
+- Restore now anchors a window with no saved position on its saved monitor via `WindowPosition::Centered`. Previously the saved `monitor_index` was ignored when `logical_position` was `None`, so the window landed on whichever monitor winit defaulted to. No-op on Wayland (no client-side positioning).
+
 ### Changed
 
 - **Breaking:** `WindowRestored` event fields renamed to explicitly qualify pixel units: `position` → `physical_position`, `size` → `physical_size`. `logical_size` unchanged.

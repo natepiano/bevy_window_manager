@@ -114,6 +114,25 @@
     },
 
     {
+      "id": "save_position_on_unmoved_window",
+      "description": "Window that was never moved saves a real position (not None) to the state file",
+      "automation": "full",
+      "launch_monitor": 0,
+
+      "ron_file": "no_position_same_monitor.ron",
+
+      "windows": {
+        "primary": {
+          "validate": ["size", "mode", "monitor_index"]
+        }
+      },
+
+      "persistence_validation": {
+        "expect_position_saved": ["primary"]
+      }
+    },
+
+    {
       "id": "exclusive_mon0_W3",
       "description": "Exclusive fullscreen with DX12 crash workaround on Monitor 0",
       "automation": "full",

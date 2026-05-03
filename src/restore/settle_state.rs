@@ -99,13 +99,15 @@ fn check_settle_matches(
     platform: Platform,
 ) -> SettleComparison {
     let is_fullscreen = target.mode.is_fullscreen();
-    let position_matches = if is_fullscreen {
-        true
-    } else if platform.position_reliable_for_settle() {
-        target_physical_position == actual.physical_position
-    } else {
-        true // X11 W6: target is frame coords, actual is client area — skip
-    };
+    // Skip position comparison when:
+    // - fullscreen (window fills monitor; saved position is irrelevant)
+    // - no saved position (window was anchored via `WindowPosition::Centered`; the resulting `At`
+    //   position is OS-chosen and not part of the comparison)
+    // - X11 W6 frame-vs-client coordinate mismatch
+    let skip_position = is_fullscreen
+        || target_physical_position.is_none()
+        || !platform.position_reliable_for_settle();
+    let position_matches = skip_position || target_physical_position == actual.physical_position;
     let size_match = is_fullscreen || target_physical_size == actual.physical_size;
     let mode_match = platform.modes_match(target_mode, actual.mode);
     let monitor_match = target_monitor == actual.monitor;

@@ -347,8 +347,8 @@ fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
             window.position = WindowPosition::At(position);
         } else {
             debug!(
-                "[apply_initial_move] No position available (Wayland), fullscreen mode {:?}",
-                target.mode
+                "[apply_initial_move] No saved position, fullscreen mode {:?} targets monitor {} via WindowMode",
+                target.mode, target.monitor_index
             );
         }
         return;
@@ -356,28 +356,10 @@ fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
 
     let Some(position) = target.physical_position else {
         debug!(
-            "[apply_initial_move] No position available (Wayland), setting size only: {}x{}",
-            target.physical_size.x, target.physical_size.y
+            "[apply_initial_move] No saved position, centering on monitor {}",
+            target.monitor_index
         );
-        debug!(
-            "[apply_initial_move] BEFORE set_physical_resolution: physical={}x{} logical={}x{} scale={}",
-            window.resolution.physical_width(),
-            window.resolution.physical_height(),
-            window.resolution.width(),
-            window.resolution.height(),
-            window.resolution.scale_factor()
-        );
-        window
-            .resolution
-            .set_physical_resolution(target.physical_size.x, target.physical_size.y);
-        debug!(
-            "[apply_initial_move] AFTER set_physical_resolution: physical={}x{} logical={}x{} scale={}",
-            window.resolution.physical_width(),
-            window.resolution.physical_height(),
-            window.resolution.width(),
-            window.resolution.height(),
-            window.resolution.scale_factor()
-        );
+        window.position = WindowPosition::Centered(MonitorSelection::Index(target.monitor_index));
         return;
     };
 
@@ -420,19 +402,38 @@ fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
 }
 
 /// Handle the initial move for cross-DPI strategies.
+///
+/// With a saved position, we apply a compensated position+size on the starting monitor,
+/// then transition to `WaitingForScaleChange` so winit's `WindowScaleFactorChanged`
+/// triggers the final `ApplySize` phase at `target_scale`.
+///
+/// With no saved position, we anchor the window on the saved monitor via
+/// `WindowPosition::Centered` and size at `starting_scale` (so the stored logical size
+/// resolves to `target.physical_size` once the window lands on the target monitor).
+/// The two-phase scale-change dance is skipped because macOS does not fire
+/// `WindowScaleFactorChanged` for windows that are still hidden; waiting for it would
+/// deadlock. Settle starts immediately and verifies the resulting state.
 fn begin_cross_dpi_restore(target: &mut TargetPosition, window: &mut Window) {
     if target.physical_position.is_none() {
+        // Size at `starting_scale`: `set_physical_resolution` is interpreted at the
+        // window's current scale factor, which is `starting_scale` until the move
+        // completes. Storing logical = `starting_size / starting_scale = logical_size`
+        // means the post-move physical size resolves to `logical_size * target_scale`,
+        // matching `target.physical_size` for settle.
         let physical_width = (f64::from(target.logical_size.x) * target.starting_scale).to_u32();
         let physical_height = (f64::from(target.logical_size.y) * target.starting_scale).to_u32();
         debug!(
-            "[restore_windows] No position for cross-DPI restore, applying logical size \
-             {}x{} at starting_scale={} (physical {}x{}) instead of two-phase dance",
-            target.logical_size.x,
-            target.logical_size.y,
+            "[begin_cross_dpi_restore] no saved position, centering on monitor {} at \
+             starting_scale={} (physical {}x{} → logical {}x{} after move to target_scale={})",
+            target.monitor_index,
             target.starting_scale,
             physical_width,
-            physical_height
+            physical_height,
+            target.logical_size.x,
+            target.logical_size.y,
+            target.target_scale
         );
+        window.position = WindowPosition::Centered(MonitorSelection::Index(target.monitor_index));
         window
             .resolution
             .set_physical_resolution(physical_width, physical_height);
@@ -562,6 +563,7 @@ fn apply_window_geometry(
     size: UVec2,
     strategy: &str,
     ratio: Option<f64>,
+    monitor_index: usize,
 ) {
     if let Some(position) = position {
         if let Some(ratio) = ratio {
@@ -576,16 +578,19 @@ fn apply_window_geometry(
             );
         }
         window.position = WindowPosition::At(position);
-    } else if let Some(ratio) = ratio {
-        debug!(
-            "[try_apply_restore] size={}x{} only ({strategy}, ratio={ratio}, no position)",
-            size.x, size.y
-        );
     } else {
-        debug!(
-            "[try_apply_restore] size={}x{} only ({strategy}, no position)",
-            size.x, size.y
-        );
+        if let Some(ratio) = ratio {
+            debug!(
+                "[try_apply_restore] size={}x{} centered on monitor {monitor_index} ({strategy}, ratio={ratio}, no saved position)",
+                size.x, size.y
+            );
+        } else {
+            debug!(
+                "[try_apply_restore] size={}x{} centered on monitor {monitor_index} ({strategy}, no saved position)",
+                size.x, size.y
+            );
+        }
+        window.position = WindowPosition::Centered(MonitorSelection::Index(monitor_index));
     }
     window.resolution.set_physical_resolution(size.x, size.y);
 }
@@ -649,6 +654,7 @@ fn try_apply_restore(
                 target.physical_size,
                 "ApplyUnchanged",
                 None,
+                target.monitor_index,
             );
         },
         MonitorScaleStrategy::CompensateSizeOnly(WindowRestoreState::ApplySize) => {
@@ -675,6 +681,7 @@ fn try_apply_restore(
                 target.compensated_size(),
                 "LowerToHigher",
                 Some(target.ratio()),
+                target.monitor_index,
             );
         },
         MonitorScaleStrategy::HigherToLower(WindowRestoreState::ApplySize) => {

@@ -330,6 +330,22 @@
       }
     },
     {
+      "id": "x11_save_position_on_unmoved_window",
+      "description": "Window that was never moved saves a real position (not None) to the state file (X11)",
+      "automation": "full",
+      "backend": "x11",
+      "launch_monitor": 0,
+      "ron_file": "no_position_same_monitor.ron",
+      "windows": {
+        "primary": {
+          "validate": ["size", "mode", "monitor_index"]
+        }
+      },
+      "persistence_validation": {
+        "expect_position_saved": ["primary"]
+      }
+    },
+    {
       "id": "x11_pos_size_restore_mon1",
       "description": "Basic position/size persistence on Monitor 1 (HDMI)",
       "automation": "full",
