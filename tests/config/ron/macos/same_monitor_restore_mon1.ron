@@ -4,7 +4,7 @@
         (
             key: Primary,
             state: (
-                logical_position: Some((-716, -1340)),
+                logical_position: Some((${MONITOR_1_LOGICAL_POS_X}, ${MONITOR_1_LOGICAL_POS_Y})),
                 logical_width: 900,
                 logical_height: 500,
                 monitor_scale: 1.0,

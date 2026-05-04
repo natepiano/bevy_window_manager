@@ -17,8 +17,8 @@
         (
             key: Managed("window-1"),
             state: (
-                // Secondary window on Monitor 1 (HDMI, pos 0,0, scale 1)
-                logical_position: Some((200, 200)),
+                // Secondary window on Monitor 1 (HDMI)
+                logical_position: Some((${MONITOR_1_LOGICAL_POS_X+200}, ${MONITOR_1_LOGICAL_POS_Y+200})),
                 logical_width: 1200,
                 logical_height: 800,
                 monitor_scale: 1.0,

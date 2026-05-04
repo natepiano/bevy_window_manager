@@ -1216,8 +1216,8 @@ def run_discovery(
     print(f"export NUM_MONITORS={num_monitors}")
 
     for i, mon in enumerate(monitor_list):
-        pos = json_list(mon.get("position"))
-        size = json_list(mon.get("size"))
+        pos = json_list(mon.get("physical_position"))
+        size = json_list(mon.get("physical_size"))
         scale = json_str(mon.get("scale"))
         pos_x = json_str(pos[0]) if len(pos) > 0 else "0"
         pos_y = json_str(pos[1]) if len(pos) > 1 else "0"
@@ -1301,7 +1301,7 @@ def run_discovery(
                 env_vars[f"MONITOR_{i}_X11_SCALE"] = x11_scale
                 print(f"export MONITOR_{i}_X11_SCALE={x11_scale}")
 
-                x11_pos = json_list(x11_list[i].get("position"))
+                x11_pos = json_list(x11_list[i].get("physical_position"))
                 x11_pos_x = json_str(x11_pos[0]) if len(x11_pos) > 0 else "0"
                 x11_pos_y = json_str(x11_pos[1]) if len(x11_pos) > 1 else "0"
                 x11_scale_f = float(x11_scale) if x11_scale else 1.0
