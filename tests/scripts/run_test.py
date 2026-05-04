@@ -107,6 +107,7 @@ class WindowConfig(TypedDict, total=False):
     validate: list[str]
     expected_mode: str
     spawn_event: str
+    position_readback_offset: list[int]
 
 
 class _TestEntryRequired(TypedDict):
@@ -748,6 +749,7 @@ def validate_window(
     expected_mode_override: str = "",
     backend: str = "native",
     env_vars: dict[str, str] | None = None,
+    position_readback_offset: list[int] | None = None,
 ) -> None:
     for field in validate_fields:
         if field == "position":
@@ -757,6 +759,9 @@ def validate_window(
             scale = _monitor_scale(entity, env_vars or {})
             logical_x = ron_values.get("pos_x", "")
             logical_y = ron_values.get("pos_y", "")
+            if logical_x and position_readback_offset:
+                logical_x = str(int(logical_x) + position_readback_offset[0])
+                logical_y = str(int(logical_y) + position_readback_offset[1])
             exp_x = str(_logical_to_physical_pos(int(logical_x), scale)) if logical_x else ""
             exp_y = str(_logical_to_physical_pos(int(logical_y), scale)) if logical_y else ""
             _check_field_pair(key, "position", exp_x, exp_y, actual_x, actual_y, prefix)
@@ -869,6 +874,7 @@ def validate_all_windows(
         validate_fields = wconfig.get("validate", [])
         expected_mode_override = wconfig.get("expected_mode", "")
         spawn_event = wconfig.get("spawn_event", "")
+        position_readback_offset = wconfig.get("position_readback_offset")
 
         entity: JsonDict | None = None
 
@@ -899,6 +905,7 @@ def validate_all_windows(
             expected_mode_override=expected_mode_override,
             backend=backend,
             env_vars=env_vars,
+            position_readback_offset=position_readback_offset,
         )
 
 

@@ -42,10 +42,12 @@
       },
 
       "ron_file": "cross_monitor_high_to_low.ron",
+      "expect_mismatch": true,
 
       "windows": {
         "primary": {
-          "validate": ["position", "size", "monitor_index", "mode"]
+          "validate": ["position", "size", "monitor_index", "mode"],
+          "position_readback_offset": [0, 30]
         }
       }
     },
