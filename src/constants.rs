@@ -1,15 +1,15 @@
 //! Cross-module constants.
 
-// Managed window naming
+// managed window naming
 /// First numeric suffix appended to deduplicate a managed window name (e.g. `name-2`).
 pub(crate) const FIRST_DUPLICATE_SUFFIX: u32 = 2;
 
-// Persistence
+// persistence
 pub(crate) const CURRENT_STATE_VERSION: u8 = 2;
 pub(crate) const PRIMARY_WINDOW_KEY: &str = "primary";
 pub(crate) const STATE_FILE: &str = "windows.ron";
 
-// Scale factor
+// scale factor
 /// Fallback scale factor when the monitor cannot be determined.
 pub(crate) const DEFAULT_SCALE_FACTOR: f64 = 1.0;
 /// Threshold for considering two scale factors equal.
@@ -18,18 +18,21 @@ pub(crate) const DEFAULT_SCALE_FACTOR: f64 = 1.0;
 /// A difference less than this epsilon is considered negligible.
 pub(crate) const SCALE_FACTOR_EPSILON: f64 = 0.01;
 
-// Settle timing
+// settle timing
 /// Duration (in seconds) that all values must remain stable before declaring success.
 pub(crate) const SETTLE_STABILITY_SECS: f32 = 0.2;
 /// Maximum total duration (in seconds) to wait for values to stabilize.
 pub(crate) const SETTLE_TIMEOUT_SECS: f32 = 1.0;
 
-// State format
+// state format
 /// Header comment prepended to the RON file to document the coordinate contract.
 pub(crate) const RON_HEADER: &str = "\
 // All spatial values (position, size) are in logical pixels.
 // monitor_scale: scale factor at save time (informational, not used during restore).
 ";
+
+// unit conversions
+pub(crate) const MILLIS_PER_SECOND: f32 = 1000.0;
 
 // Windows DPI fix
 /// Win32 subclass identifier for DPI-change interception.

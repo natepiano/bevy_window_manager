@@ -14,6 +14,7 @@ use super::winit_info::X11FrameCompensated;
 use crate::ManagedWindow;
 use crate::Platform;
 use crate::WindowKey;
+use crate::constants::MILLIS_PER_SECOND;
 use crate::constants::SETTLE_STABILITY_SECS;
 use crate::constants::SETTLE_TIMEOUT_SECS;
 use crate::events::WindowRestoreMismatch;
@@ -255,8 +256,8 @@ pub fn check_restore_settling(
         settle.total_timeout.tick(time.delta());
         settle.stability_timer.tick(time.delta());
 
-        let total_elapsed_ms = settle.total_timeout.elapsed_secs() * 1000.0;
-        let stability_elapsed_ms = settle.stability_timer.elapsed_secs() * 1000.0;
+        let total_elapsed_ms = settle.total_timeout.elapsed_secs() * MILLIS_PER_SECOND;
+        let stability_elapsed_ms = settle.stability_timer.elapsed_secs() * MILLIS_PER_SECOND;
         let timeout_state = if settle.total_timeout.is_finished() {
             TimeoutState::TimedOut
         } else {

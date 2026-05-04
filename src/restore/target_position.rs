@@ -255,12 +255,12 @@ pub fn compute_target_position(
 
     // Convert logical → physical using the target monitor's scale factor.
     // This is the single conversion point for size values.
-    let width = (f64::from(saved_state.logical_width) * target_scale).to_u32();
-    let height = (f64::from(saved_state.logical_height) * target_scale).to_u32();
+    let physical_width = (f64::from(saved_state.logical_width) * target_scale).to_u32();
+    let physical_height = (f64::from(saved_state.logical_height) * target_scale).to_u32();
 
-    let outer_width = width + decoration.x;
-    let outer_height = height + decoration.y;
-    let position = fallback_position.map(|(x, y)| {
+    let physical_outer_width = physical_width + decoration.x;
+    let physical_outer_height = physical_height + decoration.y;
+    let physical_position = fallback_position.map(|(x, y)| {
         // Convert logical position to physical using the target monitor's scale factor.
         let physical_x = (f64::from(x) * target_scale).round().to_i32();
         let physical_y = (f64::from(y) * target_scale).round().to_i32();
@@ -268,16 +268,16 @@ pub fn compute_target_position(
             physical_x,
             physical_y,
             target_info,
-            outer_width,
-            outer_height,
+            physical_outer_width,
+            physical_outer_height,
             platform,
         )
     });
 
     TargetPosition {
-        physical_position: position,
+        physical_position,
         logical_position: fallback_position.map(|(x, y)| IVec2::new(x, y)),
-        physical_size: UVec2::new(width, height),
+        physical_size: UVec2::new(physical_width, physical_height),
         logical_size: UVec2::new(saved_state.logical_width, saved_state.logical_height),
         target_scale,
         starting_scale,
@@ -301,38 +301,38 @@ pub fn compute_target_position(
 /// so we preserve the exact saved position without clamping.
 #[must_use]
 fn clamp_position_to_monitor(
-    saved_x: i32,
-    saved_y: i32,
+    physical_saved_x: i32,
+    physical_saved_y: i32,
     target_info: &MonitorInfo,
-    outer_width: u32,
-    outer_height: u32,
+    physical_outer_width: u32,
+    physical_outer_height: u32,
     platform: Platform,
 ) -> IVec2 {
     if platform.should_clamp_position() {
         let monitor_right = target_info.physical_position.x + target_info.physical_size.x.to_i32();
         let monitor_bottom = target_info.physical_position.y + target_info.physical_size.y.to_i32();
 
-        let mut x = saved_x;
-        let mut y = saved_y;
+        let mut x = physical_saved_x;
+        let mut y = physical_saved_y;
 
-        if x + outer_width.to_i32() > monitor_right {
-            x = monitor_right - outer_width.to_i32();
+        if x + physical_outer_width.to_i32() > monitor_right {
+            x = monitor_right - physical_outer_width.to_i32();
         }
-        if y + outer_height.to_i32() > monitor_bottom {
-            y = monitor_bottom - outer_height.to_i32();
+        if y + physical_outer_height.to_i32() > monitor_bottom {
+            y = monitor_bottom - physical_outer_height.to_i32();
         }
         x = x.max(target_info.physical_position.x);
         y = y.max(target_info.physical_position.y);
 
-        if x != saved_x || y != saved_y {
+        if x != physical_saved_x || y != physical_saved_y {
             debug!(
-                "[clamp_position_to_monitor] Clamped: ({saved_x}, {saved_y}) -> ({x}, {y}) for outer size {outer_width}x{outer_height}"
+                "[clamp_position_to_monitor] Clamped: ({physical_saved_x}, {physical_saved_y}) -> ({x}, {y}) for outer size {physical_outer_width}x{physical_outer_height}"
             );
         }
 
         IVec2::new(x, y)
     } else {
-        IVec2::new(saved_x, saved_y)
+        IVec2::new(physical_saved_x, physical_saved_y)
     }
 }
 
@@ -363,16 +363,16 @@ fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
         return;
     };
 
-    let (move_position, move_size) = match target.scale_strategy {
+    let (physical_move_position, physical_move_size) = match target.scale_strategy {
         MonitorScaleStrategy::HigherToLower(_) => {
             let ratio = target.ratio();
-            let compensated_x = (f64::from(position.x) * ratio).to_i32();
-            let compensated_y = (f64::from(position.y) * ratio).to_i32();
+            let physical_compensated_x = (f64::from(position.x) * ratio).to_i32();
+            let physical_compensated_y = (f64::from(position.y) * ratio).to_i32();
             debug!(
-                "[apply_initial_move] HigherToLower: compensating position {position:?} -> ({compensated_x}, {compensated_y}) (ratio={ratio})",
+                "[apply_initial_move] HigherToLower: compensating position {position:?} -> ({physical_compensated_x}, {physical_compensated_y}) (ratio={ratio})",
             );
             (
-                IVec2::new(compensated_x, compensated_y),
+                IVec2::new(physical_compensated_x, physical_compensated_y),
                 target.physical_size,
             )
         },
@@ -391,14 +391,14 @@ fn apply_initial_move(target: &TargetPosition, window: &mut Window) {
     };
 
     debug!(
-        "[apply_initial_move] position={move_position:?} size={}x{} visible={}",
-        move_size.x, move_size.y, window.visible
+        "[apply_initial_move] position={physical_move_position:?} size={}x{} visible={}",
+        physical_move_size.x, physical_move_size.y, window.visible
     );
 
-    window.position = WindowPosition::At(move_position);
+    window.position = WindowPosition::At(physical_move_position);
     window
         .resolution
-        .set_physical_resolution(move_size.x, move_size.y);
+        .set_physical_resolution(physical_move_size.x, physical_move_size.y);
 }
 
 /// Handle the initial move for cross-DPI strategies.
@@ -559,40 +559,42 @@ enum RestoreStatus {
 
 fn apply_window_geometry(
     window: &mut Window,
-    position: Option<IVec2>,
-    size: UVec2,
+    physical_position: Option<IVec2>,
+    physical_size: UVec2,
     strategy: &str,
     ratio: Option<f64>,
     monitor_index: usize,
 ) {
-    if let Some(position) = position {
+    if let Some(physical_position) = physical_position {
         if let Some(ratio) = ratio {
             debug!(
                 "[try_apply_restore] position={:?} size={}x{} ({strategy}, ratio={ratio})",
-                position, size.x, size.y
+                physical_position, physical_size.x, physical_size.y
             );
         } else {
             debug!(
                 "[try_apply_restore] position={:?} size={}x{} ({strategy})",
-                position, size.x, size.y
+                physical_position, physical_size.x, physical_size.y
             );
         }
-        window.position = WindowPosition::At(position);
+        window.position = WindowPosition::At(physical_position);
     } else {
         if let Some(ratio) = ratio {
             debug!(
                 "[try_apply_restore] size={}x{} centered on monitor {monitor_index} ({strategy}, ratio={ratio}, no saved position)",
-                size.x, size.y
+                physical_size.x, physical_size.y
             );
         } else {
             debug!(
                 "[try_apply_restore] size={}x{} centered on monitor {monitor_index} ({strategy}, no saved position)",
-                size.x, size.y
+                physical_size.x, physical_size.y
             );
         }
         window.position = WindowPosition::Centered(MonitorSelection::Index(monitor_index));
     }
-    window.resolution.set_physical_resolution(size.x, size.y);
+    window
+        .resolution
+        .set_physical_resolution(physical_size.x, physical_size.y);
 }
 
 fn apply_fullscreen_restore(target: &TargetPosition, window: &mut Window, platform: Platform) {
